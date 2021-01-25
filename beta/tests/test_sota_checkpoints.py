@@ -449,7 +449,6 @@ def clean_previous_metrics_dump_dir():
 
 @pytest.fixture(autouse=True, scope="class")
 def results(sota_data_dir):
-    print("results started")
     yield
     if sota_data_dir:
         Tsc.write_common_metrics_file(per_model_metric_file_dump_path=METRICS_DUMP_PATH)
