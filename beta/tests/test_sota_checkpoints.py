@@ -440,14 +440,16 @@ Tsc = TestSotaCheckpoints
 @pytest.fixture(autouse=True, scope="class")
 def clean_previous_metrics_dump_dir():
     if os.path.isdir(METRICS_DUMP_PATH):
-        files = [file for file in os.listdir(METRICS_DUMP_PATH) if os.path.isfile(file)]
+        files = [os.path.join(METRICS_DUMP_PATH, file) for file in os.listdir(METRICS_DUMP_PATH)]
         for file in files:
-            os.remove(file)
+            if os.path.isfile(file):
+                os.remove(file)
     yield
 
 
 @pytest.fixture(autouse=True, scope="class")
 def results(sota_data_dir):
+    print("results started")
     yield
     if sota_data_dir:
         Tsc.write_common_metrics_file(per_model_metric_file_dump_path=METRICS_DUMP_PATH)
