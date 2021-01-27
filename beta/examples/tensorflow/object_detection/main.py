@@ -279,6 +279,13 @@ def run(config):
                 logger.info('initialization...')
                 compression_ctrl.initialize(dataset=train_dataset)
 
+            # Save checkpoints
+            checkpoint = tf.train.Checkpoint(compress_model)
+            checkpoint_path = f'/home/dlyakhov/checkpoints_official/2.4/{config["ckpt_path"].split("/")[-1]}/model.ckpt'
+            checkpoint.save(checkpoint_path)
+            print(f'Successfully save checkpoint at {checkpoint_path}')
+            exit()
+
     train_step = create_train_step_fn(strategy, compress_model, loss_fn, optimizer)
     test_step = create_test_step_fn(strategy, compress_model, predict_post_process_fn)
 

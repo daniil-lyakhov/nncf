@@ -322,6 +322,8 @@ class TestSotaCheckpoints:
                 diff_target_min = model_dict[model_name].get('diff_target_min') if not None else None
                 diff_target_max = model_dict[model_name].get('diff_target_max') if not None else None
                 for dataset_type in datasets[dataset_name].get('dataset_types'):
+                    if dataset_type == "tfds":
+                        continue
                     # Change model name to keep dataset version
                     model_name_with_datatype = model_name + '_' + dataset_type
                     param_list.append(EvalRunParamsStruct(config_name_=config_name,

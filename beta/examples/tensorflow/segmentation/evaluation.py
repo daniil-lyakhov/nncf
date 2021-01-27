@@ -175,6 +175,13 @@ def run_evaluation(config, eval_timeout=None):
         if config.ckpt_path:
             load_checkpoint(checkpoint, config.ckpt_path)
 
+        # Save checkpoints
+        checkpoint = tf.train.Checkpoint(compress_model)
+        checkpoint_path = f'/home/dlyakhov/checkpoints_official/2.4/{config["ckpt_path"].split("/")[-1]}/model.ckpt'
+        checkpoint.save(checkpoint_path)
+        print(f'Successfully save checkpoint at {checkpoint_path}')
+        exit()
+
         logger.info('Evaluation...')
         statistics = compression_ctrl.statistics()
         print_statistics(statistics)

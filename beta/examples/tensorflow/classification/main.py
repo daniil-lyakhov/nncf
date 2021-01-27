@@ -181,7 +181,12 @@ def run(config):
             else:
                 logger.info('initialization...')
                 compression_ctrl.initialize(dataset=train_dataset)
-
+    # Save checkpoints
+    checkpoint = tf.train.Checkpoint(compress_model)
+    checkpoint_path = f'/home/dlyakhov/checkpoints_official/2.4/{config["ckpt_path"].split("/")[-1]}/model.ckpt'
+    checkpoint.save(checkpoint_path)
+    print(f'Successfully save checkpoint at {checkpoint_path}')
+    exit()
     callbacks = get_callbacks(
         model_checkpoint=True,
         include_tensorboard=True,
