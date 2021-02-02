@@ -181,3 +181,7 @@ class MultiStepSparsityScheduler(SparsityScheduler):
     @property
     def target_sparsity_level(self):
         return self.sparsity_levels[-1]
+
+
+class StubCompressionScheduler(CompressionScheduler):
+    pass
