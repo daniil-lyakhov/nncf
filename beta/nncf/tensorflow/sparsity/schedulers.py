@@ -159,6 +159,44 @@ class ExponentialSparsityScheduler(SparsityScheduler):
         return a, k
 
 
+@SPARSITY_SCHEDULERS.register("adaptive")
+class AdaptiveSparsityScheduler(SparsityScheduler):
+    def __init__(self, sparsity_algo, params=None):
+        super().__init__(sparsity_algo, params)
+        self.sparsity_loss = sparsity_algo.loss
+        from .rb.loss import SparseLoss
+        if not isinstance(self.sparsity_loss, SparseLoss):
+            raise TypeError('AdaptiveSparseScheduler expects SparseLoss, but {} is given'.format(
+                self.sparsity_loss.__class__.__name__))
+        self.decay_step = params.get('step', 0.05)
+        self.eps = params.get('eps', 0.03)
+        self.patience = params.get('patience', 1)
+        self.current_sparsity_target = self.initial_sparsity
+        self.num_bad_epochs = 0
+
+    def epoch_step(self, next_epoch=None):
+        super().epoch_step(next_epoch)
+        if self.sparsity_loss.current_sparsity >= self.current_sparsity_target - self.eps:
+            self.num_bad_epochs += 1
+
+        if self.num_bad_epochs >= self.patience:
+            self.num_bad_epochs = 0
+            self.current_sparsity_target = min(self.current_sparsity_target + self.decay_step, self.sparsity_target)
+        self._set_sparsity_level()
+
+    '''
+    def state_dict(self):
+        sd = super().state_dict()
+        sd['num_bad_epochs'] = self.num_bad_epochs
+        sd['current_sparsity_level'] = self.current_sparsity_level
+        return sd
+    '''
+
+    @property
+    def current_sparsity_level(self):
+        return self.current_sparsity_target
+
+
 @SPARSITY_SCHEDULERS.register("multistep")
 class MultiStepSparsityScheduler(SparsityScheduler):
     def __init__(self, sparsity_algo, params):
