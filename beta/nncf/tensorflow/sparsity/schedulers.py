@@ -175,7 +175,8 @@ class AdaptiveSparsityScheduler(SparsityScheduler):
         if self.num_bad_epochs >= self.patience:
             self.num_bad_epochs = 0
             self.current_sparsity_target = min(self.current_sparsity_target + self.decay_step, self.sparsity_target)
-        self._set_sparsity_level()
+        self.algo.set_sparsity_level(self.current_sparsity_level)
+        self._maybe_freeze()
 
     '''
     def state_dict(self):
@@ -219,7 +220,3 @@ class MultiStepSparsityScheduler(SparsityScheduler):
     @property
     def target_sparsity_level(self):
         return self.sparsity_levels[-1]
-
-
-class StubCompressionScheduler(CompressionScheduler):
-    pass
