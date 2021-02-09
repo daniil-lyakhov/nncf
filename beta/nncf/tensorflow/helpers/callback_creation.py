@@ -15,6 +15,7 @@ from nncf.api.composite_compression import CompositeCompressionAlgorithmControll
 from beta.nncf.tensorflow.sparsity.callbacks import SparsityStatistics
 from beta.nncf.tensorflow.sparsity.callbacks import UpdateMask
 from beta.nncf.tensorflow.sparsity.magnitude.algorithm import MagnitudeSparsityController
+from beta.nncf.tensorflow.sparsity.rb.algorithm import RBSparsityController
 
 
 def create_compression_callbacks(compression_ctrl, log_tensorboard=True, log_text=True, log_dir=None):
@@ -22,9 +23,10 @@ def create_compression_callbacks(compression_ctrl, log_tensorboard=True, log_tex
         if isinstance(compression_ctrl, CompositeCompressionAlgorithmController) \
         else [compression_ctrl]
     for ctrl in compression_controllers:
-        if isinstance(ctrl, MagnitudeSparsityController):
+        if isinstance(ctrl, MagnitudeSparsityController) or \
+                isinstance(ctrl, RBSparsityController):
             callbacks = [UpdateMask(ctrl.scheduler)]
-            if log_tensorboard or log_text:
+            if (log_tensorboard or log_text) and isinstance(ctrl, MagnitudeSparsityController):
                 callbacks += [SparsityStatistics(ctrl.raw_statistics,
                                                  log_tensorboard=log_tensorboard,
                                                  log_text=log_text,
