@@ -181,6 +181,17 @@ def run(config):
             else:
                 logger.info('initialization...')
                 compression_ctrl.initialize(dataset=train_dataset)
+    # Update model
+    from beta.nncf.tensorflow.layers.wrapper import NNCFWrapper
+    for layer in compress_model.layers:
+        if isinstance(layer, NNCFWrapper):
+            op_name = list(layer.ops_weights.keys())[0]
+            layer.ops_weights[op_name] = {'mask': layer.ops_weights[op_name][0]}
+    # Save checkpoint
+    cpt = tf.train.Checkpoint(compress_model)
+    cpt.save(config['checkpoint_save_dir'])
+    print(f"Save cpt at {config['checkpoint_save_dir']}")
+    exit()
 
     callbacks = get_callbacks(
         model_checkpoint=True,
