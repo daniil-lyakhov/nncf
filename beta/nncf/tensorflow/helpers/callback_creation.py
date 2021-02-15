@@ -26,7 +26,7 @@ def create_compression_callbacks(compression_ctrl, log_tensorboard=True, log_tex
         if isinstance(ctrl, MagnitudeSparsityController) or \
                 isinstance(ctrl, RBSparsityController):
             callbacks = [UpdateMask(ctrl.scheduler)]
-            if (log_tensorboard or log_text) and isinstance(ctrl, MagnitudeSparsityController):
+            if log_tensorboard or log_text:
                 callbacks += [SparsityStatistics(ctrl.raw_statistics,
                                                  log_tensorboard=log_tensorboard,
                                                  log_text=log_text,
