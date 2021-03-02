@@ -31,6 +31,7 @@ class RBSparsifyingWeight(NNCFOperation):
         super().__init__(name=OP_NAME,
                          trainable=True)
         self.eps = eps
+        #self.seed = tf.random.uniform((2, ), maxval=2**31 - 1, dtype=tf.int32)
 
     # TODO: make it static
     def build(self, input_shape, input_type, name, layer):
@@ -64,7 +65,8 @@ class RBSparsifyingWeight(NNCFOperation):
            mask and param trainable
         :param _:'''
         if tf.equal(op_weights['trainable'], tf.constant(1, dtype=tf.int8)):
-            return apply_mask(layer_weights, calc_rb_binary_mask(op_weights['mask'], self.eps))
+            #self.seed = tf.random.uniform((2,), maxval=2 ** 31 - 1, dtype=tf.int32, seed=self.seed)
+            return apply_mask(layer_weights, calc_rb_binary_mask(op_weights['mask'], (2, 3), self.eps))
         return apply_mask(layer_weights, binary_mask(op_weights['mask']))
 
     def freeze(self, op_weights):

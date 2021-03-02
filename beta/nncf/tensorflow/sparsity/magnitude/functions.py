@@ -31,6 +31,12 @@ WEIGHT_IMPORTANCE_FUNCTIONS = {
 def calc_magnitude_binary_mask(weight, weight_importance, threshold):
     return tf.cast(weight_importance(weight) > threshold, tf.float32)
 
+def per_replica_apply_mask(weights, mask):
+    return weights * mask
+
 
 def apply_mask(weights, mask):
     return weights * mask
+    strategy = tf.distribute.get_strategy()
+    return strategy.run(per_replica_apply_mask, args=(weights, mask))
+#    return weights * mask

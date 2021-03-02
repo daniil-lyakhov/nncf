@@ -26,9 +26,23 @@ def st_binary_mask(mask):
         return upstream
     return binary_mask(mask), grad
 
-
-def calc_rb_binary_mask(mask, eps=0.01):
-    # TODO: check in distributed mode (mirrored strategy)
-    uniform = tf.random.uniform(mask.shape, minval=0, maxval=1)
+def rb_binary_mask_per_replica(mask, eps):
+    uniform = tf.random.uniform(mask.shape, minval=0, maxval=1)#, seed=seed)
     mask = mask + logit(tf.clip_by_value(uniform, eps, 1 - eps))
     return st_binary_mask(mask)
+
+
+def calc_rb_binary_mask(mask, seed, eps=0.01):
+    # TODO: check in distributed mode (mirrored strategy)
+    #uniform = tf.random.uniform(mask.shape, minval=0, maxval=1)
+    #uniform = tf.random.stateless_uniform(mask.shape, seed, minval=0, maxval=1)
+    #mask = mask + logit(tf.clip_by_value(uniform, eps, 1 - eps))
+    #if tf.distribute.get_replica_context() is not None:
+    #    tf.print(tf.distribute.get_replica_context().replica_id_in_sync_group)
+    #    tf.print(tf.reshape(uniform, (-1, ))[0])
+    #return st_binary_mask(mask)
+    strategy = tf.distribute.get_strategy()
+    result = strategy.run(rb_binary_mask_per_replica, args=(mask,
+                                                           # tf.random.uniform(shape=(1, )[0], maxval=2**30),
+                                                            eps))
+    return result
