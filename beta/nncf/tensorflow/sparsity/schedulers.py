@@ -178,14 +178,6 @@ class AdaptiveSparsityScheduler(SparsityScheduler):
         self.algo.set_sparsity_level(self.current_sparsity_level)
         self._maybe_freeze()
 
-    '''
-    def state_dict(self):
-        sd = super().state_dict()
-        sd['num_bad_epochs'] = self.num_bad_epochs
-        sd['current_sparsity_level'] = self.current_sparsity_level
-        return sd
-    '''
-
     @property
     def current_sparsity_level(self):
         return self.current_sparsity_target
