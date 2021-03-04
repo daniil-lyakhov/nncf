@@ -17,7 +17,6 @@ from tensorflow.python.keras.utils.layer_utils import count_params
 from nncf.common.graph.transformations.commands import TransformationPriority
 from beta.nncf.tensorflow.algorithm_selector import TF_COMPRESSION_ALGORITHMS
 from beta.nncf.tensorflow.api.compression import TFCompressionAlgorithmBuilder
-from beta.nncf.tensorflow.api.compression import TFCompressionAlgorithmController
 from beta.nncf.tensorflow.graph.converter import convert_layer_graph_to_nxmodel
 from beta.nncf.tensorflow.graph.converter import convert_keras_model_to_nxmodel
 from beta.nncf.tensorflow.graph.model_transformer import TFModelTransformer
@@ -31,6 +30,7 @@ from beta.nncf.tensorflow.graph.utils import get_custom_layers
 from beta.nncf.tensorflow.graph.utils import get_original_name_and_instance_index
 from beta.nncf.tensorflow.graph.utils import get_weight_node_name
 from beta.nncf.tensorflow.layers.wrapper import NNCFWrapper
+from beta.nncf.tensorflow.sparsity.base_algorithm import BaseSparsityController
 from beta.nncf.tensorflow.sparsity.magnitude.functions import calc_magnitude_binary_mask
 from beta.nncf.tensorflow.sparsity.magnitude.functions import WEIGHT_IMPORTANCE_FUNCTIONS
 from beta.nncf.tensorflow.sparsity.magnitude.operation import BinaryMask
@@ -100,14 +100,14 @@ class MagnitudeSparsityBuilder(TFCompressionAlgorithmBuilder):
 
         return transformations
 
-    def build_controller(self, model) -> TFCompressionAlgorithmController:
+    def build_controller(self, model) -> BaseSparsityController:
         """
         Should be called once the compressed model target_model is fully constructed
         """
         return MagnitudeSparsityController(model, self.config.get('params', {}))
 
 
-class MagnitudeSparsityController(TFCompressionAlgorithmController):
+class MagnitudeSparsityController(BaseSparsityController):
     """
     Serves as a handle to the additional modules, parameters and hooks inserted
     into the original uncompressed model in order to enable algorithm-specific compression.
@@ -149,17 +149,6 @@ class MagnitudeSparsityController(TFCompressionAlgorithmController):
 
     def freeze(self):
         self.frozen = True
-
-    @staticmethod
-    def _apply_mask(wrapped_layer, weight_attr, op_name):
-        layer_weight = wrapped_layer.layer_weights[weight_attr]
-        op = wrapped_layer.weights_attr_ops[weight_attr][op_name]
-        layer_weight.assign(
-            op(layer_weight,
-               wrapped_layer.ops_weights[op_name],
-               False)
-        )
-        wrapped_layer.set_layer_weight(weight_attr, layer_weight)
 
     def set_sparsity_level(self, sparsity_level):
         if not self.frozen:
