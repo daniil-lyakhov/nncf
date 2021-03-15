@@ -38,7 +38,7 @@ for node in model.graph.node:
                 name = '_ch_' + str(idx)
                 if name not in stat_layer:
                     stat_layer[name] = dict()
-                stat_layer[name][w_name] = weights[w_name][idx]
+                stat_layer[name][w_name] = {'value': weights[w_name][idx]}
         # 2. FQ 
         # Find conv
         for n in model.graph.node:
@@ -60,7 +60,10 @@ for node in model.graph.node:
         for idx in denorm_ch_idx:
             for w_name, w_value in weights_fq.items():
                 name = '_ch_' + str(idx)
-                stat_layer[name][w_name] = w_value[idx]
+                stat_layer[name][w_name] = dict()
+                stat_layer[name][w_name]['value'] = w_value[idx]
+                if w_name == 'conv_weights':
+                    stat_layer[name][w_name].update(statistic(w_value[idx], ''))
         stat[node.name] = stat_layer
 
 
@@ -69,20 +72,8 @@ import sys
 import numpy
 #numpy.set_printoptions(threshold=sys.maxsize)
 
-res = dict()
-for layer_name, layer_w in stat.items():
-    res[layer_name] = dict()
-    for ch_name, ch_w in layer_w.items():
-        res[layer_name][ch_name] = dict()
-        for w_name, w_w in ch_w.items():
-            res[layer_name][ch_name][w_name] = dict()
-            res[layer_name][ch_name][w_name]['value'] = w_w
-            if isinstance(w_w, str) or 'bn' in w_name.lower() or 'fq' in w_name.lower():
-                continue
-            res[layer_name][ch_name][w_name].update(statistic(w_w, ''))
-
 with open('denorm.csv', 'w') as out:
-    out.write(pd.DataFrame(res).to_csv())
+    out.write(pd.DataFrame(stat).to_csv())
 
 
         
