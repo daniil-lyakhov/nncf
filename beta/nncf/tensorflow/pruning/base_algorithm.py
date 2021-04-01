@@ -113,6 +113,7 @@ class BasePruningAlgoBuilder(TFCompressionAlgorithmBuilder):
         shared_layers = set()
 
         self._pruned_layer_groups_info = Clusterization('layer_name')
+        _op_names = set()
 
         for i, group in enumerate(groups_of_nodes_to_prune.get_all_clusters()):
             group_minfos = []
@@ -129,6 +130,12 @@ class BasePruningAlgoBuilder(TFCompressionAlgorithmBuilder):
                 nncf_logger.info('Adding Weight Pruner in: %s', layer_name)
                 for attr_name_key in [WEIGHT_ATTR_NAME, BIAS_ATTR_NAME]:
                     attr_name = LAYERS_WITH_WEIGHTS[node.node_type][attr_name_key]
+
+                    name = layer_name + attr_name
+                    if name in _op_names:
+                        raise Exception('Duplicates!')
+                    _op_names.add(name)
+
                     if getattr(layer, attr_name) is not None:
                         transformations.register(
                             TFInsertionCommand(
@@ -144,6 +151,14 @@ class BasePruningAlgoBuilder(TFCompressionAlgorithmBuilder):
                         bn_layer_name = get_layer_identifier(bn_node)
                         for attr_name_key in [WEIGHT_ATTR_NAME, BIAS_ATTR_NAME]:
                             attr_name = SPECIAL_LAYERS_WITH_WEIGHTS[bn_node.node_type][attr_name_key]
+
+                            name = bn_layer_name + attr_name
+                            if name == 'conv2_block2_preact_bngamma':
+                                print('in')
+                            if name in _op_names:
+                                raise Exception(f'Duplicates! layer {name}')
+                            _op_names.add(name)
+
                             transformations.register(
                                 TFInsertionCommand(
                                     target_point=TFLayerWeight(bn_layer_name, attr_name),

@@ -365,9 +365,14 @@ class TestModelsGraph:
         ]
     )
     def test_pruning_network(self, desc: ModelDesc, _pruning_case_config):
+        if desc.model_name != 'resnet50_v2':
+            return
         model = desc.model_builder(input_shape=tuple(desc.input_sample_sizes[1:]))
+        model.save('resnet_v2.h5')
         config = get_basic_filter_pruning_config(desc.input_sample_sizes)
         compressed_model, _ = create_compressed_model_and_algo_for_test(model, config)
+
+        model.save('resnet_v2_pruned.h5')
 
         check_model_graph(compressed_model, desc.ref_graph_filename, _pruning_case_config.graph_dir,
                           desc.rename_resource_nodes)
