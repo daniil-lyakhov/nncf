@@ -88,6 +88,14 @@ class RBSparsifyingWeight(NNCFOperation):
         new_seed = tf.random.stateless_uniform((2,), seed=op_weights['seed'], minval=-2**31, maxval=2**31 - 1)
         new_seed = tf.cast(new_seed, tf.int32)
         op_weights['seed'].assign(new_seed)
+        if self.name == 'conv1_conv_kernel_rb_sparsity_weight':
+            if tf.distribute.get_replica_context():
+                thread_id = tf.distribute.get_replica_context().replica_id_in_sync_group
+            else:
+                thread_id = "dummy"
+            tf.print("\nID: ", thread_id)
+            tf.print("Op name: ", self.name)
+            tf.print("Seed:", op_weights['seed'])
         true_fn = lambda: apply_mask(layer_weights, calc_rb_binary_mask(
                               op_weights['mask'], op_weights['seed'], self.eps))
         false_fn = lambda: apply_mask(layer_weights, binary_mask(op_weights['mask']))
