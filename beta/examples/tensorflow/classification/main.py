@@ -149,12 +149,8 @@ def run(config):
     train_steps = train_builder.steps_per_epoch
     validation_steps = validation_builder.steps_per_epoch
 
-    num_gpus = len(tf.config.list_physical_devices('GPU'))
-    generators = [tf.random.Generator.from_seed(seed=1) for _ in range(num_gpus)]
-
     with TFOriginalModelManager(model_fn, **model_params) as model:
         with strategy.scope():
-            model.generators = generators
             compression_ctrl, compress_model = create_compressed_model(model, config.nncf_config)
             compression_callbacks = create_compression_callbacks(compression_ctrl,
                                                                  log_dir=config.log_dir)
@@ -272,8 +268,6 @@ def export(config):
 def main(argv):
     parser = get_argument_parser()
     config = get_config_from_argv(argv, parser)
-    tf.config.run_functions_eagerly(True)
-    config['eager_mode'] = True
 
     serialize_config(config, config.log_dir)
 

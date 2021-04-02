@@ -12,6 +12,7 @@
 """
 
 import tensorflow as tf
+import numpy as np
 
 from tensorflow.python.keras.utils.control_flow_util import smart_cond
 
@@ -26,7 +27,7 @@ from beta.nncf.tensorflow.layers.wrapper import NNCFWrapper
 
 @NNCF_CUSTOM_OBJECTS.register()
 class RBSparsifyingWeight(NNCFOperation):
-    def __init__(self, name: str, generators, eps: float = 1e-6):
+    def __init__(self, name: str, eps: float = 1e-6):
         """
         :param name: Model scope unique operation name.
         :param eps: Minimum value and the gap from the maximum value
@@ -34,7 +35,6 @@ class RBSparsifyingWeight(NNCFOperation):
         """
         super().__init__(name)
         self.eps = eps
-        self.generators = generators
 
     def build(self, input_shape, input_type: InputType, name: str, layer: NNCFWrapper):
         """
@@ -61,9 +61,18 @@ class RBSparsifyingWeight(NNCFOperation):
             trainable=False,
             dtype=tf.bool)
 
+        seed = layer.add_weight(
+            name + '_seed',
+            shape=(2,),
+            initializer=tf.keras.initializers.Constant(
+                            np.random.randint(size=(2,), low=-2**31, high=2**31 - 1)),
+            trainable=False,
+            dtype=tf.int32)
+
         return {
             'mask': mask,
             'trainable': trainable,
+            'seed': seed,
         }
 
     def call(self, layer_weights, op_weights, training: tf.constant):
@@ -76,7 +85,11 @@ class RBSparsifyingWeight(NNCFOperation):
         :param training: True if operation called in training mode
             else False
         """
-        true_fn = lambda: apply_mask(layer_weights, calc_rb_binary_mask(op_weights['mask'], self.generators, self.eps))
+        new_seed = tf.random.stateless_uniform((2,), seed=op_weights['seed'], minval=-2**31, maxval=2**31 - 1)
+        new_seed = tf.cast(new_seed, tf.int32)
+        op_weights['seed'].assign(new_seed)
+        true_fn = lambda: apply_mask(layer_weights, calc_rb_binary_mask(
+                              op_weights['mask'], op_weights['seed'], self.eps))
         false_fn = lambda: apply_mask(layer_weights, binary_mask(op_weights['mask']))
         return smart_cond(training,
                           true_fn=lambda: smart_cond(op_weights['trainable'],
@@ -90,11 +103,6 @@ class RBSparsifyingWeight(NNCFOperation):
         :param op_weights: Operation weights.
         """
         op_weights['trainable'].assign(False)
-
-    def get_config(self):
-        conf = super().get_config()
-        conf['generators'] = self.generators
-        return conf
 
     @staticmethod
     def loss(op_weights):

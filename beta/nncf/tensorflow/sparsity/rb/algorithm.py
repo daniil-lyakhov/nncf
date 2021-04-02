@@ -37,9 +37,6 @@ from beta.nncf.tensorflow.utils.node import is_ignored
 @TF_COMPRESSION_ALGORITHMS.register('rb_sparsity')
 class RBSparsityBuilder(TFCompressionAlgorithmBuilder):
     def __init__(self, config):
-        #if isinstance(tf.distribute.get_strategy(), tf.distribute.MirroredStrategy):
-        #    raise Exception('RB sparsity algorithm do not support the distributed mode with mirrored strategy')
-
         super().__init__(config)
         self.ignored_scopes = self.config.get('ignored_scopes', [])
         self._op_names = []
@@ -66,7 +63,7 @@ class RBSparsityBuilder(TFCompressionAlgorithmBuilder):
             transformations.register(
                 TFInsertionCommand(
                     target_point=TFLayerWeight(original_node_name, weight_attr_name),
-                    callable_object=RBSparsifyingWeight(op_name, model.generators),
+                    callable_object=RBSparsifyingWeight(op_name),
                     priority=TransformationPriority.SPARSIFICATION_PRIORITY
                 ))
 
