@@ -12,7 +12,7 @@
         "type": "Adam",
         "schedule_type": "piecewise_constant",
         "schedule_params": {
-            "boundaries": [15, 20, 25],
+            "boundaries": [17, 22, 30],
             "values": [1e-3, 1e-4, 1e-5, 1e-6]
         }
     },
@@ -26,8 +26,8 @@
         "sparsity_init": 0.02,
         "params": {
           "sparsity_target": 0.61,
-          "sparsity_target_epoch": 5,
-          "sparsity_freeze_epoch": 10
+          "sparsity_target_epoch": 7,
+          "sparsity_freeze_epoch": 13
         }
       },
       {
