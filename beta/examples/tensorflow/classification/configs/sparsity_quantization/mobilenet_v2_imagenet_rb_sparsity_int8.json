@@ -6,13 +6,13 @@
     },
 
     "batch_size": 256,
-    "epochs": 40,
+    "epochs": 45,
 
     "optimizer": {
         "type": "Adam",
         "schedule_type": "piecewise_constant",
         "schedule_params": {
-            "boundaries": [15, 20, 30],
+            "boundaries": [20, 25, 35],
             "values": [1e-3, 1e-4, 1e-5, 1e-6]
         }
     },
@@ -25,9 +25,9 @@
             "algorithm": "rb_sparsity",
             "sparsity_init": 0.01,
             "params": {
-                "sparsity_target": 0.5,
-                "sparsity_target_epoch": 5,
-                "sparsity_freeze_epoch": 10
+                "sparsity_target": 0.52,
+                "sparsity_target_epoch": 10,
+                "sparsity_freeze_epoch": 15
             }
         },
         {
