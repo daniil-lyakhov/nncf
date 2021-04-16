@@ -11,7 +11,7 @@
         "type": "Adam",
         "schedule_type": "piecewise_constant",
         "schedule_params": {
-            "boundaries": [20, 25, 37, 45],
+            "boundaries": [20, 30, 40, 45],
             "values": [1e-3, 5e-4, 1e-4, 1e-5, 1e-6]
         }
     },
