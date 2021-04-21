@@ -83,13 +83,13 @@ Quick jump to the samples:
 | :---: | :---: | :---: | :---: | :---: |
 |Inception V3|INT8 w:sym,per-tensor a:sym,per-tensor |ImageNet|77.9|78.41|
 |Inception V3|Sparsity 54% (Magnitude)|ImageNet|77.9|77.87|
-|Inception V3|INT8 w:sym,per-tensor a:sym,per-tensor + Sparsity 54% (Magnitude)|ImageNet|77.9|77.52|
+|Inception V3|INT8 w:sym,per-tensor a:sym,per-tensor + Sparsity 61% (RB)|ImageNet|77.9|77.55|
 |MobileNet V2|INT8 w:sym,per-tensor a:sym,per-tensor |ImageNet|71.85|71.96|
-|MobileNet V2|Sparsity 35% (Magnitude)|ImageNet|71.85|72.36|
-|MobileNet V2|INT8 w:sym,per-tensor a:sym,per-tensor + Sparsity 35% (Magnitude)|ImageNet|71.85|72.17|
+|MobileNet V2|Sparsity 50% (RB)|ImageNet|71.85|71.34|
+|MobileNet V2|INT8 w:sym,per-tensor a:sym,per-tensor + Sparsity 52% (RB)|ImageNet|71.85|71.05|
 |ResNet50|INT8 w:sym,per-tensor a:sym,per-tensor|ImageNet|75.04|75.04|
-|ResNet50|Sparsity 50% (Magnitude)|ImageNet|75.04|75|
-|ResNet50|INT8 w:sym,per-tensor a:sym,per-tensor + Sparsity 50% (Magnitude)|ImageNet|75.04|74.46|
+|ResNet50|Sparsity 80% (RB)|ImageNet|75.04|74.36|
+|ResNet50|INT8 w:sym,per-tensor a:sym,per-tensor + Sparsity 65% (RB)|ImageNet|75.04|74.38|
 |ResNet50|Filter Pruning 40%|ImageNet|75.04|74.98|
 |TensorFlow Hub MobileNet V2|Sparsity 35% (Magnitude)|ImageNet|71.84|71.90|
 
