@@ -12,6 +12,9 @@
 """
 
 import networkx as nx
+import tensorflow as tf
+
+from typing import List
 
 from nncf.common.graph.transformations.commands import TransformationPriority
 from nncf.common.utils.logger import logger
@@ -36,6 +39,7 @@ from beta.nncf.tensorflow.layers.custom_objects import NNCF_QUANTIZATION_OPERATO
 from beta.nncf.tensorflow.quantization.initializers.minmax import MinMaxInitializer
 from beta.nncf.tensorflow.quantization.layers import FakeQuantize
 from beta.nncf.tensorflow.quantization.quantizers import TFQuantizerSpec
+from beta.nncf.tensorflow.quantization.utils import apply_saturation_issue_fix
 from beta.nncf.tensorflow.utils.node import is_ignored
 from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.quantization.structs import QuantizationMode
@@ -69,12 +73,13 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
         self.global_quantizer_constraints = {}
         self.ignored_scopes_per_group = {}
         self.target_scopes_per_group = {}
+        self._op_names = []
 
         for quantizer_group in QUANTIZER_GROUPS:
             self._parse_group_params(self.config, quantizer_group)
 
     def build_controller(self, model):
-        return QuantizationController(model, self.config)
+        return QuantizationController(model, self._op_names, self.config)
 
     def _parse_group_params(self, config, quantizer_group):
         params_dict = config.get(quantizer_group, {})
@@ -97,9 +102,9 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
             qconfig = constraints.apply_constraints_to(qconfig)
         return qconfig
 
-    def _create_quantizer(self, name: str, qconfig: QuantizerConfig):
-        quantizer_cls = NNCF_QUANTIZATION_OPERATONS.get(qconfig.mode)
-        return quantizer_cls(name, qconfig)
+    def _create_quantizer(self, name: str, qspec: TFQuantizerSpec):
+        quantizer_cls = NNCF_QUANTIZATION_OPERATONS.get(qspec.mode)
+        return quantizer_cls(name, qspec)
 
     def get_transformation_layout(self, model):
         nxmodel = convert_keras_model_to_nxmodel(model)
@@ -123,10 +128,11 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
 
             weight_attr_name = QUANTIZATION_LAYERS[node['type']][WEIGHT_ATTR_NAME]
             op_name = self._get_quantizer_operation_name(node_name, weight_attr_name)
+            self._op_names.append(op_name)
 
             operation = self._create_quantizer(op_name, TFQuantizerSpec.from_config(qconfig,
-                                                                           narrow_range=True,
-                                                                           half_range=False))
+                                                                           narrow_range=False,
+                                                                           half_range=True))
 
             transformations.register(
                 TFInsertionCommand(
@@ -142,6 +148,7 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
             fake_quantize_layer = FakeQuantize(TFQuantizerSpec.from_config(qconfig, narrow_range=False,
                                                                            half_range=False),
                                                name=fake_quantize_name)
+            self._op_names.append(fake_quantize_layer.op_name)
 
             transformations.register(
                 TFInsertionCommand(
@@ -230,11 +237,12 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
 
 
 class QuantizationController(TFCompressionAlgorithmController):
-    def __init__(self, target_model, config):
+    def __init__(self, op_names: List[str], target_model, config):
         super().__init__(target_model)
         self._initializer = MinMaxInitializer(config)
         self._scheduler = BaseCompressionScheduler()
         self._loss = TFZeroCompressionLoss()
+        self._op_names = op_names
 
     @property
     def scheduler(self) -> CompressionScheduler:
@@ -246,3 +254,7 @@ class QuantizationController(TFCompressionAlgorithmController):
 
     def initialize(self, dataset=None, loss=None):
         self._initializer(self._model, dataset, loss)
+
+    def strip_model(self, model: tf.keras.Model) -> tf.keras.Model:
+        apply_saturation_issue_fix(model, self._op_names)
+        return model

@@ -64,28 +64,30 @@ class Quantizer(NNCFOperation):
         self._pre_processing_fn = self._make_pre_processing_fn()
         self._post_processing_fn = self._make_post_processing_fn()
 
-    def call(self, inputs, weights, _):
+    def call(self, inputs, weights, training):
         """
         The method applies quantization to the input tensor if the quantizer is enabled,
         otherwise, if the quantizer is disabled, the method returns the input tensor as is.
 
         :param inputs: Input tensor.
         :param weights: Quantizer's weights.
+        :param training: True if operation called in training mode else False
         :return: Output tensor.
         """
         if not self.enabled:
             return inputs
         transformed = self._pre_processing_fn(inputs)
-        quantized = self.quantize(transformed, weights)
+        quantized = self.quantize(transformed, weights, training)
         outputs = self._post_processing_fn(quantized)
         return outputs
 
-    def quantize(self, inputs, weights):
+    def quantize(self, inputs, weights, training):
         """
         Apply quantization to the input tensor.
 
         :param inputs: Input tensor.
         :param weights: Quantizer's weights.
+        :param training: True if operation called in training mode else False
         :return: Quantized tensor.
         """
         raise NotImplementedError
@@ -220,6 +222,11 @@ class Quantizer(NNCFOperation):
 
         return post_processing_fn
 
+    @staticmethod
+    def _min_adj(bits, low, range_len, narrow_range):
+        return range_len / (2 ** bits - (2 if narrow_range else 1)) * \
+            tf.round((2 ** bits - (2 if narrow_range else 1)) * low / range_len)
+
     def get_quantizer_config(self) -> QuantizerConfig:
         """
         Used to get a current quantizer state in terms of QuantizerConfig objects.
@@ -264,16 +271,40 @@ class SymmetricQuantizer(Quantizer):
             'signed_var': signed
         }
 
-    def quantize(self, inputs, weights):
-        return symmetric_quantize(
-            inputs,
-            weights['scale_var'],
-            weights['signed_var'],
-            num_bits=self.num_bits,
-            per_channel=self.per_channel,
-            narrow_range=self.narrow_range,
-            eps=self._eps
-        )
+    def apply_saturation_fix(self, weights):
+        assert self.num_bits == 8 and self._half_range
+        multiplier = 127./63. if self.narrow_range else 255./127.
+        weights['scale_var'].assign(multiplier * weights['scale_var'])
+        self._eps *= multiplier
+        self._half_range = False
+
+    def quantize(self, inputs, weights, _):
+        def _half_range_quantize():
+            return symmetric_quantize(
+                inputs,
+                weights['scale_var'],
+                weights['signed_var'],
+                num_bits=self.num_bits - 1,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=self._eps
+            )
+
+        def _default_quantize():
+            return symmetric_quantize(
+                inputs,
+                weights['scale_var'],
+                weights['signed_var'],
+                num_bits=self.num_bits,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=self._eps
+            )
+
+        if self._half_range:
+            return _half_range_quantize()
+
+        return _default_quantize()
 
     def apply_minmax_initialization(self, weights, min_values, max_values, min_range=0.1, eps=0.01):
         if self.signedness_to_force is None:
@@ -353,16 +384,44 @@ class AsymmetricQuantizer(Quantizer):
             'input_range_var': input_range
         }
 
-    def quantize(self, inputs, weights):
-        return asymmetric_quantize(
-            inputs,
-            weights['input_low_var'],
-            weights['input_range_var'],
-            num_bits=self.num_bits,
-            per_channel=self.per_channel,
-            narrow_range=self.narrow_range,
-            eps=self._eps
-        )
+    def apply_saturation_fix(self, weights):
+        assert self.num_bits == 8 and self._half_range
+        weights['input_low_var'].assign(weights['input_low_var'] + self._min_adj(
+                                        7, weights['input_low_var'],
+                                        weights['input_range_var'] + self._eps,
+                                        self.narrow_range))
+        multiplier = 127./63. if self.narrow_range else 255./127.
+        weights['input_range_var'].assign(multiplier * weights['input_range_var'])
+        self._eps *= multiplier
+        self._half_range = False
+
+    def quantize(self, inputs, weights, _):
+        def _half_range_quantize():
+            return asymmetric_quantize(
+                inputs,
+                weights['input_low_var'],
+                weights['input_range_var'],
+                num_bits=self.num_bits - 1,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=self._eps
+            )
+
+        def _default_quantize():
+            return asymmetric_quantize(
+                inputs,
+                weights['input_low_var'],
+                weights['input_range_var'],
+                num_bits=self.num_bits,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=self._eps
+            )
+
+        if self._half_range:
+            return _half_range_quantize()
+
+        return _default_quantize()
 
     def apply_minmax_initialization(self, weights, min_values, max_values, min_range=0.1, eps=0.01):
         ranges = max_values - min_values

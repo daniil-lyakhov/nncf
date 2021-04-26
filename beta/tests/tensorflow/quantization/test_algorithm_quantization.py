@@ -11,13 +11,10 @@
  limitations under the License.
 """
 
-from addict import Dict
-
 import tensorflow as tf
 from tensorflow.python.keras import layers
 import pytest
 
-from beta.nncf import NNCFConfig
 from beta.nncf.tensorflow.layers.common import LAYERS_WITH_WEIGHTS
 from beta.nncf.tensorflow.layers.common import WEIGHT_ATTR_NAME
 from beta.nncf.tensorflow.layers.custom_objects import NNCF_QUANTIZATION_OPERATONS
@@ -28,29 +25,8 @@ from beta.nncf.tensorflow.quantization.algorithm import QuantizationController
 from beta.nncf.tensorflow.quantization.quantizers import Quantizer, TFQuantizerSpec
 from beta.tests.tensorflow.helpers import create_compressed_model_and_algo_for_test
 from beta.tests.tensorflow.helpers import get_basic_conv_test_model
+from beta.tests.tensorflow.quantization.utils import get_basic_quantization_config
 from nncf.common.quantization.structs import QuantizationMode
-
-
-def get_basic_quantization_config(model_size=4):
-    config = NNCFConfig()
-    config.update(Dict({
-        "model": "basic_quant_conv",
-        "input_info":
-            {
-                "sample_size": [1, model_size, model_size, 1],
-            },
-        "compression":
-            {
-                "algorithm": "quantization",
-            }
-    }))
-    return config
-
-
-def get_basic_asym_quantization_config(model_size=4):
-    config = get_basic_quantization_config(model_size)
-    config['compression']['activations'] = {'mode': 'asymmetric'}
-    return config
 
 
 def compare_qspecs(qspec: TFQuantizerSpec, quantizer):
@@ -378,7 +354,6 @@ class LayerDeck:
         if self.inputs is not None:
             return tuple(self.inputs.shape)
         return None
-
 
 
 class Conv1D(LayerDeck):

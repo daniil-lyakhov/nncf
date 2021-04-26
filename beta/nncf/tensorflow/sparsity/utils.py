@@ -80,7 +80,7 @@ def strip_model_from_masks(model: tf.keras.Model, op_names: List[str]) -> tf.ker
     return TFModelTransformer(model, transformations).transform()
 
 
-def apply_fn_to_op_weights(model: tf.keras.Model, op_names: List[str], fn = lambda x: x):
+def apply_fn_to_op_weights(model: tf.keras.Model, op_names: List[str], fn=lambda x: x):
     sparsifyed_layers = collect_wrapped_layers(model)
     target_ops = []
     for layer in sparsifyed_layers:
