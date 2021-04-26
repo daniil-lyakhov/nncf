@@ -293,8 +293,23 @@ def run(config):
             loss_fn = model_builder.build_loss_fn(compress_model, compression_ctrl.loss)
             predict_post_process_fn = model_builder.post_processing
 
-            checkpoint = tf.train.Checkpoint(model=compress_model, optimizer=optimizer)
+            a = tf.Variable(0.)
+            ctrl_state = {
+                'scheduler_state': {
+                                    'a': a,
+                                    'b': tf.Variable(0.)},
+                'loss_state': tf.Variable(0.)
+            }
+            checkpoint = tf.train.Checkpoint(model=compress_model, optimizer=optimizer, ctrl=ctrl_state)
             checkpoint_manager = tf.train.CheckpointManager(checkpoint, config.checkpoint_save_dir, max_to_keep=None)
+
+
+            # Add state to the checkpoint
+            if not config.ckpt_path:
+                a.assign(1.)
+                save_path = checkpoint_manager.save()
+                print(f'Save path: {save_path}')
+                exit()
 
             initial_epoch = initial_step = 0
             if config.ckpt_path:
@@ -306,7 +321,8 @@ def run(config):
             else:
                 logger.info('Initialization...')
                 compression_ctrl.initialize(dataset=train_dataset)
-
+            tf.assert_equal(a, tf.constant(1.))
+            exit()
     train_step = create_train_step_fn(strategy, compress_model, loss_fn, optimizer)
     test_step = create_test_step_fn(strategy, compress_model, predict_post_process_fn)
 
