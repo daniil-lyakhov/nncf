@@ -15,6 +15,7 @@ from functools import partial
 from typing import Optional
 
 import tensorflow as tf
+from tensorflow.python.keras.utils.control_flow_util import smart_cond
 
 from beta.nncf.tensorflow.layers.custom_objects import NNCF_CUSTOM_OBJECTS
 from beta.nncf.tensorflow.layers.custom_objects import NNCF_QUANTIZATION_OPERATONS
@@ -64,19 +65,21 @@ class Quantizer(NNCFOperation):
         self._pre_processing_fn = self._make_pre_processing_fn()
         self._post_processing_fn = self._make_post_processing_fn()
 
-    def call(self, inputs, weights, _):
+    def call(self, inputs, weights, training):
         """
         The method applies quantization to the input tensor if the quantizer is enabled,
         otherwise, if the quantizer is disabled, the method returns the input tensor as is.
 
         :param inputs: Input tensor.
         :param weights: Quantizer's weights.
+        :param training: True if operation called in training mode
+            else False
         :return: Output tensor.
         """
         if not self.enabled:
             return inputs
         transformed = self._pre_processing_fn(inputs)
-        quantized = self.quantize(transformed, weights)
+        quantized = self.quantize(transformed, weights, training)
         outputs = self._post_processing_fn(quantized)
         return outputs
 
@@ -264,16 +267,62 @@ class SymmetricQuantizer(Quantizer):
             'signed_var': signed
         }
 
-    def quantize(self, inputs, weights):
-        return symmetric_quantize(
-            inputs,
-            weights['scale_var'],
-            weights['signed_var'],
-            num_bits=self.num_bits,
-            per_channel=self.per_channel,
-            narrow_range=self.narrow_range,
-            eps=self._eps
-        )
+    def quantize(self, inputs, weights, training):
+        def _half_range_quantize():
+            return symmetric_quantize(
+                inputs,
+                weights['scale_var'],
+                weights['signed_var'],
+                num_bits=self.num_bits - 1,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=self._eps
+            )
+
+        def _full_range_non_narrow_quantize():
+            return symmetric_quantize(
+                inputs,
+                255 / 256 * weights['scale_var'],
+                weights['signed_var'],
+                num_bits=self.num_bits,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=255 / 256 * self._eps
+            )
+
+        def _full_range_narrow_quantize():
+            return symmetric_quantize(
+                inputs,
+                127 / 63 * weights['scale_var'],
+                weights['signed_var'],
+                num_bits=self.num_bits,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=127 / 63 * self._eps
+            )
+
+        def _default_quantize():
+            return symmetric_quantize(
+                inputs,
+                weights['scale_var'],
+                weights['signed_var'],
+                num_bits=self.num_bits,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=self._eps
+            )
+
+        if not self._half_range:
+            return _default_quantize()
+
+        if self.narrow_range:
+            return smart_cond(pred=training,
+                              true_fn=_half_range_quantize,
+                              false_fn=_full_range_narrow_quantize)
+
+        return smart_cond(pred=training,
+                          true_fn=_half_range_quantize,
+                          false_fn=_full_range_non_narrow_quantize)
 
     def apply_minmax_initialization(self, weights, min_values, max_values, min_range=0.1, eps=0.01):
         if self.signedness_to_force is None:
@@ -353,16 +402,70 @@ class AsymmetricQuantizer(Quantizer):
             'input_range_var': input_range
         }
 
-    def quantize(self, inputs, weights):
-        return asymmetric_quantize(
-            inputs,
-            weights['input_low_var'],
-            weights['input_range_var'],
-            num_bits=self.num_bits,
-            per_channel=self.per_channel,
-            narrow_range=self.narrow_range,
-            eps=self._eps
-        )
+    def quantize(self, inputs, weights, training):
+        def min_adj(bits, low, range_, narrow_range):
+            return low / (2 ** bits - 2 if narrow_range else 1) * \
+                tf.round((2 ** bits - 2 if narrow_range else 1) * low / range_)
+
+        def _half_range_quantize():
+            return asymmetric_quantize(
+                inputs,
+                weights['input_low_var'],
+                weights['input_range_var'],
+                num_bits=self.num_bits - 1,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=self._eps
+            )
+
+        def _full_range_non_narrow_quantize():
+            return asymmetric_quantize(
+                inputs,
+                weights['input_low_var'] + min_adj(7, weights['input_low_var'],
+                                                   weights['input_range_var'],
+                                                   self.narrow_range),
+                255 / 127 * weights['input_range_var'],
+                num_bits=self.num_bits,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=255 / 127 * self._eps
+            )
+
+        def _full_range_narrow_quantize():
+            return asymmetric_quantize(
+                inputs,
+                weights['input_low_var'] + min_adj(7, weights['input_low_var'],
+                                                   weights['input_range_var'],
+                                                   self.narrow_range),
+                127 / 63 * weights['input_range_var'],
+                num_bits=self.num_bits,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=127 / 63 * self._eps
+            )
+
+        def _default_quantize():
+            return asymmetric_quantize(
+                inputs,
+                weights['input_low_var'],
+                weights['input_range_var'],
+                num_bits=self.num_bits,
+                per_channel=self.per_channel,
+                narrow_range=self.narrow_range,
+                eps=self._eps
+            )
+
+        if not self._half_range:
+            return _default_quantize()
+
+        if self.narrow_range:
+            return smart_cond(pred=training,
+                              true_fn=_half_range_quantize,
+                              false_fn=_full_range_narrow_quantize)
+
+        return smart_cond(pred=training,
+                          true_fn=_half_range_quantize,
+                          false_fn=_full_range_non_narrow_quantize)
 
     def apply_minmax_initialization(self, weights, min_values, max_values, min_range=0.1, eps=0.01):
         ranges = max_values - min_values
