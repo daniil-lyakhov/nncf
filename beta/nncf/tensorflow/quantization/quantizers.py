@@ -17,6 +17,7 @@ from typing import Optional
 import tensorflow as tf
 from tensorflow.python.keras.utils.control_flow_util import smart_cond
 
+from beta.nncf.tensorflow.layers.operation import InputType
 from beta.nncf.tensorflow.layers.custom_objects import NNCF_CUSTOM_OBJECTS
 from beta.nncf.tensorflow.layers.custom_objects import NNCF_QUANTIZATION_OPERATONS
 from beta.nncf.tensorflow.layers.data_layout import get_channel_axis
@@ -245,8 +246,10 @@ class SymmetricQuantizer(Quantizer):
         self.narrow_range = qspec.narrow_range
         self.signedness_to_force = qspec.signedness_to_force
         self._half_range = qspec.half_range
+        self._input_type = None
 
     def build(self, input_shape, input_type, name, layer):
+        self._input_type = input_type
         shape = None
         if self.per_channel:
             self.setup_input_transformation(input_shape, input_type, name, layer)
@@ -268,6 +271,15 @@ class SymmetricQuantizer(Quantizer):
         }
 
     def quantize(self, inputs, weights, training):
+        def maybe_clip(inputs):
+            if self._input_type == InputType.WEIGHTS:
+                scale_safe = weights['scale_var'] + self._eps
+                inputs = tf.clip_by_value(
+                    inputs,
+                    clip_value_min=scale_safe * weights['signed_var'],
+                    clip_value_max=scale_safe)
+            return inputs
+
         def _half_range_quantize():
             return symmetric_quantize(
                 inputs,
@@ -280,19 +292,21 @@ class SymmetricQuantizer(Quantizer):
             )
 
         def _full_range_non_narrow_quantize():
+            inputs_clipped = maybe_clip(inputs)
             return symmetric_quantize(
-                inputs,
-                255 / 256 * weights['scale_var'],
+                inputs_clipped,
+                255 / 127 * weights['scale_var'],
                 weights['signed_var'],
                 num_bits=self.num_bits,
                 per_channel=self.per_channel,
                 narrow_range=self.narrow_range,
-                eps=255 / 256 * self._eps
+                eps=255 / 127 * self._eps
             )
 
         def _full_range_narrow_quantize():
+            inputs_clipped = maybe_clip(inputs)
             return symmetric_quantize(
-                inputs,
+                inputs_clipped,
                 127 / 63 * weights['scale_var'],
                 weights['signed_var'],
                 num_bits=self.num_bits,
@@ -380,8 +394,10 @@ class AsymmetricQuantizer(Quantizer):
         self.narrow_range = qspec.narrow_range
         self.per_channel = qspec.per_channel
         self._half_range = qspec.half_range
+        self._input_type = None
 
     def build(self, input_shape, input_type, name, layer):
+        self._input_type = input_type
         shape = None
         if self.per_channel:
             self.setup_input_transformation(input_shape, input_type, name, layer)
@@ -407,6 +423,14 @@ class AsymmetricQuantizer(Quantizer):
             return low / (2 ** bits - 2 if narrow_range else 1) * \
                 tf.round((2 ** bits - 2 if narrow_range else 1) * low / range_)
 
+        def maybe_clip(inputs):
+            if self._input_type == InputType.WEIGHTS:
+                inputs = tf.clip_by_value(
+                    inputs,
+                    clip_value_min=weights['input_low_var'],
+                    clip_value_max=weights['input_low_var'] + weights['input_range_var'] + self._eps)
+            return inputs
+
         def _half_range_quantize():
             return asymmetric_quantize(
                 inputs,
@@ -419,8 +443,9 @@ class AsymmetricQuantizer(Quantizer):
             )
 
         def _full_range_non_narrow_quantize():
+            inputs_clipped = maybe_clip(inputs)
             return asymmetric_quantize(
-                inputs,
+                inputs_clipped,
                 weights['input_low_var'] + min_adj(7, weights['input_low_var'],
                                                    weights['input_range_var'],
                                                    self.narrow_range),
@@ -432,8 +457,9 @@ class AsymmetricQuantizer(Quantizer):
             )
 
         def _full_range_narrow_quantize():
+            inputs_clipped = maybe_clip(inputs)
             return asymmetric_quantize(
-                inputs,
+                inputs_clipped,
                 weights['input_low_var'] + min_adj(7, weights['input_low_var'],
                                                    weights['input_range_var'],
                                                    self.narrow_range),

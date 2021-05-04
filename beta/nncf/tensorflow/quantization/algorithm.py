@@ -97,9 +97,9 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
             qconfig = constraints.apply_constraints_to(qconfig)
         return qconfig
 
-    def _create_quantizer(self, name: str, qconfig: QuantizerConfig):
-        quantizer_cls = NNCF_QUANTIZATION_OPERATONS.get(qconfig.mode)
-        return quantizer_cls(name, qconfig)
+    def _create_quantizer(self, name: str, qspec: TFQuantizerSpec):
+        quantizer_cls = NNCF_QUANTIZATION_OPERATONS.get(qspec.mode)
+        return quantizer_cls(name, qspec)
 
     def get_transformation_layout(self, model):
         nxmodel = convert_keras_model_to_nxmodel(model)
