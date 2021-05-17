@@ -224,8 +224,8 @@ class Quantizer(NNCFOperation):
 
     @staticmethod
     def _min_adj(bits, low, range_len, narrow_range):
-        return range_len / (2 ** bits - (2 if narrow_range else 1)) * \
-            tf.round((2 ** bits - (2 if narrow_range else 1)) * low / range_len)
+        quants_count = 2 ** bits - (2 if narrow_range else 1)
+        return range_len / quants_count * tf.round(quants_count * low / range_len)
 
     def get_quantizer_config(self) -> QuantizerConfig:
         """
@@ -272,7 +272,10 @@ class SymmetricQuantizer(Quantizer):
         }
 
     def apply_saturation_fix(self, weights):
-        assert self.num_bits == 8 and self._half_range
+        if self.num_bits != 8 or not self._half_range:
+            raise RuntimeError('Attempt to apply saturation issue fix '
+                               'to quantizer which is not configured for that.')
+
         multiplier = 127./63. if self.narrow_range else 255./127.
         weights['scale_var'].assign(multiplier * weights['scale_var'])
         self._eps *= multiplier
@@ -385,7 +388,10 @@ class AsymmetricQuantizer(Quantizer):
         }
 
     def apply_saturation_fix(self, weights):
-        assert self.num_bits == 8 and self._half_range
+        if self.num_bits != 8 or not self._half_range:
+            raise RuntimeError('Attempt to apply saturation issue fix '
+                               'to quantizer which is not configured for that.')
+
         weights['input_low_var'].assign(weights['input_low_var'] + self._min_adj(
                                         7, weights['input_low_var'],
                                         weights['input_range_var'] + self._eps,

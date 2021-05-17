@@ -18,7 +18,7 @@ import tensorflow as tf
 from beta.nncf.tensorflow.layers.wrapper import NNCFWrapper
 
 
-def apply_saturation_issue_fix(model: tf.keras.Model, op_names: List[str]) -> tf.keras.Model:
+def apply_saturation_issue_fix(model: tf.keras.Model, op_names: List[str]) -> None:
     if not isinstance(model, tf.keras.Model):
         raise ValueError(
             'Expected model to be a `tf.keras.Model` instance but got: {}'.format(type(model)))
@@ -38,5 +38,4 @@ def apply_saturation_fix_to_layer(layer: NNCFWrapper, weight_attr: str, op_name:
     layer_weight.assign(
         op.call(layer_weight, ops_weights, False)
     )
-    layer.set_layer_weight(weight_attr, layer_weight)
     op.apply_saturation_fix(ops_weights)

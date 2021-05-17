@@ -71,8 +71,8 @@ def test_quantization_configs__with_defaults():
                                        num_bits=8,
                                        signedness_to_force=None,
                                        per_channel=False,
-                                       narrow_range=True,
-                                       half_range=False)
+                                       narrow_range=False,
+                                       half_range=True)
     for wq in weight_quantizers:
         compare_qspecs(ref_weight_qspec, wq)
 
@@ -119,6 +119,37 @@ def test_quantization_configs__custom():
     ref_activation_qspec = TFQuantizerSpec(mode=QuantizationMode.ASYMMETRIC,
                                            num_bits=4,
                                            signedness_to_force=True,
+                                           per_channel=False,
+                                           narrow_range=False,
+                                           half_range=False)
+    for wq in activation_quantizers:
+        compare_qspecs(ref_activation_qspec, wq)
+
+
+def test_quantization_configs__disable_saturation_fix():
+    model = get_basic_conv_test_model()
+
+    config = get_basic_quantization_config()
+    config['compression'].update({
+        'disable_saturation_fix': True
+    })
+    compression_model, compression_ctrl = create_compressed_model_and_algo_for_test(model, config)
+
+    assert isinstance(compression_ctrl, QuantizationController)
+    activation_quantizers, weight_quantizers = get_quantizers(compression_model)
+
+    ref_weight_qspec = TFQuantizerSpec(mode=QuantizationMode.SYMMETRIC,
+                                       num_bits=8,
+                                       signedness_to_force=None,
+                                       per_channel=False,
+                                       narrow_range=True,
+                                       half_range=False)
+    for wq in weight_quantizers:
+        compare_qspecs(ref_weight_qspec, wq)
+
+    ref_activation_qspec = TFQuantizerSpec(mode=QuantizationMode.SYMMETRIC,
+                                           num_bits=8,
+                                           signedness_to_force=None,
                                            per_channel=False,
                                            narrow_range=False,
                                            half_range=False)

@@ -143,7 +143,7 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
             self._op_names.append(op_name)
 
             operation = self._create_quantizer(op_name, TFQuantizerSpec.from_config(qconfig,
-                                                                           narrow_range=False,
+                                                                           narrow_range=not half_range,
                                                                            half_range=half_range))
 
             transformations.register(
@@ -249,7 +249,7 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
 
 
 class QuantizationController(TFCompressionAlgorithmController):
-    def __init__(self, op_names: List[str], target_model, config):
+    def __init__(self, target_model, op_names: List[str], config):
         super().__init__(target_model)
         self._initializer = MinMaxInitializer(config)
         self._scheduler = BaseCompressionScheduler()

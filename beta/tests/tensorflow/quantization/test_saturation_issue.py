@@ -80,9 +80,6 @@ class TestQuantizedWeightsEqualAfterFixApplied:
     @pytest.mark.parametrize('signedness_to_force', [True, False], ids=['signed', 'unsigned'])
     def test_symmetric_quantized_weights_equal_after_fix_applied(self, per_ch, signedness_to_force,
                                                                  init_w_as_middle_points, narrow_range):
-        physical_devices = tf.config.list_physical_devices('GPU')
-        for device in physical_devices:
-            tf.config.experimental.set_memory_growth(device, True)
         qconfig = QuantizerConfig(
             num_bits=8,
             mode=QuantizationMode.SYMMETRIC,
@@ -127,12 +124,9 @@ class TestQuantizedWeightsEqualAfterFixApplied:
         check_quantized_values_equals(w_int7, w_int8, EPS, range_len, narrow_range)
 
     @pytest.mark.parametrize('low,range_len', [(-1., 2.), (-5., 4.), (3., 2.)],
-                             ids=['zero_in_range', 'max_l_than_zero', 'low_g_than_zero'])
+                             ids=['zero_in_range', 'max_less_than_zero', 'low_greater_than_zero'])
     def test_asymmetric_quantized_weights_equal_after_fix_applied(self, low, range_len, per_ch,
                                                                   init_w_as_middle_points, narrow_range):
-        physical_devices = tf.config.list_physical_devices('GPU')
-        for device in physical_devices:
-            tf.config.experimental.set_memory_growth(device, True)
         qconfig = QuantizerConfig(
             num_bits=8,
             mode=QuantizationMode.ASYMMETRIC,
