@@ -69,6 +69,7 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
 
         self.quantize_inputs = self.config.get('quantize_inputs', True)
         self.quantize_outputs = self.config.get('quantize_outputs', False)
+        self._disable_saturation_fix = self.config.get('disable_saturation_fix', False)
 
         self.global_quantizer_constraints = {}
         self.ignored_scopes_per_group = {}
@@ -102,6 +103,15 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
             qconfig = constraints.apply_constraints_to(qconfig)
         return qconfig
 
+    def _get_half_range(self, qconfig):
+        if qconfig.num_bits == 8 and not self._disable_saturation_fix:
+            logger.warning('A saturation issue fix will be applied. '
+                           'Now all weight quantizers will effectively use only 7 bits out of 8 bits. '
+                           'This resolves the saturation issue problem on AVX2 and AVX-512 machines. '
+                           'Please take a look at the documentation for a detailed information.')
+            return True
+        return False
+
     def _create_quantizer(self, name: str, qspec: TFQuantizerSpec):
         quantizer_cls = NNCF_QUANTIZATION_OPERATONS.get(qspec.mode)
         return quantizer_cls(name, qspec)
@@ -115,6 +125,8 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
 
         transformations = TFTransformationLayout()
         qconfig = self._get_default_qconfig(self.global_quantizer_constraints[WEIGHTS])
+        half_range = self._get_half_range(qconfig)
+
         shared_nodes = set()
         for node_name, node in nxmodel.nodes.items():
             original_node_name, _ = get_original_name_and_instance_index(node_name)
@@ -132,7 +144,7 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
 
             operation = self._create_quantizer(op_name, TFQuantizerSpec.from_config(qconfig,
                                                                            narrow_range=False,
-                                                                           half_range=True))
+                                                                           half_range=half_range))
 
             transformations.register(
                 TFInsertionCommand(
