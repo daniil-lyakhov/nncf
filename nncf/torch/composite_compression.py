@@ -45,35 +45,16 @@ class PTCompositeCompressionLoss(CompositeCompressionLoss, PTCompressionLoss):
 class PTCompositeCompressionAlgorithmBuilder(
         CompositeCompressionAlgorithmBuilder, PTCompressionAlgorithmBuilder):
     def __init__(self, config: 'NNCFConfig', should_init: bool = True):
-        from nncf import NNCFConfig
         from nncf.torch.model_creation import get_compression_algorithm
 
         super().__init__(config, should_init)
+        compression_config = config.get('compression', {})
 
-        compression_config_json_section = config.get('compression', {})
-        compression_config_json_section = deepcopy(compression_config_json_section)
-
-        hw_config_type = None
-        target_device = config.get("target_device", "ANY")
-        global_compression_lr_multiplier = config.get("compression_lr_multiplier", None)
-        if target_device != 'TRIAL':
-            hw_config_type = HWConfigType.from_str(HW_CONFIG_TYPE_TARGET_DEVICE_MAP[target_device])
-
-        if isinstance(compression_config_json_section, dict):
-            compression_config = NNCFConfig(compression_config_json_section)
-            compression_config.register_extra_structs(config.get_all_extra_structs_for_copy())
-            compression_config["hw_config_type"] = hw_config_type
-            if "compression_lr_multiplier" not in compression_config:
-                compression_config["compression_lr_multiplier"] = global_compression_lr_multiplier
+        if isinstance(compression_config, dict):
             self._child_builders = [
                 get_compression_algorithm(compression_config)(compression_config, should_init=should_init), ]
         else:
-            for algo_config in compression_config_json_section:
-                algo_config = NNCFConfig(algo_config)
-                algo_config.register_extra_structs(config.get_all_extra_structs_for_copy())
-                algo_config["hw_config_type"] = hw_config_type
-                if "compression_lr_multiplier" not in algo_config:
-                    algo_config["compression_lr_multiplier"] = global_compression_lr_multiplier
+            for algo_config in compression_config:
                 self._child_builders.append(
                     get_compression_algorithm(algo_config)(algo_config, should_init=should_init))
 

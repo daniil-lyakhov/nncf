@@ -101,13 +101,39 @@ class NNCFConfig(dict):
             raise
 
     def _configure_algo_params(self):
-        algorithms = self.get('compression', [])
-        if isinstance(algorithms, dict):
-            algorithms = [algorithms]
+        algorithm_configs = self.get('compression')
+        if not algorithm_configs:
+            return
 
-        for algo in algorithms:
-            algo['target_device'] = self.get('target_device',
-                                             DEFAULT_TARGET_DEVICE)
+        if isinstance(algorithm_configs, dict):
+            algorithm_configs = [algorithm_configs]
+
+        hw_config_type = None
+        target_device = self.get('target_device', 'ANY')
+        compression_lr_multiplier = self.get('compression_lr_multiplier', None)
+        if target_device != 'TRIAL':
+            from nncf.common.hardware.config import HW_CONFIG_TYPE_TARGET_DEVICE_MAP
+            from nncf.common.hardware.config import HWConfigType
+            hw_config_type = HWConfigType.from_str(HW_CONFIG_TYPE_TARGET_DEVICE_MAP[target_device])
+
+
+        modified_algo_configs = []
+        for algo_conf in algorithm_configs:
+            modified_algo_conf = NNCFConfig(algo_conf)
+            modified_algo_conf.register_extra_structs(self.get_all_extra_structs_for_copy())
+            modified_algo_conf.update({
+                'target_device': target_device,
+                'compression_lr_multiplier': compression_lr_multiplier,
+                'hw_config_type': hw_config_type
+            })
+            modified_algo_configs.append(modified_algo_conf)
+
+        # TODO: We can keep list with one element and use
+        # len(config.get(compression)) instead of isinstance
+        if len(algorithm_configs) == 1:
+            modified_algo_configs = modified_algo_configs[0]
+
+        self['compression'] = modified_algo_configs
 
 
 def product_dict(d):
