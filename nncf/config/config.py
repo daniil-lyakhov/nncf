@@ -26,6 +26,8 @@ from nncf.config.schema import ROOT_NNCF_CONFIG_SCHEMA
 from nncf.config.schema import validate_single_compression_algo_schema
 from nncf.config.structure import NNCFExtraConfigStruct
 
+DEFAULT_TARGET_DEVICE = 'ANY'
+
 
 class NNCFConfig(dict):
     """A regular dictionary object extended with some utility functions."""
@@ -42,7 +44,9 @@ class NNCFConfig(dict):
         """
 
         NNCFConfig.validate(nncf_dict)
-        return cls(deepcopy(nncf_dict))
+        nncf_config = cls(deepcopy(nncf_dict))
+        nncf_config._configure_algo_params()
+        return nncf_config
 
     @classmethod
     def from_json(cls, path) -> 'NNCFConfig':
@@ -95,6 +99,15 @@ class NNCFConfig(dict):
             # specific sub-schema will be shown, which is much shorter than the global schema
             logger.error("Invalid NNCF config supplied!")
             raise
+
+    def _configure_algo_params(self):
+        algorithms = self.get('compression', [])
+        if isinstance(algorithms, dict):
+            algorithms = [algorithms]
+
+        for algo in algorithms:
+            algo['target_device'] = self.get('target_device',
+                                             DEFAULT_TARGET_DEVICE)
 
 
 def product_dict(d):
