@@ -174,20 +174,20 @@ class QuantizationBuilder(TFCompressionAlgorithmBuilder):
                         callable_object=operation,
                         priority=TransformationPriority.QUANTIZATION_PRIORITY))
 
-        insertion_points = self._find_insertion_points(nncf_graph)
-        qconfig = self._get_default_qconfig(self.global_quantizer_constraints[QuantizerGroup.ACTIVATIONS])
-        for original_node_name, instance_index in insertion_points:
-            fake_quantize_name = self._get_fake_quantize_name(original_node_name, instance_index)
-            fake_quantize_layer = FakeQuantize(
-                TFQuantizerSpec.from_config(qconfig, narrow_range=False, half_range=False),
-                name=fake_quantize_name)
-            self._op_names.append(fake_quantize_layer.op_name)
+        #insertion_points = self._find_insertion_points(nncf_graph)
+        #qconfig = self._get_default_qconfig(self.global_quantizer_constraints[QuantizerGroup.ACTIVATIONS])
+        #for original_node_name, instance_index in insertion_points:
+        #    fake_quantize_name = self._get_fake_quantize_name(original_node_name, instance_index)
+        #    fake_quantize_layer = FakeQuantize(
+        #        TFQuantizerSpec.from_config(qconfig, narrow_range=False, half_range=False),
+        #        name=fake_quantize_name)
+        #    self._op_names.append(fake_quantize_layer.op_name)
 
-            transformations.register(
-                TFInsertionCommand(
-                    target_point=TFAfterLayer(original_node_name, instance_index),
-                    callable_object=fake_quantize_layer,
-                    priority=TransformationPriority.QUANTIZATION_PRIORITY))
+        #    transformations.register(
+        #        TFInsertionCommand(
+        #            target_point=TFAfterLayer(original_node_name, instance_index),
+        #            callable_object=fake_quantize_layer,
+        #            priority=TransformationPriority.QUANTIZATION_PRIORITY))
 
         return transformations
 
