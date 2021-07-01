@@ -6,14 +6,14 @@
     },
 
     "batch_size": 256,
-    "epochs": 15,
+    "epochs": 9,
 
     "optimizer": {
         "type": "Adam",
         "schedule_type": "piecewise_constant",
         "schedule_params": {
-            "boundaries": [5, 10],
-            "values": [1e-4, 1e-5, 1e-6]
+            "boundaries": [3, 6],
+            "values": [1e-3, 1e-4, 1e-5]
         }
     },
 
@@ -23,10 +23,9 @@
     "compression": {
         "algorithm": "quantization",
         "initializer": {
-            "batchnorm_adaptation": {
-                "num_bn_adaptation_samples": 2048,
-                "num_bn_forget_samples": 1024
-            }
-        }
+             "range": {
+                 "num_init_samples": 0
+             }
+         }
     }
 }

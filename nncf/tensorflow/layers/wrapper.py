@@ -21,6 +21,31 @@ from nncf.tensorflow.layers.custom_objects import NNCF_CUSTOM_OBJECTS
 from nncf.tensorflow.layers.operation import InputType
 
 
+from tensorflow.python.distribute.values_util import get_current_replica_id_as_int
+from tensorflow.python.framework import importer
+from tensorflow.python.eager import wrap_function
+from tensorflow.python.pywrap_tfe import TFE_Py_TapeSetShouldRecordBackprop as \
+    check_tensor_in_tape
+from tensorflow.python.ops.resource_variable_ops import variable_accessed as \
+    add_resource_var_in_tape
+
+from tensorflow.python.framework import auto_control_deps
+from tensorflow.python.framework import ops
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import resource_variable_ops
+from tensorflow.python.ops import tensor_array_ops
+from tensorflow.python.ops import variable_scope
+from tensorflow.python.util import nest
+from tensorflow.python.util import object_identity
+from tensorflow.python.util import tf_decorator
+from tensorflow.python.framework.func_graph import FuncGraph
+from tensorflow.python.framework.func_graph import _get_defun_inputs_from_args
+from tensorflow.python.framework.func_graph import _get_defun_inputs_from_kwargs
+from tensorflow.python.framework.func_graph import convert_structure_to_signature
+from tensorflow.python.framework.func_graph import flatten
+from tensorflow.python.framework.func_graph import check_mutation
+
+
 @NNCF_CUSTOM_OBJECTS.register()
 class NNCFWrapper(tf.keras.layers.Wrapper):
     """
@@ -169,6 +194,15 @@ class NNCFWrapper(tf.keras.layers.Wrapper):
 
     def build(self, input_shape=None):
         super().build(input_shape)
+
+        self.input_shape__ = input_shape
+        self.tf_f = tf.function(self.layer.call)
+
+        concrete = self.tf_f.get_concrete_function(*[tf.TensorSpec(self.input_shape__, tf.float32)])
+        with concrete.graph.as_default() as g:
+            tf.nn.softmax(g.outputs[0])
+
+        self.fn_train = concrete
         for weight_attr, ops in self.weights_attr_ops.items():
             weight = self.get_layer_weight(weight_attr)
             for op_name, op in ops.items():
@@ -179,16 +213,25 @@ class NNCFWrapper(tf.keras.layers.Wrapper):
         self._op_build = True
 
     def call(self, inputs, training=None):
-        training = self._get_training_value(training)
+        replica_context = tf.distribute.get_replica_context()
+        if replica_context is not None:
+            replica_id = get_current_replica_id_as_int()
+            new_variables = []
+            new_captured = []
+            for var, input_tensor in zip(self.layer.variables, self.fn_train.inputs[1:]):
+                new_variables.append(var._get_replica(replica_id))
+                new_captured.append((var._get_replica(replica_id).handle, input_tensor))
 
-        self._apply_ops(training)
-
-        if self._layer_expects_training_arg:
-            outputs = self.layer.call(inputs, training=training)
         else:
-            outputs = self.layer.call(inputs)
+            new_variables = self.fn_train.graph.variables
+            new_captured = self.fn_train.graph.captures
 
-        return outputs
+        fn_train = make_new_func(self.fn_train.graph.as_graph_def(),
+                                 new_captured,
+                                 new_variables,
+                                 self.fn_train.inputs,
+                                 self.fn_train.outputs)
+        return fn_train(inputs)
 
     def _apply_ops(self, training):
         for weight_attr, ops in self.weights_attr_ops.items():
@@ -200,6 +243,7 @@ class NNCFWrapper(tf.keras.layers.Wrapper):
             self.set_layer_weight(weight_attr, layer_weight)
 
     def registry_weight_operation(self, weights_attr, op):
+        return
         if weights_attr not in self.weights_attr_ops:
             self.weights_attr_ops[weights_attr] = OrderedDict()
 
@@ -279,3 +323,61 @@ class NNCFWrapper(tf.keras.layers.Wrapper):
                 )
 
         return wrapper
+
+
+#######
+# To make possible to get gradients out of concrete function
+# their vars id and captured id should be equal
+#######
+def get_concrete_vars_id(concrete):
+    res = []
+    for var in concrete._func_graph.variables:
+        res.append(var.handle._id)
+    return res
+
+
+def get_concrete_captured_id(concrete):
+    res = []
+    for var in concrete.captured_inputs:
+        res.append(var._id)
+    return res
+
+
+def _add_concrete_fun_resource_vars_to_tape(concrete):
+    for v in concrete._func_graph.variables:
+        add_resource_var_in_tape(v)
+
+
+def _check_concrete_fun_resource_vars_is_in_tape(concrete):
+    return check_tensor_in_tape(concrete.captured_inputs)
+
+
+def make_new_func(output_graph_def, captures, variables, inputs, outputs):
+    new_input_names = [tensor.name for tensor in inputs]
+    inputs_map = {
+        tensor.name: tensor for tensor in inputs
+    }
+    new_output_names = [tensor.name for tensor in outputs]
+    new_func = my_function_from_graph_def(output_graph_def,
+                                          new_input_names,
+                                          new_output_names,
+                                          captures,)
+    for input in new_func.inputs:
+        input.set_shape(inputs_map[input.name].shape)
+        break
+
+    new_func.graph.variables = variables
+    return new_func
+
+
+def my_function_from_graph_def(graph_def, inputs, outputs, ref_captures):
+    def _imports_graph_def():
+        importer.import_graph_def(graph_def, name="")
+
+    wrapped_import = wrap_function.wrap_function(_imports_graph_def, [])
+    import_graph = wrapped_import.graph
+    wrapped_import.graph.reset_captures([(tensor, import_graph.get_tensor_by_name(placeholder.name))
+                                         for tensor, placeholder in ref_captures])
+    return wrapped_import.prune(
+        nest.map_structure(import_graph.as_graph_element, inputs),
+        nest.map_structure(import_graph.as_graph_element, outputs))
