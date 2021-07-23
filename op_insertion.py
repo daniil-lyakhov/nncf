@@ -41,6 +41,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
         self.mirrored_vars_created = False
         self.ops_vars_created = False
         self.initial_model_weights = None
+        self.training_lock = None
         if isinstance(trainable_model, dict):
             self.model_type = ModelType.KerasLayer
 
@@ -204,6 +205,12 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             tf.io.write_graph(concrete.graph, '/tmp', 'mobilenetv2_sub_with_conv.pb')
 
     def call(self, inputs, training=None):
+        if self.training_lock is not None:
+            training = self.training_lock
+            print(f'Force training param to {training}')
+        else:
+            print(f'Build graph with given trainable={training}')
+
         model_obj = self.trainable_model if training else self.eval_model
         if isinstance(tf.distribute.get_strategy(), tf.distribute.MirroredStrategy):
             replica_context = tf.distribute.get_replica_context()

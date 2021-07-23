@@ -302,6 +302,25 @@ def run(config):
         'validation_freq': config.test_every_n_epochs,
     }
 
+    # BN INITIALIZATION
+    # Set trainable graph for eval
+    print(25*'*')
+    print('Start BN adaptiation')
+    print(25*'*')
+    compress_model.layers[0].training_lock = True
+    # Update BN statistics
+    compress_model.evaluate(train_dataset,
+                            steps=500,
+                            callbacks=[get_progress_bar(
+                            stateful_metrics=['loss'] + [metric.name for metric in metrics])],
+                            verbose=1)
+    # Reset model
+    compress_model.layers[0].training_lock = None
+    compress_model.compile(optimizer=optimizer,
+                           loss=loss_obj,
+                           metrics=metrics,
+                           run_eagerly=config.get('eager_mode', False))
+    ###
     if 'train' in config.mode:
         logger.info('training...')
         compress_model.fit(
