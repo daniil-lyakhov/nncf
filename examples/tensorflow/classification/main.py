@@ -310,7 +310,7 @@ def run(config):
     compress_model.layers[0].training_lock = True
     # Update BN statistics
     compress_model.evaluate(train_dataset,
-                            steps=500,
+                            steps=1000,
                             callbacks=[get_progress_bar(
                             stateful_metrics=['loss'] + [metric.name for metric in metrics])],
                             verbose=1)

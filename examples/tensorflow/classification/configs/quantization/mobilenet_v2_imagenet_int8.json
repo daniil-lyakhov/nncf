@@ -6,7 +6,7 @@
     },
 
     "batch_size": 256,
-    "epochs": 16,
+    "epochs": 22,
     "num_classes": 1001,
     "dataset_preprocessing_preset": "imagenet2012_slim",
 
@@ -14,7 +14,7 @@
         "type": "Adam",
         "schedule_type": "piecewise_constant",
         "schedule_params": {
-            "boundaries": [6, 10],
+            "boundaries": [12, 17],
             "values": [1e-4, 1e-5, 1e-6]
         }
     },
