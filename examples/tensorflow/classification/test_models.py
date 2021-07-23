@@ -45,16 +45,13 @@ def get_submoduled_model():
 
 def get_KerasLayer_model():
     """
-
     :return : 2 * (KerasLayer instance, non optimized concrete function,
                optimized graph_def) first one is trainable and second one is not
     """
     retval = []
+    keras_layer = hub.KerasLayer("https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/5",
+                                 trainable=True, arguments=dict(batch_norm_momentum=0.997))
     for trainable in [True, False]:
-        #assert not tf.distribute.has_strategy(), 'Can\'t modify KerasLayer graph created in cross replica mode'
-
-        keras_layer = hub.KerasLayer("https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/5",
-                                     trainable=trainable, arguments=dict(batch_norm_momentum=0.997))
         tf_f = tf.function(lambda x: keras_layer.call(x, training=trainable))
         concrete = tf_f.get_concrete_function(*[tf.TensorSpec((None, 224, 224, 3), tf.float32, name='input')])
         optimized_gd = _run_inline_graph_optimization(concrete, False, False)

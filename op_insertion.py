@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from typing import List
+from itertools import islice
 from tensorflow.python.framework import importer
 from tensorflow.python.eager import wrap_function
 from tensorflow.python.distribute.values_util import get_current_replica_id_as_int
@@ -23,9 +24,9 @@ class InsertionPoint(object):
 
 
 class QuantizationSetup(object):
-    def __init__(self, signed=None, should_init=None):
+    def __init__(self, signed=None, init_value=6):
         self.signed = signed
-        self.init_value = should_init
+        self.init_value = init_value
 
 
 class NNCFCallableGraph(object):
@@ -33,7 +34,11 @@ class NNCFCallableGraph(object):
 
 
 class NNCFWrapperCustom(tf.keras.layers.Wrapper):
-    def __init__(self, trainable_model, eval_model=None, **kwargs):
+    def __init__(self,
+                 trainable_model,
+                 eval_model=None,
+                 caliblration_dataset=None,
+                 **kwargs):
         super().__init__(tf.keras.layers.Layer(), **kwargs)
         self.model_type = ModelType.FuncModel
         self.trainable_model = NNCFCallableGraph()
@@ -41,14 +46,18 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
         self.mirrored_vars_created = False
         self.ops_vars_created = False
         self.initial_model_weights = None
-        self.training_lock = None
+        self.calibration_dataset = caliblration_dataset
+        self.init_steps = 1
+        self.training_forced = None
         if isinstance(trainable_model, dict):
             self.model_type = ModelType.KerasLayer
 
             self.trainable_model.graph_def = trainable_model['graph_def']
             self.trainable_model.concrete = trainable_model['concrete_function']
+            self.trainable_model.orig_model = eval_model['layer']
             self.eval_model.graph_def = eval_model['graph_def']
             self.eval_model.concrete = eval_model['concrete_function']
+            self.eval_model.orig_model = eval_model['layer']
         else:
             self.trainable_model.orig_model = trainable_model
             self.eval_model.orig_model = trainable_model
@@ -124,6 +133,10 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
 
                 sorted_vars = get_sorted_on_captured_vars(concrete)
                 model.mirrored_variables = self.create_mirrored_variables(sorted_vars)
+            ###
+            ### Generated weights preprocessing
+            ###
+            ### Insert compression operation
 
             if not self.initial_model_weights:
                 self.initial_model_weights = self.get_numpy_weights_list(sorted_vars)
@@ -146,26 +159,25 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             enable_quantization = True
             if enable_quantization:
                 new_vars = []
+                transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
+                if training:
+                    self.initialize_trainsformations(concrete, transformations)
+
                 with concrete.graph.as_default() as g:
-                    transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(g)
                     # Insert given transformations
                     for op, insertion_point, setup in transformations:
-                        def fq_creation(input_tensor, name, init_value=6):
+                        def fq_creation(input_tensor, name):
                             return create_fq_with_weights(input_tensor=input_tensor,
                                                           name=name,
                                                           signed=setup.signed,
-                                                          init_value=init_value)
+                                                          init_value=setup.init_value)
 
                         if insertion_point == InsertionPoint.AFTER_LAYER:
                             new_vars.append(insert_op_after(g, op, 0, fq_creation, op.name))
                         elif insertion_point == InsertionPoint.BEFORE_LAYER:
                             new_vars.append(insert_op_before(g, op, 0, fq_creation, f'{op.name}_before_layer'))
                         elif insertion_point == InsertionPoint.WEIGHTS:
-                            min_val, max_val = self.get_min_max_op_weights(g, op, concrete.inputs,
-                                                                           self.initial_model_weights)
-                            scale = max(abs(min_val), abs(max_val))
-                            fq_creation_initialized = lambda input_tensor, name: fq_creation(input_tensor, name, scale)
-                            new_vars.append(insert_op_before(g, op, 1, fq_creation_initialized, op.name))
+                            new_vars.append(insert_op_before(g, op, 1, fq_creation, op.name))
                         else:
                             raise RuntimeError('Wrong insertion point in quantization algo')
 
@@ -205,8 +217,8 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             tf.io.write_graph(concrete.graph, '/tmp', 'mobilenetv2_sub_with_conv.pb')
 
     def call(self, inputs, training=None):
-        if self.training_lock is not None:
-            training = self.training_lock
+        if self.training_forced is not None:
+            training = self.training_forced
             print(f'Force training param to {training}')
         else:
             print(f'Build graph with given trainable={training}')
@@ -251,6 +263,44 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                                  [model_obj.output_tensor])
 
         return fn_train(inputs)
+
+    def initialize_trainsformations(self, concrete, trainsformations):
+        """
+        Modify init_valuer from QuantizerSetup
+        for activation from trainsformations
+        """
+        weights_transformations = [t for t in trainsformations if t[1] == InsertionPoint.WEIGHTS]
+
+        for op, _, setup in weights_transformations:
+            min_val, max_val = self.get_min_max_op_weights(concrete.graph, op, concrete.inputs,
+                                                           self.initial_model_weights)
+            setup.init_value = max(abs(min_val), abs(max_val))
+
+        if self.calibration_dataset is None:
+            return
+
+        outputs = []
+        activation_transformations = [t for t in trainsformations if t[1] != InsertionPoint.WEIGHTS]
+        for op, insertion_point, setup in activation_transformations:
+            outputs.append(op.outputs[0])
+
+        # Create concrete function with outputs from each activation
+        init_f = make_new_func(concrete.graph.as_graph_def(),
+                               concrete.graph.captures,
+                               concrete.variables,
+                               concrete.inputs,
+                               outputs)
+        mins = [[] for _ in outputs]
+        maxs = [[] for _ in outputs]
+        for x, _ in islice(self.calibration_dataset, self.init_steps):
+            outs = init_f(x)
+            for idx, out in enumerate(outs):
+                mins[idx].append(tf.reduce_min(out).numpy())
+                maxs[idx].append(tf.reduce_max(out).numpy())
+
+        # Update quantization setup
+        for i, (_, _, setup) in enumerate(activation_transformations):
+            setup.init_value = max(abs(np.mean(mins[i])), abs(np.mean(maxs[i])))
 
     def get_min_max_op_weights(self, graph, op, placeholders, np_vars):
         try:

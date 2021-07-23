@@ -239,7 +239,7 @@ def run(config):
             from op_insertion import NNCFWrapperCustom
             model = tf.keras.Sequential([
                 tf.keras.layers.Input(shape=(224, 224, 3)),
-                NNCFWrapperCustom(*args),
+                NNCFWrapperCustom(*args, caliblration_dataset=train_dataset),
                 #args[0]['layer'],
                 tf.keras.layers.Activation('softmax')
             ])
@@ -304,23 +304,25 @@ def run(config):
 
     # BN INITIALIZATION
     # Set trainable graph for eval
-    print(25*'*')
-    print('Start BN adaptiation')
-    print(25*'*')
-    compress_model.layers[0].training_lock = True
-    # Update BN statistics
-    compress_model.evaluate(train_dataset,
-                            steps=1000,
-                            callbacks=[get_progress_bar(
-                            stateful_metrics=['loss'] + [metric.name for metric in metrics])],
-                            verbose=1)
-    # Reset model
-    compress_model.layers[0].training_lock = None
-    compress_model.compile(optimizer=optimizer,
-                           loss=loss_obj,
-                           metrics=metrics,
-                           run_eagerly=config.get('eager_mode', False))
-    ###
+    enable_bn = False
+    if not resume_training and enable_bn:
+        print(25*'*')
+        print('Start BN adaptiation')
+        print(25*'*')
+        compress_model.layers[0].training_forced = True
+        # Update BN statistics
+        compress_model.evaluate(train_dataset,
+                                steps=1000,
+                                callbacks=[get_progress_bar(
+                                stateful_metrics=['loss'] + [metric.name for metric in metrics])],
+                                verbose=1)
+        # Reset model
+        compress_model.layers[0].training_forced = None
+        compress_model.compile(optimizer=optimizer,
+                               loss=loss_obj,
+                               metrics=metrics,
+                               run_eagerly=config.get('eager_mode', False))
+        ###
     if 'train' in config.mode:
         logger.info('training...')
         compress_model.fit(
