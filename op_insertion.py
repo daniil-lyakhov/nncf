@@ -294,9 +294,9 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                 if 'batchnorm' in var.name.lower():
                     trainable = var.trainable
                 else:
-                    trainable=False
+                    trainable = False
                 mirrored_var = tf.Variable(var.numpy(),
-                                           trainable=trainable,#var.trainable,
+                                           trainable=var.trainable,#trainable,#var.trainable,
                                            dtype=var.dtype,
                                            name=var.name.split(':')[0] + '_mirrored')
                 retval.append(mirrored_var)
