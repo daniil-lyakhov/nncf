@@ -6,32 +6,20 @@
     },
 
     "batch_size": 256,
-    "epochs": 15,
+    "epochs": 16,
+    "num_classes": 1001,
+    "dataset_preprocessing_preset": "imagenet2012_slim",
 
     "optimizer": {
         "type": "Adam",
         "schedule_type": "piecewise_constant",
         "schedule_params": {
-            "boundaries": [5, 10],
+            "boundaries": [6, 10],
             "values": [1e-4, 1e-5, 1e-6]
         }
     },
 
     "dataset": "imagenet2012",
-    "dataset_type": "tfds",
+    "dataset_type": "tfrecords"
 
-    "compression": {
-        "algorithm": "quantization",
-        "initializer": {
-            "batchnorm_adaptation": {
-                "num_bn_adaptation_samples": 2048
-            }
-        },
-        "weights": {
-            "per_channel": false
-        },
-        "activations": {
-            "per_channel": false
-        }
-    }
 }

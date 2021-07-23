@@ -89,4 +89,4 @@ def create_compressed_model(model: tf.keras.Model,
     compressed_model.original_model_accuracy = original_model_accuracy
     if isinstance(compressed_model, tf.keras.Model):
         compressed_model.accuracy_aware_fit = types.MethodType(accuracy_aware_fit, compressed_model)
-    return compression_ctrl, compressed_model
+    return compression_ctrl, model
