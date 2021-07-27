@@ -25,8 +25,9 @@ class InsertionPoint(object):
 
 
 class QuantizationSetup(object):
-    def __init__(self, signed=None, init_value=6):
+    def __init__(self, signed=None, narrow_range=False, init_value=6):
         self.signed = signed
+        self.narrow_range = narrow_range
         self.init_value = init_value
 
 
@@ -172,8 +173,8 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             enable_quantization = True
             if enable_quantization:
                 new_vars = []
-                transformations = self.get_functional_retinanet_fq_placing_simular_to_nncf2_0(concrete.graph)
-                #transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
+                #transformations = self.get_functional_retinanet_fq_placing_simular_to_nncf2_0(concrete.graph)
+                transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
                 if training:
                     self.initialize_trainsformations(concrete, transformations)
 
@@ -184,7 +185,8 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                             return create_fq_with_weights(input_tensor=input_tensor,
                                                           name=name,
                                                           signed=setup.signed,
-                                                          init_value=setup.init_value)
+                                                          init_value=setup.init_value,
+                                                          narrow_range=setup.narrow_range)
 
                         if insertion_point == InsertionPoint.AFTER_LAYER:
                             new_vars.append(insert_op_after(g, op, 0, fq_creation, op.name))
@@ -289,6 +291,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             min_val, max_val = self.get_min_max_op_weights(concrete.graph, op, concrete.inputs,
                                                            self.initial_model_weights)
             setup.init_value = max(abs(min_val), abs(max_val))
+            setup.narrow_range = True
 
         if self.calibration_dataset is None:
             return
@@ -315,6 +318,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
         # Update quantization setup
         for i, (_, _, setup) in enumerate(activation_transformations):
             setup.init_value = max(abs(np.mean(mins[i])), abs(np.mean(maxs[i])))
+            setup.narrow_range = False
 
     def get_min_max_op_weights(self, graph, op, placeholders, np_vars):
         try:
@@ -470,7 +474,7 @@ def insert_op_after(graph, target_parent, output_index, node_creation_fn, name):
     return node_weights
 
 
-def create_fq_with_weights(input_tensor, name, signed, init_value):
+def create_fq_with_weights(input_tensor, name, signed, init_value, narrow_range):
     """Should be called in graph context"""
     with variable_scope.variable_scope('new_node'):
         scale = variable_scope.get_variable(
@@ -481,7 +485,8 @@ def create_fq_with_weights(input_tensor, name, signed, init_value):
             trainable=True)
 
         min = -scale if signed else 0.
-        output_tensor = tf.quantization.fake_quant_with_min_max_vars(input_tensor, min, scale)
+        output_tensor = tf.quantization.fake_quant_with_min_max_vars(input_tensor, min, scale,
+                                                                     narrow_range=narrow_range)
     return output_tensor, scale
 
 
