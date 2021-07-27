@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import json
 
 from typing import List
 from itertools import islice
@@ -61,6 +62,18 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
         else:
             self.trainable_model.orig_model = trainable_model
             self.eval_model.orig_model = trainable_model
+    # How to get quantization setup from the NNCF
+    # examples/tensorflow/object_detection/configs/quantization/retinanet_quantization_layout.json
+    # res = []
+    #for q_point in self._quantizer_setup._quantization_points:
+    #    point_dict = {**q_point.target_point.__dict__, **q_point.quantizer_spec.__dict__}
+    #    point_dict['_target_type'] = point_dict['_target_type'].__dict__
+    #    if '__objclass__' in point_dict['_target_type']:
+    #        point_dict['_target_type'].pop('__objclass__')
+    #    res.append(point_dict)
+    def get_functional_retinanet_fq_placing_simular_to_nncf2_0(self, g):
+        path = 'examples/tensorflow/object_detection/configs/quantization/retinanet_quantization_layout.json'
+        layout = json.load(path)
 
     def get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(self, g):
         """Hardcode fq placing for examples.classification.test_models.get_KerasLayer_model"""
@@ -159,7 +172,8 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             enable_quantization = True
             if enable_quantization:
                 new_vars = []
-                transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
+                transformations = self.get_functional_retinanet_fq_placing_simular_to_nncf2_0(concrete.graph)
+                #transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
                 if training:
                     self.initialize_trainsformations(concrete, transformations)
 

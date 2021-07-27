@@ -1,0 +1,2856 @@
+[
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "input_1",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_1",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_2",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_4",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_1",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_4",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_5",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_7",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_8",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_10",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_11",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_14",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_11",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_13",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_14",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_16",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_17",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_19",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_20",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_22",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_23",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_27",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_24",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_25",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_26",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_28",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_29",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_31",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_32",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_34",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_35",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_37",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_38",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_40",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_41",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_46",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_43",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_43",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_44",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_46",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_47",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_48",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_8",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_12",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_16",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_8",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_12",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_16",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_9",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_13",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_17",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_9",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_13",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_17",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_10",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_14",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_18",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_10",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_14",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_18",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_11",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_15",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_19",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_11",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_15",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_19",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "up_sampling2d",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "l4",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "up_sampling2d_1",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "l3",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_fpn/add_1",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_4",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_4",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_1",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_5",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_1",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_5",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_2",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_6",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_2",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_6",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_3",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_box_net/Relu_7",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_3",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_class_net/Relu_7",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_3",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_7",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_10",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_6",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_17",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_12",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_20",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_15",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_23",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_18",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_30",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_24",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_33",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_27",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_30",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_36",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_39",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_33",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_36",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_42",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_49",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_42",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_45",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "batch_normalization_52",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "l5",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "post_hoc_d5",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "p5-bn",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "p6-bn",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "p7-bn",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_fpn/add",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "p3-bn",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "p4-bn",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_39",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "p6",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_9",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 2,
+            "_name_": "AFTER_LAYER"
+        },
+        "_layer_name": "tf_op_layer_resnet50/Relu_21",
+        "_instance_idx": 0,
+        "_output_port_id": 0,
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": null,
+        "narrow_range": false,
+        "half_range": false,
+        "per_channel": false
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_2",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_3",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_4",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_1",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_5",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_6",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_7",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_8",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_9",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_10",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_12",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_13",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_14",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_11",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_15",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_16",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_17",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_18",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_19",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_20",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_21",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_22",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_23",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_25",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_26",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_27",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_24",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_28",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_29",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_30",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_31",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_32",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_33",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_34",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_35",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_36",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_37",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_38",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_39",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_40",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_41",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_42",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_44",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_45",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_46",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_43",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_47",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_48",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_49",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_50",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_51",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "conv2d_52",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "l5",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "l4",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "post_hoc_d5",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "l3",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "p6",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "post_hoc_d3",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "post_hoc_d4",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "p7",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "box-0",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "class-0",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "box-1",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "class-1",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "box-2",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "class-2",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "box-3",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "class-3",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "box-predict",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    },
+    {
+        "_target_type": {
+            "_value_": 5,
+            "_name_": "OPERATION_WITH_WEIGHTS"
+        },
+        "_layer_name": "class-predict",
+        "_weights_attr_name": "kernel",
+        "num_bits": 8,
+        "mode": "symmetric",
+        "signedness_to_force": true,
+        "narrow_range": false,
+        "half_range": true,
+        "per_channel": true
+    }
+]
