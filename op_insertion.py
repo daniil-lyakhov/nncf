@@ -6,6 +6,7 @@ from typing import List
 from itertools import islice
 from tensorflow.python.framework import importer
 from tensorflow.python.eager import wrap_function
+from tensorflow.python.distribute.values import MirroredVariable
 from tensorflow.python.distribute.values_util import get_current_replica_id_as_int
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import nest
@@ -40,6 +41,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                  trainable_model,
                  eval_model=None,
                  caliblration_dataset=None,
+                 enable_mirrored_vars_split=True,
                  **kwargs):
         super().__init__(tf.keras.layers.Layer(), **kwargs)
         self.model_type = ModelType.FuncModel
@@ -51,6 +53,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
         self.calibration_dataset = caliblration_dataset
         self.init_steps = 1
         self.training_forced = None
+        self.enable_mirrored_vars_split = enable_mirrored_vars_split
         if isinstance(trainable_model, dict):
             self.model_type = ModelType.KerasLayer
 
@@ -170,13 +173,14 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             # Add new op to layer
             if not self.ops_vars_created:
                 self.op_vars = []
-            enable_quantization = True
+            enable_quantization = False
             if enable_quantization:
                 new_vars = []
-                #transformations = self.get_functional_retinanet_fq_placing_simular_to_nncf2_0(concrete.graph)
-                transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
+                transformations = self.get_functional_retinanet_fq_placing_simular_to_nncf2_0(concrete.graph)
+                #transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
                 if training:
-                    self.initialize_trainsformations(concrete, transformations)
+                    pass
+                    #self.initialize_trainsformations(concrete, transformations)
 
                 with concrete.graph.as_default() as g:
                     # Insert given transformations
@@ -196,8 +200,6 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                             new_vars.append(insert_op_before(g, op, 1, fq_creation, op.name))
                         else:
                             raise RuntimeError('Wrong insertion point in quantization algo')
-
-                    model.output_tensor = g.outputs[0]
 
                 if not self.ops_vars_created:
                     self.op_vars = new_vars
@@ -224,9 +226,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                                          concrete.inputs,
                                          concrete.outputs)
 
-            else:
-                model.output_tensor = concrete.graph.outputs[0]
-
+            model.output_tensor = concrete.graph.outputs
             model.fn_train = concrete
 
         if DUMP_GRAPH:
@@ -237,12 +237,18 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             training = self.training_forced
             print(f'Force training param to {training}')
         else:
-            print(f'Build graph with given trainable={training}')
+            print(f'Call graph with given trainable={training}')
 
         model_obj = self.trainable_model if training else self.eval_model
-        if isinstance(tf.distribute.get_strategy(), tf.distribute.MirroredStrategy):
+        if not self.enable_mirrored_vars_split:
+            return model_obj.fn_train(inputs)
+
+        if isinstance(tf.distribute.get_strategy(), tf.distribute.MirroredStrategy) or\
+                isinstance(model_obj.mirrored_variables[0], MirroredVariable):
+            print('in context')
             replica_context = tf.distribute.get_replica_context()
             if replica_context is not None:
+                print('sort variables')
                 # Map correspondent replica of MirroredVariable to replica concrete function
                 replica_id = get_current_replica_id_as_int()
                 new_variables = []
@@ -276,7 +282,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                                  new_captured,
                                  new_variables,
                                  model_obj.fn_train.inputs,
-                                 [model_obj.output_tensor])
+                                 model_obj.output_tensor)
 
         return fn_train(inputs)
 

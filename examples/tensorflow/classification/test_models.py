@@ -31,11 +31,9 @@ class SubclassModel(tf.keras.Model):
 
 def get_func_model():
     mobilenet = tf.keras.applications.mobilenet_v2.MobileNetV2(input_shape=(224, 224, 3),
-                                                               include_top=False)
+                                                               include_top=True)
     input = tf.keras.Input((224, 224, 3))
     x = mobilenet(input)
-    x = tf.keras.layers.Flatten()(x)
-    x = tf.keras.layers.Dense(1001)(x)
     return (tf.keras.Model(input, x),)
 
 

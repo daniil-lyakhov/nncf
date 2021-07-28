@@ -74,19 +74,19 @@ def create_compressed_model(model: tf.keras.Model,
             necessary to enable algorithm-specific compression during fine-tuning.
     """
     model = get_built_model(model, config)
-    original_model_accuracy = None
+    #original_model_accuracy = None
 
-    if is_accuracy_aware_training(config, compression_config_passed=True):
-        if config.has_extra_struct(ModelEvaluationArgs):
-            evaluation_args = config.get_extra_struct(ModelEvaluationArgs)
-            original_model_accuracy = evaluation_args.eval_fn(model)
+    #if is_accuracy_aware_training(config, compression_config_passed=True):
+    #    if config.has_extra_struct(ModelEvaluationArgs):
+    #        evaluation_args = config.get_extra_struct(ModelEvaluationArgs)
+    #        original_model_accuracy = evaluation_args.eval_fn(model)
 
     builder = create_compression_algorithm_builder(config, should_init=not compression_state)
     if compression_state:
         builder.load_state(compression_state[BaseController.BUILDER_STATE])
     compressed_model = builder.apply_to(model)
     compression_ctrl = builder.build_controller(compressed_model)
-    compressed_model.original_model_accuracy = original_model_accuracy
-    if isinstance(compressed_model, tf.keras.Model):
-        compressed_model.accuracy_aware_fit = types.MethodType(accuracy_aware_fit, compressed_model)
+    #compressed_model.original_model_accuracy = original_model_accuracy
+    #if isinstance(compressed_model, tf.keras.Model):
+    #    compressed_model.accuracy_aware_fit = types.MethodType(accuracy_aware_fit, compressed_model)
     return compression_ctrl, model

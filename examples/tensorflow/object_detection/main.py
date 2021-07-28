@@ -308,7 +308,14 @@ def run(config):
                                 weights=config.get('weights', None)) as model:
         with strategy.scope():
             config.nncf_config.register_extra_structs([ModelEvaluationArgs(eval_fn=model_eval_fn)])
-            compression_ctrl, compress_model = create_compressed_model(model, nncf_config, compression_state)
+            compression_ctrl, model = create_compressed_model(model, nncf_config, compression_state)
+            from op_insertion import NNCFWrapperCustom
+            args = [model]
+            inputs = tf.keras.layers.Input(shape=model.inputs[0].shape[1:])
+            outputs = NNCFWrapperCustom(*args, caliblration_dataset=train_dataset,
+                                        enable_mirrored_vars_split=False)(inputs)
+            compress_model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
             scheduler = build_scheduler(
                 config=config,
                 steps_per_epoch=steps_per_epoch)
@@ -402,6 +409,7 @@ def export(config):
 def main(argv):
     parser = get_argument_parser()
     config = get_config_from_argv(argv, parser)
+    #config['eager_mode'] = True
     print_args(config)
 
     serialize_config(config.nncf_config, config.log_dir)
