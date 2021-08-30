@@ -23,9 +23,5 @@
                 1e-4
             ]
         }
-    },
-
-    "compression": {
-        "algorithm": "quantization"
     }
 }

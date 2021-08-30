@@ -18,6 +18,8 @@ from pathlib import Path
 import tensorflow as tf
 import numpy as np
 
+from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
+
 from nncf.tensorflow import AdaptiveCompressionTrainingLoop
 from nncf.tensorflow import create_compressed_model
 from nncf.tensorflow.helpers.model_manager import TFOriginalModelManager
@@ -46,6 +48,20 @@ from examples.tensorflow.common.utils import get_saving_parameters
 from examples.tensorflow.common.utils import write_metrics
 from examples.tensorflow.object_detection.models.model_selector import get_predefined_config
 from examples.tensorflow.object_detection.models.model_selector import get_model_builder
+
+def keras_model_to_frozen_graph(model):
+    input_signature = []
+    for item in model.inputs:
+        input_signature.append(tf.TensorSpec(item.shape, item.dtype))
+    concrete_function = tf.function(model).get_concrete_function(input_signature)
+    frozen_func = convert_variables_to_constants_v2(concrete_function, lower_control_flow=False)
+    return frozen_func.graph.as_graph_def(add_shapes=True)
+
+
+def save_model_as_frozen_graph(model, save_path, as_text=False):
+    frozen_graph = keras_model_to_frozen_graph(model)
+    save_dir, name = os.path.split(save_path)
+    tf.io.write_graph(frozen_graph, save_dir, name, as_text=as_text)
 
 
 def get_argument_parser():
@@ -308,7 +324,14 @@ def run(config):
                                 weights=config.get('weights', None)) as model:
         with strategy.scope():
             config.nncf_config.register_extra_structs([ModelEvaluationArgs(eval_fn=model_eval_fn)])
-            compression_ctrl, compress_model = create_compressed_model(model, nncf_config, compression_state)
+            compression_ctrl, model = create_compressed_model(model, nncf_config, compression_state)
+            from op_insertion import NNCFWrapperCustom
+            args = [model]
+            inputs = tf.keras.layers.Input(shape=model.inputs[0].shape[1:], name=model.inputs[0].name.split(':')[0])
+            outputs = NNCFWrapperCustom(*args, caliblration_dataset=train_dataset,
+                                        enable_mirrored_vars_split=True)(inputs)
+            compress_model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
             scheduler = build_scheduler(
                 config=config,
                 steps_per_epoch=steps_per_epoch)
@@ -374,9 +397,10 @@ def run(config):
         write_metrics(metric_result['AP'], config.metrics_dump)
 
     if 'export' in config.mode:
-        save_path, save_format = get_saving_parameters(config)
-        compression_ctrl.export_model(save_path, save_format)
-        logger.info("Saved to {}".format(save_path))
+        save_model_as_frozen_graph(compress_model, config.to_frozen_graph)
+        #save_path, save_format = get_saving_parameters(config)
+        #compression_ctrl.export_model(save_path, save_format)
+        #logger.info("Saved to {}".format(save_path))
 
 
 def export(config):
@@ -402,6 +426,7 @@ def export(config):
 def main(argv):
     parser = get_argument_parser()
     config = get_config_from_argv(argv, parser)
+    #config['eager_mode'] = True
     print_args(config)
 
     serialize_config(config.nncf_config, config.log_dir)

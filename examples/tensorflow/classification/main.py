@@ -11,12 +11,14 @@
  limitations under the License.
 """
 
+import os
 import sys
 import os.path as osp
-from pathlib import Path
-
 import tensorflow as tf
 import tensorflow_addons as tfa
+
+from pathlib import Path
+from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
 from nncf.config.utils import is_accuracy_aware_training
 from nncf.tensorflow.helpers.model_creation import create_compressed_model
@@ -25,14 +27,13 @@ from nncf.tensorflow.helpers.model_manager import TFOriginalModelManager
 from nncf.tensorflow.initialization import register_default_init_args
 from nncf.tensorflow.utils.state import TFCompressionState
 from nncf.tensorflow.utils.state import TFCompressionStateLoader
-
 from examples.tensorflow.classification.datasets.builder import DatasetBuilder
 from examples.tensorflow.common.argparser import get_common_argument_parser
 from examples.tensorflow.common.callbacks import get_callbacks
 from examples.tensorflow.common.callbacks import get_progress_bar
 from examples.tensorflow.common.distributed import get_distribution_strategy
 from examples.tensorflow.common.logger import logger
-from examples.tensorflow.common.model_loader import get_model
+from examples.tensorflow.common.model_loader import get_model as get_model_old
 from examples.tensorflow.common.optimizer import build_optimizer
 from examples.tensorflow.common.sample_config import create_sample_config
 from examples.tensorflow.common.scheduler import build_scheduler
@@ -43,6 +44,37 @@ from examples.tensorflow.common.utils import print_args
 from examples.tensorflow.common.utils import serialize_config
 from examples.tensorflow.common.utils import serialize_cli_args
 from examples.tensorflow.common.utils import write_metrics
+from examples.tensorflow.classification.test_models import get_KerasLayer_model
+from examples.tensorflow.classification.test_models import get_model
+from examples.tensorflow.classification.test_models import ModelType
+
+# KerasLayer with NNCFWrapper 1 epoch
+# runs/MobileNetV2_imagenet2012/2021-07-21__14-22-44
+# Keras Layer pure 1 epoch
+# runs/MobileNetV2_imagenet2012/2021-07-21__14-53-04
+
+
+def keras_model_to_frozen_graph(model):
+    input_signature = []
+    for item in model.inputs:
+        input_signature.append(tf.TensorSpec(item.shape, item.dtype))
+    concrete_function = tf.function(model).get_concrete_function(input_signature)
+    frozen_func = convert_variables_to_constants_v2(concrete_function, lower_control_flow=False)
+    return frozen_func.graph.as_graph_def(add_shapes=True)
+
+
+def save_model_as_frozen_graph(model, save_path, as_text=False):
+    frozen_graph = keras_model_to_frozen_graph(model)
+    save_dir, name = os.path.split(save_path)
+    tf.io.write_graph(frozen_graph, save_dir, name, as_text=as_text)
+
+
+class DummyContextManager:
+    def __enter__(self):
+        pass
+
+    def __exit__(self, *args):
+        pass
 
 
 def get_argument_parser():
@@ -64,6 +96,11 @@ def get_argument_parser():
         help="Use pretrained models from the tf.keras.applications",
         action="store_true",
     )
+    parser.add_argument(
+        "--model_type",
+        choices=[ModelType.KerasLayer, ModelType.FuncModel, ModelType.SubClassModel],
+        default=ModelType.KerasLayer,
+        help="Type of mobilenetV2 model which should be quantized.")
     return parser
 
 
@@ -152,11 +189,17 @@ def run(config):
     if config.metrics_dump is not None:
         write_metrics(0, config.metrics_dump)
 
-    model_fn, model_params = get_model(config.model,
+    model_fn, model_params = get_model_old(config.model,
                                        input_shape=config.get('input_info', {}).get('sample_size', None),
                                        num_classes=config.get('num_classes', get_num_classes(config.dataset)),
                                        pretrained=config.get('pretrained', False),
                                        weights=config.get('weights', None))
+
+    if config.model_type == ModelType.KerasLayer:
+        #args = None
+        args = get_KerasLayer_model()
+    else:
+        args = None
 
     builders = get_dataset_builders(config, strategy.num_replicas_in_sync)
     datasets = [builder.build() for builder in builders]
@@ -188,10 +231,20 @@ def run(config):
     if resume_training:
         compression_state = load_compression_state(config.ckpt_path)
 
-    with TFOriginalModelManager(model_fn, **model_params) as model:
+    with DummyContextManager():
         with strategy.scope():
-            compression_ctrl, compress_model = create_compressed_model(model, nncf_config, compression_state)
-            compression_callbacks = create_compression_callbacks(compression_ctrl, log_dir=config.log_dir)
+            if not args:
+                args = get_model(config.model_type)
+
+            from op_insertion import NNCFWrapperCustom
+            model = tf.keras.Sequential([
+                tf.keras.layers.Input(shape=(224, 224, 3)),
+                NNCFWrapperCustom(*args, caliblration_dataset=train_dataset),
+                #args[0]['layer'],
+                tf.keras.layers.Activation('softmax')
+            ])
+            #compression_ctrl, compress_model = create_compressed_model(model, nncf_config, compression_state)
+            compress_model = model
 
             scheduler = build_scheduler(
                 config=config,
@@ -202,13 +255,13 @@ def run(config):
 
             loss_obj = tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1)
 
-            compress_model.add_loss(compression_ctrl.loss)
+            #compress_model.add_loss(compression_ctrl.loss)
 
             metrics = [
                 tf.keras.metrics.CategoricalAccuracy(name='acc@1'),
                 tf.keras.metrics.TopKCategoricalAccuracy(k=5, name='acc@5'),
                 tfa.metrics.MeanMetricWrapper(loss_obj, name='ce_loss'),
-                tfa.metrics.MeanMetricWrapper(compression_ctrl.loss, name='cr_loss')
+                #tfa.metrics.MeanMetricWrapper(compression_ctrl.loss, name='cr_loss')
             ]
 
             compress_model.compile(optimizer=optimizer,
@@ -218,14 +271,17 @@ def run(config):
 
             compress_model.summary()
 
-            checkpoint = tf.train.Checkpoint(model=compress_model,
-                                             compression_state=TFCompressionState(compression_ctrl))
+            checkpoint = tf.train.Checkpoint(model=compress_model)
 
             initial_epoch = 0
             if resume_training:
                 initial_epoch = resume_from_checkpoint(checkpoint=checkpoint,
                                                        ckpt_path=config.ckpt_path,
                                                        steps_per_epoch=train_steps)
+            weights_path = config.get('weights', None)
+            if weights_path:
+                compress_model.load_weights(weights_path)
+                logger.info(f'Weights from {weights_path} were loaded successfully')
 
     callbacks = get_callbacks(
         include_tensorboard=True,
@@ -238,7 +294,7 @@ def run(config):
 
     callbacks.append(get_progress_bar(
         stateful_metrics=['loss'] + [metric.name for metric in metrics]))
-    callbacks.extend(compression_callbacks)
+    #callbacks.extend(compression_callbacks)
 
     validation_kwargs = {
         'validation_data': validation_dataset,
@@ -246,34 +302,38 @@ def run(config):
         'validation_freq': config.test_every_n_epochs,
     }
 
+    # BN INITIALIZATION
+    # Set trainable graph for eval
+    enable_bn = False
+    if not resume_training and enable_bn:
+        print(25*'*')
+        print('Start BN adaptiation')
+        print(25*'*')
+        compress_model.layers[0].training_forced = True
+        # Update BN statistics
+        compress_model.evaluate(train_dataset,
+                                steps=1000,
+                                callbacks=[get_progress_bar(
+                                stateful_metrics=['loss'] + [metric.name for metric in metrics])],
+                                verbose=1)
+        # Reset model
+        compress_model.layers[0].training_forced = None
+        compress_model.compile(optimizer=optimizer,
+                               loss=loss_obj,
+                               metrics=metrics,
+                               run_eagerly=config.get('eager_mode', False))
+        ###
     if 'train' in config.mode:
-        if is_accuracy_aware_training(config):
-            logger.info('starting an accuracy-aware training loop...')
-            result_dict_to_val_metric_fn = lambda results: 100 * results['acc@1']
-            compress_model.accuracy_aware_fit(train_dataset,
-                                              compression_ctrl,
-                                              nncf_config=config.nncf_config,
-                                              callbacks=callbacks,
-                                              initial_epoch=initial_epoch,
-                                              steps_per_epoch=train_steps,
-                                              tensorboard_writer=config.tb,
-                                              log_dir=config.log_dir,
-                                              uncompressed_model_accuracy=uncompressed_model_accuracy,
-                                              result_dict_to_val_metric_fn=result_dict_to_val_metric_fn,
-                                              **validation_kwargs)
-        else:
-            logger.info('training...')
-            compress_model.fit(
-                train_dataset,
-                epochs=train_epochs,
-                steps_per_epoch=train_steps,
-                initial_epoch=initial_epoch,
-                callbacks=callbacks,
-                **validation_kwargs)
+        logger.info('training...')
+        compress_model.fit(
+            train_dataset,
+            epochs=train_epochs,
+            steps_per_epoch=train_steps,
+            initial_epoch=initial_epoch,
+            callbacks=callbacks,
+            **validation_kwargs)
 
     logger.info('evaluation...')
-    statistics = compression_ctrl.statistics()
-    logger.info(statistics.to_str())
     results = compress_model.evaluate(
         validation_dataset,
         steps=validation_steps,
@@ -285,9 +345,10 @@ def run(config):
         write_metrics(results[1], config.metrics_dump)
 
     if 'export' in config.mode:
-        save_path, save_format = get_saving_parameters(config)
-        compression_ctrl.export_model(save_path, save_format)
-        logger.info('Saved to {}'.format(save_path))
+        save_model_as_frozen_graph(compress_model, config.to_frozen_graph)
+        #save_path, save_format = get_saving_parameters(config)
+        #compression_ctrl.export_model(save_path, save_format)
+        #logger.info('Saved to {}'.format(save_path))
 
 
 def export(config):
@@ -329,6 +390,7 @@ def export(config):
 def main(argv):
     parser = get_argument_parser()
     config = get_config_from_argv(argv, parser)
+    #config['eager_mode'] = True
     print_args(config)
 
     serialize_config(config.nncf_config, config.log_dir)

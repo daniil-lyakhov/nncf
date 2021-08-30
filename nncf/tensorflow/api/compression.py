@@ -51,11 +51,11 @@ class TFCompressionAlgorithmBuilder(BaseCompressionAlgorithmBuilder):
         :return: The model with additional modifications necessary to enable
             algorithm-specific compression during fine-tuning.
         """
-        transformation_layout = self.get_transformation_layout(model)
-        transformer = TFModelTransformer(model)
-        transformed_model = transformer.transform(transformation_layout)
+        #transformation_layout = self.get_transformation_layout(model)
+        #transformer = TFModelTransformer(model)
+        #transformed_model = transformer.transform(transformation_layout)
 
-        if self.should_init:
-            self.initialize(transformed_model)
+        #if self.should_init:
+        #    self.initialize(transformed_model)
 
-        return transformed_model
+        return model
