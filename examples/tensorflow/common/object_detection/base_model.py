@@ -49,7 +49,7 @@ class Model:
         # One can use 'RESNET_FROZEN_VAR_PREFIX' to speed up ResNet training when loading from the checkpoint
         # RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+)\/(conv2d(|_([1-9]|10))|batch_normalization(|_([1-9]|10)))\/'
         self._frozen_variable_prefix = ""
-        params_train_regularization_variable_regex = r'.*(kernel|weight):0$'
+        params_train_regularization_variable_regex = r'.*(kernel|weight|kernel_mirrored|weight_mirrored):0$'
         self._regularization_var_regex = params_train_regularization_variable_regex
         self._l2_weight_decay = params.weight_decay
 

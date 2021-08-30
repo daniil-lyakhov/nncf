@@ -329,7 +329,7 @@ def run(config):
             args = [model]
             inputs = tf.keras.layers.Input(shape=model.inputs[0].shape[1:], name=model.inputs[0].name.split(':')[0])
             outputs = NNCFWrapperCustom(*args, caliblration_dataset=train_dataset,
-                                        enable_mirrored_vars_split=False)(inputs)
+                                        enable_mirrored_vars_split=True)(inputs)
             compress_model = tf.keras.Model(inputs=inputs, outputs=outputs)
 
             scheduler = build_scheduler(

@@ -198,7 +198,11 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                 concrete = tf_f.get_concrete_function(input_signature)
                 structured_outputs = concrete.structured_outputs
                 sorted_vars = get_sorted_on_captured_vars(concrete)
-                model.mirrored_variables = model.orig_model.variables
+                if isinstance(model.orig_model.variables[0], MirroredVariable):
+                    model.mirrored_variables = model.orig_model.variables
+                else:
+                    # Case when model build before replica context
+                    model.mirrored_variables = self.create_mirrored_variables(sorted_vars)
 
             else:
                 concrete = make_new_func(model.graph_def,
@@ -209,6 +213,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
 
                 sorted_vars = get_sorted_on_captured_vars(concrete)
                 model.mirrored_variables = self.create_mirrored_variables(sorted_vars)
+                structured_outputs = None
 
             if not self.initial_model_weights:
                 self.initial_model_weights = self.get_numpy_weights_list(sorted_vars)
@@ -231,8 +236,8 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
             enable_quantization = True
             if enable_quantization:
                 new_vars = []
-                transformations = self.get_functional_retinanet_fq_placing_simular_to_nncf2_0(concrete.graph)
-                #transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
+                #transformations = self.get_functional_retinanet_fq_placing_simular_to_nncf2_0(concrete.graph)
+                transformations = self.get_keras_layer_mobilenet_v2_fq_placing_simular_to_nncf2_0(concrete.graph)
                 if training:
                     #pass
                     self.initialize_trainsformations(concrete, transformations)
@@ -350,6 +355,14 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
                                  model_obj.fn_train.inputs,
                                  model_obj.output_tensor)
 
+        if model_obj.fn_train.structured_outputs is not None:
+                            # The order should be the same because
+                            # we use concrete.outputs when building new concrete function
+                            #outputs_list = nest.flatten(structured_outputs, expand_composites=True)
+                            fn_train._func_graph.structured_outputs = \
+                                nest.pack_sequence_as(model_obj.fn_train.structured_outputs,
+                                                      fn_train.outputs,
+                                                      expand_composites=True)
         return fn_train(inputs)
 
     def initialize_trainsformations(self, concrete, trainsformations):
@@ -367,7 +380,7 @@ class NNCFWrapperCustom(tf.keras.layers.Wrapper):
 
         if self.calibration_dataset is None:
             return
-
+        return
         outputs = []
         activation_transformations = [t for t in trainsformations if t[1] != InsertionPoint.WEIGHTS]
         for op, _, _ in activation_transformations:

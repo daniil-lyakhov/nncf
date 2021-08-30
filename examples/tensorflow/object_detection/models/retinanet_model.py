@@ -68,10 +68,14 @@ class RetinanetModel(base_model.Model):
 
         return model_outputs
 
+    @staticmethod
+    def get_zero_replica_from_mirrored_var(var):
+        return var._get_replica(0)
+
     def build_loss_fn(self, keras_model, compression_loss_fn):
         #filter_fn = self.make_filter_trainable_variables_fn()
         #trainable_variables = filter_fn(keras_model.trainable_variables)
-        trainable_variables = [v for v in keras_model.layers[1].trainable_model.mirrored_variables if v.trainable]
+        trainable_variables = [self.get_zero_replica_from_mirrored_var(v) for v in keras_model.layers[1].trainable_model.mirrored_variables if v.trainable]
 
         def _total_loss_fn(labels, outputs):
             cls_loss = self._cls_loss_fn(outputs['cls_outputs'],
