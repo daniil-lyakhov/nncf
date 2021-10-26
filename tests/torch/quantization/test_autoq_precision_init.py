@@ -132,7 +132,6 @@ AUTOQ_TEST_PARAMS = (
 )
 
 
-@pytest.mark.skip()
 @pytest.mark.parametrize('params', AUTOQ_TEST_PARAMS, ids=[str(p) for p in AUTOQ_TEST_PARAMS])
 def test_autoq_precision_init(_seed, dataset_dir, tmp_path, mocker, params):
     config = params.config_builder.build()

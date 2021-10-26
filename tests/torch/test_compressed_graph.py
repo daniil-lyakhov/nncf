@@ -326,8 +326,6 @@ class TestModelsGraph:
 
     def test_quantize_network(self, desc: ModelDesc, _case_config):
         model = desc.model_builder()
-        if 'mobilenet_v2' not in desc.model_name.lower():
-            return
 
         config = get_basic_quantization_config(_case_config.quant_type, input_sample_sizes=desc.input_sample_sizes)
         register_bn_adaptation_init_args(config)
@@ -339,7 +337,6 @@ class TestModelsGraph:
     def test_sparse_quantize_network(self, desc: ModelDesc):
         model = desc.model_builder()
 
-        from nncf.torch.layers import NNCF_MODULES_MAP
         config = get_empty_config(input_sample_sizes=desc.input_sample_sizes)
         config["compression"] = [
             {"algorithm": "rb_sparsity"},
@@ -351,7 +348,7 @@ class TestModelsGraph:
             create_compressed_model_and_algo_for_test(model, config, dummy_forward_fn=desc.dummy_forward_fn,
                                                       wrap_inputs_fn=desc.wrap_inputs_fn)
 
-        sparsifiable_modules = self.get_sparsifiable_modules(algo)
+        sparsifiable_modules = self.get_sparsifiable_modules('rb_sparsity')
         ref_num_sparsed = len(get_all_modules_by_type(compressed_model, sparsifiable_modules))
 
         assert ref_num_sparsed == len(compression_ctrl.child_ctrls[0].sparsified_module_info)
