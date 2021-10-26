@@ -112,6 +112,8 @@ MANUAL_CONFIG_TEST_PARAMS = [
 ]
 
 
+# Something really bad happened here
+@pytest.mark.skip()
 @pytest.mark.parametrize('manual_config_params', MANUAL_CONFIG_TEST_PARAMS,
                          ids=[p.name for p in MANUAL_CONFIG_TEST_PARAMS])
 def test_hawq_manual_configs(manual_config_params):

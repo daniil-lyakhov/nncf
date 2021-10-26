@@ -126,6 +126,7 @@ class NNCFLinear(_NNCFModuleMixin, nn.Linear):
 
 class NNCFBatchNorm(_NNCFModuleMixin, nn.BatchNorm2d):
     op_func_name = "batch_norm"
+    ignored_algorithms = ['magnitude_sparsity', 'rb_sparsity', 'const_sparsity', 'quantization']
 
     @staticmethod
     def from_module(module):
@@ -138,6 +139,7 @@ class NNCFBatchNorm(_NNCFModuleMixin, nn.BatchNorm2d):
 
 class NNCFGroupNorm(_NNCFModuleMixin, nn.GroupNorm):
     op_func_name = "group_norm"
+    ignored_algorithms = ['magnitude_sparsity', 'rb_sparsity', 'const_sparsity', 'quantization']
 
     @staticmethod
     def from_module(module):
