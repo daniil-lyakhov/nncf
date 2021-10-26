@@ -51,8 +51,9 @@ class FilterPruningMask(nn.Module):
             dim = 0 if param_name == 'bias' else self.mask_applying_dim
             if is_tracing_state():
                 with no_jit_trace():
+                    # TODO: Improve the way of logging
                     new_params.append(inplace_apply_filter_binary_mask(self.binary_filter_pruning_mask, param_value,
-                                                                       dim=dim))
+                                                                       '', dim=dim))
             else:
                 new_params.append(apply_filter_binary_mask(self.binary_filter_pruning_mask, param_value, dim=dim))
         return new_params

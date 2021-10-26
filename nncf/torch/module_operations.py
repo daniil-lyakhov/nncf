@@ -54,10 +54,10 @@ class UpdateWeight(UpdateParameter):
 
 class UpdateParameterList(BaseOp):
     """
-    A module which updates attributes of a module fed to 
+    A module which updates attributes of a module fed to
     forward method call by operand call.
     """
-    
+
     def __init__(self, param_names, op):
         super().__init__(op)
         self._param_names = param_names
@@ -77,10 +77,10 @@ class UpdateParameterList(BaseOp):
 
 class UpdateWeightAndBias(UpdateParameterList):
     """
-    A module which updates `weight` and `bias` attributes of a module 
+    A module which updates `weight` and `bias` attributes of a module
     fed to forward method call by operand call.
     """
-    
+
     def __init__(self, op):
         super().__init__(["weight", "bias"], op)
 

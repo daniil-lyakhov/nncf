@@ -16,8 +16,7 @@ import pytest
 import torch
 import numpy as np
 
-from examples.torch.common.optimizer import make_optimizer, get_parameter_groups
-from nncf.torch.module_operations import UpdateWeight, UpdateWeightAndBias
+from nncf.torch.module_operations import UpdateWeightAndBias
 from nncf.torch.pruning.filter_pruning.algo import FilterPruningController
 from nncf.torch.pruning.filter_pruning.functions import l2_filter_norm
 from nncf.torch.pruning.filter_pruning.layers import FilterPruningMask
@@ -25,7 +24,6 @@ from nncf.torch.pruning.filter_pruning.layers import apply_filter_binary_mask
 from nncf.common.pruning.schedulers import ExponentialPruningScheduler
 from tests.torch.helpers import create_compressed_model_and_algo_for_test
 from tests.torch.helpers import check_correct_nncf_modules_replacement
-from tests.torch.helpers import create_ones_mock_dataloader
 from tests.torch.pruning.helpers import gen_ref_masks
 from tests.torch.pruning.helpers import get_basic_pruning_config
 from tests.torch.pruning.helpers import PruningTestModel
@@ -241,8 +239,8 @@ def test_pruning_masks_applying_correctness(all_weights, pruning_flops_target, p
         Checks that output of module are masked.
         """
         mask = ref_masks[num]
-        input = torch.ones(input_shapes[name])
-        output = module(input)
+        input_ = torch.ones(input_shapes[name])
+        output = module(input_)
         ref_output = apply_filter_binary_mask(mask, output, dim=1)
         assert torch.allclose(output, ref_output)
 
@@ -310,7 +308,7 @@ def test_valid_masks_for_bn_after_concat(prune_bn):
     config['compression']['params']['prune_last_conv'] = True
     config['compression']['pruning_init'] = 0.5
     model = PruningTestModelConcatBN()
-    pruned_model, compression_ctrl = create_compressed_model_and_algo_for_test(model, config)
+    pruned_model, _ = create_compressed_model_and_algo_for_test(model, config)
 
     bn_modules = [pruned_model.bn, pruned_model.bn1, pruned_model.bn2]
     for bn_module in bn_modules:

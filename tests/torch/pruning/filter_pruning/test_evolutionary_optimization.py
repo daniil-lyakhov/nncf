@@ -11,7 +11,6 @@
  limitations under the License.
 """
 
-import torch
 from functools import partial
 from torch import optim
 
@@ -130,7 +129,7 @@ def test_evolution_env_interface():
 
 
 def test_pruner_default_params():
-    _, compressed_model, compression_ctrl = get_model_and_controller_for_legr_test()
+    _, _, compression_ctrl = get_model_and_controller_for_legr_test()
     legr_pruner = compression_ctrl.legr.pruner
 
     assert legr_pruner.filter_pruner == compression_ctrl
