@@ -284,8 +284,8 @@ def register_module(*quantizable_field_names: str, ignored_algorithms: list = No
         UNWRAPPED_USER_MODULES.registry_dict[cls.__name__] = cls
         nncf_wrapped_module_class_name = 'NNCFUser{}'.format(cls.__name__)
         NNCF_WRAPPED_USER_MODULES_DICT[cls] = type(nncf_wrapped_module_class_name, (_NNCFModuleMixin, cls), {})
-        get_base_attributes_fn = lambda self : GenericWeightedLayerAttributes(self.weight.requires_grad,
-                                                                              self.weight.shape)
+        get_base_attributes_fn = lambda self: GenericWeightedLayerAttributes(self.weight.requires_grad,
+                                                                             self.weight.shape)
         setattr(NNCF_WRAPPED_USER_MODULES_DICT[cls], "get_weight_shape", get_base_attributes_fn)
         if ignored_algorithms:
             setattr(NNCF_WRAPPED_USER_MODULES_DICT[cls], "ignored_algorithms", ignored_algorithms)
