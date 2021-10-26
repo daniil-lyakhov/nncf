@@ -119,7 +119,7 @@ class FilterPruningController(BasePruningAlgoController):
     def __init__(self, target_model: NNCFNetwork,
                  prunable_types: List[str],
                  pruned_module_groups: Clusterization[PrunedModuleInfo],
-                 pruned_norms_operators,
+                 pruned_norms_operators: List[Tuple[NNCFNode, FilterPruningMask, torch.nn.Module]],
                  config: NNCFConfig):
         #pylint:disable=too-many-statements
         super().__init__(target_model, prunable_types, pruned_module_groups, config)
@@ -653,20 +653,11 @@ class FilterPruningController(BasePruningAlgoController):
         MaskPropagationAlgorithm(graph, PT_PRUNING_OPERATOR_METATYPES).mask_propagation()
 
         # 2. Set the masks for Batch/Group Norms
-        types_to_apply_mask = ['group_norm']
-        if self.prune_batch_norms:
-            types_to_apply_mask.append('batch_norm')
-
         pruned_node_modules = []
-        for node in graph.get_all_nodes():
-            if node.node_type not in types_to_apply_mask:
-                continue
-            node_module = self.model.get_containing_module(node.node_name)
-            if node.data['output_mask'] is not None and node_module not in pruned_node_modules and \
-                    node.node_name in self._pruned_norms_operators:
+        for node, pruning_block, node_module in self._pruned_norms_operators:
+            if node.data['output_mask'] is not None and node_module not in pruned_node_modules:
                 # Setting masks for BN nodes
-                self._pruned_norms_operators[node.node_name][0].binary_filter_pruning_mask = \
-                    node.data['output_mask'].tensor
+                pruning_block.binary_filter_pruning_mask = node.data['output_mask'].tensor
                 pruned_node_modules.append(node_module)
 
     def prepare_for_export(self):

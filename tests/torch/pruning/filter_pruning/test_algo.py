@@ -314,13 +314,13 @@ def test_valid_masks_for_bn_after_concat(prune_bn):
 
     bn_modules = [pruned_model.bn, pruned_model.bn1, pruned_model.bn2]
     for bn_module in bn_modules:
-        mask = bn_module.pre_ops['0'].op.binary_filter_pruning_mask
         if prune_bn:
             # Check that mask was applied for batch_norm module
+            mask = bn_module.pre_ops['0'].op.binary_filter_pruning_mask
             assert sum(mask) == len(mask) * 0.5
         else:
-            # Check that mask was not applied for batch_norm module
-            assert sum(mask) == len(mask)
+            # Check that no mask was added to the layer
+            assert len(bn_module.pre_ops) == 0
 
     # Check output mask of concat layers
     ref_concat_masks = [

@@ -60,7 +60,7 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
                                                          self.prune_downsample_convs)
 
         self.pruned_module_groups_info = []
-        self._pruned_norms_operators = {}
+        self._pruned_norms_operators = []
 
     @staticmethod
     def _set_default_params_for_ranking_type(params: Dict) -> None:
@@ -131,7 +131,11 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
             self.pruned_module_groups_info.add_cluster(cluster)
 
         # Adding binary masks also for Batch/Group Norms to allow applying masks after propagation
-        all_norm_layers = target_model_graph.get_nodes_by_types(['batch_norm', 'group_norm'])
+        types_to_apply_mask = ['group_norm']
+        if self.prune_batch_norms:
+            types_to_apply_mask.append('batch_norm')
+
+        all_norm_layers = target_model_graph.get_nodes_by_types(types_to_apply_mask)
         for node in all_norm_layers:
             node_name = node.node_name
             module = target_model.get_containing_module(node_name)
@@ -147,7 +151,7 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
                     TransformationPriority.PRUNING_PRIORITY
                 )
             )
-            self._pruned_norms_operators[node_name] = (pruning_block, module)
+            self._pruned_norms_operators.append((node, pruning_block, module))
         return insertion_commands
 
     def create_weight_pruning_operation(self, module):
