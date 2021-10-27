@@ -20,6 +20,7 @@ from nncf import NNCFConfig
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.pruning.clusterization import Cluster
 from nncf.common.pruning.clusterization import Clusterization
+from nncf.common.pruning.mask_propagation import MaskPropagationAlgorithm
 from nncf.common.utils.logger import logger as nncf_logger
 from nncf.config.extractors import extract_algo_specific_config
 from nncf.torch.algo_selector import ZeroCompressionLoss
@@ -33,6 +34,7 @@ from nncf.torch.module_operations import UpdateWeightAndBias
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.pruning.operations import PT_PRUNING_OPERATOR_METATYPES
 from nncf.torch.pruning.structs import PrunedModuleInfo
+from nncf.torch.pruning.utils import init_output_masks_in_graph
 
 
 class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
@@ -130,6 +132,10 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
             cluster = Cluster[PrunedModuleInfo](i, group_minfos, [n.node_id for n in group.elements])
             self.pruned_module_groups_info.add_cluster(cluster)
 
+        # Propagate masks to find norm layers to prune
+        init_output_masks_in_graph(target_model_graph, self.pruned_module_groups_info.get_all_nodes())
+        MaskPropagationAlgorithm(target_model_graph, PT_PRUNING_OPERATOR_METATYPES).mask_propagation()
+
         # Adding binary masks also for Batch/Group Norms to allow applying masks after propagation
         types_to_apply_mask = ['group_norm']
         if self.prune_batch_norms:
@@ -137,6 +143,10 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
 
         all_norm_layers = target_model_graph.get_nodes_by_types(types_to_apply_mask)
         for node in all_norm_layers:
+            if node.data['output_mask'] is None:
+                # Skip elements that will not be pruned
+                continue
+
             node_name = node.node_name
             module = target_model.get_containing_module(node_name)
 

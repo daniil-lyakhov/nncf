@@ -655,7 +655,7 @@ class FilterPruningController(BasePruningAlgoController):
         # 2. Set the masks for Batch/Group Norms
         pruned_node_modules = []
         for node, pruning_block, node_module in self._pruned_norms_operators:
-            if node.data['output_mask'] is not None and node_module not in pruned_node_modules:
+            if node_module not in pruned_node_modules:
                 # Setting masks for BN nodes
                 pruning_block.binary_filter_pruning_mask = node.data['output_mask'].tensor
                 pruned_node_modules.append(node_module)

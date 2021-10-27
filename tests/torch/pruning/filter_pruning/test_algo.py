@@ -102,6 +102,10 @@ def test_valid_modules_replacement_and_pruning(prune_first, prune_last):
         pruning_op = pre_ops[0].operand
         assert isinstance(pruning_op, FilterPruningMask)
 
+    def check_that_module_is_not_pruned(module):
+        assert len(module.pre_ops) == 0
+        assert len(module.post_ops) == 0
+
     config = get_basic_pruning_config(input_sample_size=[1, 1, 8, 8])
     config['compression']['params']['prune_first_conv'] = prune_first
     config['compression']['params']['prune_last_conv'] = prune_last
@@ -116,12 +120,27 @@ def test_valid_modules_replacement_and_pruning(prune_first, prune_last):
         assert conv1 in pruned_modules
         assert conv1 in nncf_modules.values()
         check_that_module_is_pruned(conv1)
+    else:
+        check_that_module_is_not_pruned(conv1)
+
+    # Check for bn1
+    bn1 = pruned_model.bn1
+    if prune_first:
+        assert bn1 in nncf_modules.values()
+        check_that_module_is_pruned(bn1)
+    else:
+        check_that_module_is_not_pruned(bn1)
 
     # Check for conv2
     conv2 = pruned_model.conv2
     assert conv2 in pruned_modules
     assert conv2 in nncf_modules.values()
     check_that_module_is_pruned(conv2)
+
+    # Check for bn2
+    bn2 = pruned_model.bn2
+    assert bn2 in nncf_modules.values()
+    check_that_module_is_pruned(bn2)
 
     # Check for conv3
     up = pruned_model.up
@@ -135,6 +154,8 @@ def test_valid_modules_replacement_and_pruning(prune_first, prune_last):
         assert conv3 in pruned_modules
         assert conv3 in nncf_modules.values()
         check_that_module_is_pruned(conv3)
+    else:
+        check_that_module_is_not_pruned(conv3)
 
 
 @pytest.mark.parametrize(('all_weights', 'pruning_flops_target', 'prune_first', 'ref_masks'),
@@ -221,7 +242,8 @@ def test_pruning_masks_applying_correctness(all_weights, pruning_flops_target, p
     """
     input_shapes = {'conv1': [1, 1, 8, 8],
                     'conv2': [1, 16, 8, 8],
-                    'bn': [1, 32, 8, 8],
+                    'bn1': [1, 16, 8, 8],
+                    'bn2': [1, 32, 8, 8],
                     'up': [1, 32, 8, 8]}
 
     def check_mask(module, num):
@@ -276,6 +298,12 @@ def test_pruning_masks_applying_correctness(all_weights, pruning_flops_target, p
         assert conv1 in pruned_modules
         check_mask(conv1, i)
         check_module_output(conv1, 'conv1', i)
+
+    # Check for bn1
+    bn1 = pruned_model.bn1
+    if prune_first:
+        check_mask(bn1, i)
+        check_module_output(bn1, 'bn1', i)
         i += 1
 
     # Check for conv2
@@ -284,10 +312,10 @@ def test_pruning_masks_applying_correctness(all_weights, pruning_flops_target, p
     check_mask(conv2, i)
     check_module_output(conv2, 'conv2', i)
 
-    # Check for BN
-    bn = pruned_model.bn
-    check_mask(bn, i)
-    check_module_output(bn, 'bn', i)
+    # Check for bn2
+    bn2 = pruned_model.bn2
+    check_mask(bn2, i)
+    check_module_output(bn2, 'bn2', i)
     i += 1
 
     # Check for up conv
