@@ -110,7 +110,7 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
                 assert self._is_pruned_module(module)
 
                 nncf_logger.info("Adding Weight Pruner in scope: {}".format(node_name))
-                pruning_block = self.create_weight_pruning_operation(module)
+                pruning_block = self.create_weight_pruning_operation(module, node_name)
                 # Hook for weights and bias
                 hook = UpdateWeightAndBias(pruning_block).to(device)
                 insertion_commands.append(
@@ -140,7 +140,7 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
             node_name = node.node_name
             module = target_model.get_containing_module(node_name)
 
-            pruning_block = self.create_weight_pruning_operation(module)
+            pruning_block = self.create_weight_pruning_operation(module, node_name)
             # Hook for weights and bias
             hook = UpdateWeightAndBias(pruning_block).to(device)
             insertion_commands.append(
@@ -154,7 +154,7 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
             self._pruned_norms_operators.append((node, pruning_block, module))
         return insertion_commands
 
-    def create_weight_pruning_operation(self, module):
+    def create_weight_pruning_operation(self, module, node_name):
         raise NotImplementedError
 
     def _is_pruned_module(self, module: nn.Module):

@@ -26,7 +26,7 @@ class TestFilterPruningBlockModel(nn.Module):
     def __init__(self, layer):
         super().__init__()
         self.layer = layer
-        pruning_op = FilterPruningMask(layer.weight.size(0))
+        pruning_op = FilterPruningMask(layer.weight.size(0), 'test_node')
         self.op_key = self.layer.register_pre_forward_operation(UpdateWeightAndBias(pruning_op))
 
     @property

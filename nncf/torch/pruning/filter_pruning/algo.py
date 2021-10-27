@@ -91,9 +91,9 @@ LINEAR_LAYER_METATYPES = [
 
 @PT_COMPRESSION_ALGORITHMS.register('filter_pruning')
 class FilterPruningBuilder(BasePruningAlgoBuilder):
-    def create_weight_pruning_operation(self, module):
+    def create_weight_pruning_operation(self, module, node_name):
         return FilterPruningMask(module.weight.size(module.target_weight_dim_for_compression),
-                                 module.target_weight_dim_for_compression)
+                                 node_name, module.target_weight_dim_for_compression)
 
     def _build_controller(self, model: NNCFNetwork) -> PTCompressionAlgorithmController:
         return FilterPruningController(model,
