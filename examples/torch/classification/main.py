@@ -139,6 +139,19 @@ def inception_criterion_fn(model_outputs: Any, target: Any, criterion: _Loss) ->
 
 # pylint:disable=too-many-branches,too-many-statements
 def main_worker(current_gpu, config: SampleConfig):
+    no_pruning = False
+    if 'compression' not in config:
+        no_pruning = True
+    if not no_pruning:
+        compression = config['compression']
+        if not isinstance(compression, list):
+            compression = [compression]
+        if not any(c['algorithm'] == 'filter_pruning' for c in compression):
+            no_pruning = True
+
+    if no_pruning:
+        print('NO PRUNING ALGO')
+        exit()
     configure_device(current_gpu, config)
     config.mlflow = SafeMLFLow(config)
     if is_main_process():
@@ -213,6 +226,16 @@ def main_worker(current_gpu, config: SampleConfig):
     compression_ctrl, model = create_compressed_model(model, nncf_config, compression_state)
     if model_state_dict is not None:
         load_state(model, model_state_dict, is_resume=True)
+
+    # Save new checkpoint
+    resuming_checkpoint[MODEL_STATE_ATTR] = model.state_dict()
+    import os
+    path = '/home/dlyakhov/model_export/29_10_21/'
+    file_name = os.path.basename(resuming_checkpoint_path)
+    new_ckpt_path = os.path.join(path, file_name)
+    print(f'New ckpt saved at {new_ckpt_path}')
+    torch.save(resuming_checkpoint, new_ckpt_path)
+    #return
 
     if is_export_only:
         compression_ctrl.export_model(config.to_onnx)
@@ -430,7 +453,7 @@ def create_datasets(config):
         ])
 
     val_dataset = get_dataset(dataset_config, config, val_transform, is_train=False)
-    train_dataset = get_dataset(dataset_config, config, train_transforms, is_train=True)
+    train_dataset = None#get_dataset(dataset_config, config, train_transforms, is_train=True)
 
     return train_dataset, val_dataset
 
@@ -454,6 +477,7 @@ def create_data_loaders(config, train_dataset, val_dataset):
         num_workers=workers, pin_memory=pin_memory,
         sampler=val_sampler, drop_last=False)
 
+    return None, None, val_loader, None
     train_sampler = None
     if config.distributed:
         sampler_seed = 0 if config.seed is None else config.seed

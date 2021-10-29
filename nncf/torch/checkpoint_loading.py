@@ -44,6 +44,14 @@ def load_state(model: torch.nn.Module, state_dict_to_load: dict, is_resume: bool
 
     model_state_dict = model.state_dict()
 
+    ckpt_pre_ops = [x for x in state_dict_to_load.items() if 'pre_ops' in x[0]]
+    model_pre_ops = [x for x in model_state_dict if 'pre_ops' in x]
+    for conv_pre_op_name, conv_mask in ckpt_pre_ops:
+        bn_name = conv_pre_op_name.replace('conv', 'bn')
+        new_bn_name = '.'.join(bn_name.split('.')[1:])
+        assert new_bn_name in model_pre_ops
+        state_dict_to_load[bn_name] = conv_mask
+
     key_matcher = KeyMatcher(is_resume, state_dict_to_load, model_state_dict, keys_to_ignore)
     new_dict = key_matcher.run()
     num_loaded_params = len(new_dict)

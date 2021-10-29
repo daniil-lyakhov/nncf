@@ -123,6 +123,20 @@ class PolyLRDropScheduler:
 # pylint:disable=too-many-branches
 # pylint:disable=too-many-statements
 def staged_quantization_main_worker(current_gpu, config):
+    no_pruning = False
+    if 'compression' not in config:
+        no_pruning = True
+    if not no_pruning:
+        compression = config['compression']
+        if not isinstance(compression, list):
+            compression = [compression]
+        if not any(c['algorithm'] == 'filter_pruning' for c in compression):
+            no_pruning = True
+
+    if no_pruning:
+        print('NO PRUNING ALGO')
+        exit()
+
     configure_device(current_gpu, config)
     config.mlflow = SafeMLFLow(config)
 
@@ -149,7 +163,7 @@ def staged_quantization_main_worker(current_gpu, config):
 
     if is_export_only:
         assert pretrained or (resuming_checkpoint_path is not None)
-    else:
+    elif False:
         # Data loading code
         train_dataset, val_dataset = create_datasets(config)
         train_loader, train_sampler, val_loader, init_loader = create_data_loaders(config, train_dataset, val_dataset)
@@ -214,6 +228,16 @@ def staged_quantization_main_worker(current_gpu, config):
             logger.info("=> loaded checkpoint '{}'".format(resuming_checkpoint_path))
 
     log_common_mlflow_params(config)
+
+    # Save new checkpoint
+    resuming_checkpoint[MODEL_STATE_ATTR] = net.state_dict()
+    import os
+    path = '/home/dlyakhov/model_export/29_10_21/'
+    file_name = os.path.basename(resuming_checkpoint_path)
+    new_ckpt_path = os.path.join(path, file_name)
+    print(f'New ckpt saved at {new_ckpt_path}')
+    torch.save(resuming_checkpoint, new_ckpt_path)
+    return
 
     if is_export_only:
         compression_ctrl.export_model(config.to_onnx)

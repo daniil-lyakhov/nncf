@@ -108,6 +108,19 @@ def main(argv):
 
 # pylint:disable=too-many-branches,too-many-statements
 def main_worker(current_gpu, config):
+    no_pruning = False
+    if 'compression' not in config:
+        no_pruning = True
+    if not no_pruning:
+        compression = config['compression']
+        if not isinstance(compression, list):
+            compression = [compression]
+        if not any(c['algorithm'] == 'filter_pruning' for c in compression):
+            no_pruning = True
+
+    if no_pruning:
+        print('NO PRUNING ALGO')
+        exit()
     #################################
     # Setup experiment environment
     #################################
@@ -157,7 +170,7 @@ def main_worker(current_gpu, config):
     is_export_only = 'export' in config.mode and ('train' not in config.mode and 'test' not in config.mode)
     if is_export_only:
         assert pretrained or (resuming_checkpoint_path is not None)
-    else:
+    elif False:
         test_data_loader, train_data_loader, init_data_loader = create_dataloaders(config)
 
         def criterion_fn(model_outputs, target, criterion):
@@ -215,6 +228,15 @@ def main_worker(current_gpu, config):
         logger.info("Saved to {}".format(config.to_onnx))
         return
 
+    # Save new checkpoint
+    resuming_checkpoint[MODEL_STATE_ATTR] = net.state_dict()
+    import os
+    path = '/home/dlyakhov/model_export/29_10_21/'
+    file_name = os.path.basename(resuming_checkpoint_path)
+    new_ckpt_path = os.path.join(path, file_name)
+    print(f'New ckpt saved at {new_ckpt_path}')
+    torch.save(resuming_checkpoint, new_ckpt_path)
+    return
     if is_main_process():
         statistics = compression_ctrl.statistics()
         logger.info(statistics.to_str())

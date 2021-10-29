@@ -472,6 +472,20 @@ def predict(model, images, class_encoding, config):
 
 
 def main_worker(current_gpu, config):
+    no_pruning = False
+    if 'compression' not in config:
+        no_pruning = True
+    if not no_pruning:
+        compression = config['compression']
+        if not isinstance(compression, list):
+            compression = [compression]
+        if not any(c['algorithm'] == 'filter_pruning' for c in compression):
+            no_pruning = True
+
+    if no_pruning:
+        print('NO PRUNING ALGO')
+        exit()
+
     configure_device(current_gpu, config)
     config.mlflow = SafeMLFLow(config)
     if is_main_process():
@@ -503,7 +517,7 @@ def main_worker(current_gpu, config):
     is_export_only = 'export' in config.mode and ('train' not in config.mode and 'test' not in config.mode)
     if is_export_only:
         assert pretrained or (resuming_checkpoint_path is not None)
-    else:
+    elif False:
         loaders, w_class = load_dataset(dataset, config)
         train_loader, val_loader, init_loader = loaders
         criterion = get_criterion(w_class, config)
@@ -538,6 +552,16 @@ def main_worker(current_gpu, config):
         compression_ctrl.distributed()
 
     log_common_mlflow_params(config)
+
+    # Save new checkpoint
+    resuming_checkpoint[MODEL_STATE_ATTR] = model.state_dict()
+    import os
+    path = '/home/dlyakhov/model_export/29_10_21/'
+    file_name = os.path.basename(resuming_checkpoint_path)
+    new_ckpt_path = os.path.join(path, file_name)
+    print(f'New ckpt saved at {new_ckpt_path}')
+    torch.save(resuming_checkpoint, new_ckpt_path)
+    return
 
     if is_export_only:
         compression_ctrl.export_model(config.to_onnx)

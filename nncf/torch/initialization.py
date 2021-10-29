@@ -235,12 +235,12 @@ def register_default_init_args(nncf_config: 'NNCFConfig',
                                execution_parameters: 'ExecutionParameters' = None,
                                legr_train_optimizer: torch.optim.Optimizer = None,
                                device: str = None, ) -> 'NNCFConfig':
-    nncf_config.register_extra_structs([QuantizationRangeInitArgs(data_loader=wrap_dataloader_for_init(train_loader),
-                                                                  device=device),
-                                        BNAdaptationInitArgs(data_loader=wrap_dataloader_for_init(train_loader),
-                                                             device=device),
+    #nncf_config.register_extra_structs([QuantizationRangeInitArgs(data_loader=wrap_dataloader_for_init(train_loader),
+    #                                                              device=device),
+    #                                    BNAdaptationInitArgs(data_loader=wrap_dataloader_for_init(train_loader),
+    #                                                         device=device),
 
-                                        ])
+    #                                    ])
     if train_loader and train_steps_fn and val_loader and validate_fn:
         nncf_config.register_extra_structs([LeGRInitArgs(
             train_loader=train_loader,
