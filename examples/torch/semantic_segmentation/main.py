@@ -554,6 +554,7 @@ def main_worker(current_gpu, config):
     log_common_mlflow_params(config)
 
     # Save new checkpoint
+    MODEL_STATE_ATTR = 'state_dict'
     resuming_checkpoint[MODEL_STATE_ATTR] = model.state_dict()
     import os
     path = '/home/dlyakhov/model_export/29_10_21/'

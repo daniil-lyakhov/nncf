@@ -177,6 +177,7 @@ def main_worker(current_gpu, config: SampleConfig):
 
     if is_export_only:
         assert pretrained or (resuming_checkpoint_path is not None)
+    #elif False:
     else:
         # Data loading code
         train_dataset, val_dataset = create_datasets(config)
