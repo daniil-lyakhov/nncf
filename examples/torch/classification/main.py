@@ -217,6 +217,7 @@ def main_worker(current_gpu, config: SampleConfig):
 
     # Save new checkpoint
     resuming_checkpoint[MODEL_STATE_ATTR] = model.state_dict()
+    resuming_checkpoint[COMPRESSION_STATE_ATTR] = compression_ctrl.get_compression_state()
     import os
     path = '/home/dlyakhov/model_export/01_11_21/'
     file_name = os.path.basename(resuming_checkpoint_path)

@@ -1,12 +1,6 @@
 {
     "classification": {
         "imagenet": {
-            "resnet50_imagenet": {
-                "config": "examples/torch/classification/configs/quantization/resnet50_imagenet.json",
-                "target": 76.16,
-                "metric_type": "Acc@1",
-                "model_description": "ResNet-50"
-            },
             "resnet50_imagenet_int8": {
                 "config": "examples/torch/classification/configs/quantization/resnet50_imagenet_int8.json",
                 "reference": "resnet50_imagenet",
