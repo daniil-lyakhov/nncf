@@ -472,20 +472,6 @@ def predict(model, images, class_encoding, config):
 
 
 def main_worker(current_gpu, config):
-    no_pruning = False
-    if 'compression' not in config:
-        no_pruning = True
-    if not no_pruning:
-        compression = config['compression']
-        if not isinstance(compression, list):
-            compression = [compression]
-        if not any(c['algorithm'] == 'filter_pruning' for c in compression):
-            no_pruning = True
-
-    if no_pruning:
-        print('NO PRUNING ALGO')
-        exit()
-
     configure_device(current_gpu, config)
     config.mlflow = SafeMLFLow(config)
     if is_main_process():
@@ -557,7 +543,7 @@ def main_worker(current_gpu, config):
     MODEL_STATE_ATTR = 'state_dict'
     resuming_checkpoint[MODEL_STATE_ATTR] = model.state_dict()
     import os
-    path = '/home/dlyakhov/model_export/29_10_21/'
+    path = '/home/dlyakhov/model_export/01_11_21/'
     file_name = os.path.basename(resuming_checkpoint_path)
     new_ckpt_path = os.path.join(path, file_name)
     print(f'New ckpt saved at {new_ckpt_path}')

@@ -139,19 +139,6 @@ def inception_criterion_fn(model_outputs: Any, target: Any, criterion: _Loss) ->
 
 # pylint:disable=too-many-branches,too-many-statements
 def main_worker(current_gpu, config: SampleConfig):
-    no_pruning = False
-    if 'compression' not in config:
-        no_pruning = True
-    if not no_pruning:
-        compression = config['compression']
-        if not isinstance(compression, list):
-            compression = [compression]
-        if not any(c['algorithm'] == 'filter_pruning' for c in compression):
-            no_pruning = True
-
-    if no_pruning:
-        print('NO PRUNING ALGO')
-        exit()
     configure_device(current_gpu, config)
     config.mlflow = SafeMLFLow(config)
     if is_main_process():
@@ -177,8 +164,8 @@ def main_worker(current_gpu, config: SampleConfig):
 
     if is_export_only:
         assert pretrained or (resuming_checkpoint_path is not None)
-    #elif False:
-    else:
+    elif False:
+    #else:
         # Data loading code
         train_dataset, val_dataset = create_datasets(config)
         train_loader, train_sampler, val_loader, init_loader = create_data_loaders(config, train_dataset, val_dataset)
@@ -231,12 +218,12 @@ def main_worker(current_gpu, config: SampleConfig):
     # Save new checkpoint
     resuming_checkpoint[MODEL_STATE_ATTR] = model.state_dict()
     import os
-    path = '/home/dlyakhov/model_export/29_10_21/'
+    path = '/home/dlyakhov/model_export/01_11_21/'
     file_name = os.path.basename(resuming_checkpoint_path)
     new_ckpt_path = os.path.join(path, file_name)
     print(f'New ckpt saved at {new_ckpt_path}')
     torch.save(resuming_checkpoint, new_ckpt_path)
-    #return
+    return
 
     if is_export_only:
         compression_ctrl.export_model(config.to_onnx)

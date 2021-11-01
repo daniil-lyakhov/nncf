@@ -785,6 +785,11 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
 
         for qp_id in non_unified_scales_quantization_point_ids:
             qp = quantizer_setup.quantization_points[qp_id]
+            target_node_name = qp.insertion_point.target_node_name
+            if 'BatchNorm2d' in target_node_name:
+                target_node_name = target_node_name.replace('BatchNorm2d', 'NNCFBatchNorm')
+                qp.insertion_point.target_node_name = target_node_name
+
             nncf_node = target_model_graph.get_node_by_name(qp.insertion_point.target_node_name)
             if qp.is_weight_quantization_point() and nncf_node.is_shared():
                 layer_name = nncf_node.layer_name
