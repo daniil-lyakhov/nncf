@@ -21,6 +21,7 @@ from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.pruning.clusterization import Cluster
 from nncf.common.pruning.clusterization import Clusterization
 from nncf.common.pruning.mask_propagation import MaskPropagationAlgorithm
+from nncf.common.pruning.utils import is_prunable_depthwise_conv
 from nncf.common.utils.logger import logger as nncf_logger
 from nncf.config.extractors import extract_algo_specific_config
 from nncf.torch.algo_selector import ZeroCompressionLoss
@@ -124,7 +125,8 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
                                                      module_scope=module_scope,
                                                      module=module,
                                                      operand=pruning_block,
-                                                     node_id=node.node_id))
+                                                     node_id=node.node_id,
+                                                     is_depthwise=is_prunable_depthwise_conv(node)))
 
             cluster = Cluster[PrunedModuleInfo](i, group_minfos, [n.node_id for n in group.elements])
             self.pruned_module_groups_info.add_cluster(cluster)

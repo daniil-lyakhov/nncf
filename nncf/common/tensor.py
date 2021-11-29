@@ -97,6 +97,18 @@ class NNCFBaseTensorProcessor:
 
     @classmethod
     @abstractmethod
+    def sum(cls, tensor: NNCFTensor) -> int:
+        """
+
+        Args:
+            tensor:
+
+        Returns:
+
+        """
+
+    @classmethod
+    @abstractmethod
     def elementwise_mask_propagation(cls, input_masks: List[NNCFTensor]) -> NNCFTensor:
         """
         Assemble output mask for elementwise pruning operation from given input masks.

@@ -44,6 +44,10 @@ class PTNNCFTensorProcessor(NNCFBaseTensorProcessor):
         return PTNNCFTensor(ret_tensor)
 
     @classmethod
+    def sum(cls, tensor: NNCFTensor) -> int:
+        return int(torch.sum(tensor.tensor))
+
+    @classmethod
     def elementwise_mask_propagation(cls, input_masks: List[NNCFTensor]) -> NNCFTensor:
         cls.assert_allclose(input_masks)
         return input_masks[0]
