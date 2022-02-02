@@ -11,6 +11,7 @@
  limitations under the License.
 """
 from typing import List, Dict
+from functools import partial
 
 import torch
 from nncf.torch.pruning.tensor_processor import PTNNCFPruningTensorProcessor
@@ -25,6 +26,8 @@ from nncf.common.pruning.mask_propagation import MaskPropagationAlgorithm
 from nncf.common.pruning.utils import is_prunable_depthwise_conv
 from nncf.common.utils.logger import logger as nncf_logger
 from nncf.config.extractors import extract_algo_specific_config
+from nncf.torch.layers import NNCFBatchNorm
+from nncf.torch.layers import NNCFGroupNorm
 from nncf.torch.algo_selector import ZeroCompressionLoss
 from nncf.torch.compression_method_api import PTCompressionAlgorithmBuilder
 from nncf.torch.compression_method_api import PTCompressionAlgorithmController
@@ -33,6 +36,7 @@ from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.graph.transformations.commands import TransformationPriority
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.module_operations import UpdateWeightAndBias
+from nncf.torch.module_operations import UpdateParameterList
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.pruning.operations import PT_PRUNING_OPERATOR_METATYPES
 from nncf.torch.pruning.structs import PrunedModuleInfo
@@ -143,6 +147,10 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
         if self.prune_batch_norms:
             types_to_apply_mask.append('batch_norm')
 
+        hook_by_type = {
+            NNCFBatchNorm: partial(UpdateParameterList, param_names=['weight', 'bias', 'running_mean']),
+            NNCFGroupNorm: UpdateWeightAndBias
+        }
         all_norm_layers = target_model_graph.get_nodes_by_types(types_to_apply_mask)
         for node in all_norm_layers:
             if node.data['output_mask'] is None:
@@ -154,7 +162,7 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
 
             pruning_block = self.create_weight_pruning_operation(module, node_name)
             # Hook for weights and bias
-            hook = UpdateWeightAndBias(pruning_block).to(device)
+            hook = hook_by_type[module.__class__](op=pruning_block).to(device)
             insertion_commands.append(
                 PTInsertionCommand(
                     PTTargetPoint(TargetType.PRE_LAYER_OPERATION,

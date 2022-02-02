@@ -56,6 +56,8 @@ class FilterPruningMask(nn.Module):
                     new_params.append(inplace_apply_filter_binary_mask(self.binary_filter_pruning_mask, param_value,
                                                                        node_name_for_logging=self.node_name, dim=dim))
             else:
+                if param_name == 'running_mean':
+                    continue
                 new_params.append(apply_filter_binary_mask(self.binary_filter_pruning_mask, param_value,
                                                            node_name_for_logging=self.node_name, dim=dim))
         return new_params

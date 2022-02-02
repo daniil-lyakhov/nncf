@@ -123,7 +123,6 @@ class NNCFConv2d(_NNCFModuleMixin, nn.Conv2d):
         proxy_bias = self.bias
         return self._conv_forward_proxy(input_, proxy_weight, proxy_bias, proxy_padding_value)
 
-
     def _conv_forward_proxy(self, input_, weight, bias, padding_value):
         with no_jit_trace():
             padding_val = padding_value.item()
@@ -211,6 +210,7 @@ class NNCFConv3d(_NNCFModuleMixin, nn.Conv3d):
         )
         nncf_conv3d = align_module_internals(module, nncf_conv3d)
         return nncf_conv3d
+
 
 class NNCFConvTranspose3d(_NNCFModuleMixin, nn.ConvTranspose3d):
     op_func_name = "conv_transpose3d"
