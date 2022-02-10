@@ -39,15 +39,16 @@ from tests.torch.pruning.helpers import PruningTestModelConcatBN
 from tests.torch.pruning.helpers import DisconectedGraphModel
 
 
-def create_pruning_algo_with_config(config):
+def create_pruning_algo_with_config(config, dim=2):
     """
     Create filter_pruning with default params.
     :param config: config for the algorithm
+    :param dim: dimension of the model.
     :return pruned model, pruning_algo, nncf_modules
     """
     config['compression']['algorithm'] = 'filter_pruning'
-    model = BigPruningTestModel()
-    pruned_model, pruning_algo = create_compressed_model_and_algo_for_test(BigPruningTestModel(), config)
+    model = BigPruningTestModel(dim)
+    pruned_model, pruning_algo = create_compressed_model_and_algo_for_test(BigPruningTestModel(dim), config)
 
     # Check that all modules was correctly replaced by NNCF modules and return this NNCF modules
     _, nncf_modules = check_correct_nncf_modules_replacement(model, pruned_model)
@@ -83,12 +84,14 @@ def test_check_default_algo_params():
 
 @pytest.mark.parametrize('prune_first', [False, True])
 @pytest.mark.parametrize('prune_batch_norms', [True, False])
-def test_valid_modules_replacement_and_pruning(prune_first, prune_batch_norms):
+@pytest.mark.parametrize('dim', [1, 2, 3])
+def test_valid_modules_replacement_and_pruning(prune_first, prune_batch_norms, dim):
     """
     Test that checks that all conv modules in model was replaced by nncf modules and
     pruning pre ops were added correctly.
-    :param prune_first: whether to prune first convolution or not
+    :param prune_first: whether to prune first convolution or not.
     :param prune_batch_norms: whether to prune batch norm layers or not.
+    :param dim: dimention of the test net.
     """
 
     def check_that_module_is_pruned(module):
@@ -102,11 +105,11 @@ def test_valid_modules_replacement_and_pruning(prune_first, prune_batch_norms):
         assert len(module.pre_ops) == 0
         assert len(module.post_ops) == 0
 
-    config = get_basic_pruning_config(input_sample_size=[1, 1, 8, 8])
+    config = get_basic_pruning_config(input_sample_size=[1, 1] + [8] * dim)
     config['compression']['params']['prune_first_conv'] = prune_first
     config['compression']['params']['prune_batch_norms'] = prune_batch_norms
 
-    pruned_model, pruning_algo, nncf_modules = create_pruning_algo_with_config(config)
+    pruned_model, pruning_algo, nncf_modules = create_pruning_algo_with_config(config, dim)
     pruned_module_info = pruning_algo.pruned_module_groups_info.get_all_nodes()
     pruned_modules = [minfo.module for minfo in pruned_module_info]
 
@@ -172,14 +175,16 @@ BIG_PRUNING_MODEL_TEST_PARAMS_VALUES = \
 ]
 
 
-@pytest.mark.parametrize(BIG_PRUNING_MODEL_TEST_PARAMS, BIG_PRUNING_MODEL_TEST_PARAMS_VALUES )
-def test_pruning_masks_correctness(all_weights, pruning_flops_target, prune_first, ref_masks):
+@pytest.mark.parametrize(BIG_PRUNING_MODEL_TEST_PARAMS, BIG_PRUNING_MODEL_TEST_PARAMS_VALUES)
+@pytest.mark.parametrize('dim', [1, 2, 3])
+def test_pruning_masks_correctness(all_weights, pruning_flops_target, prune_first, ref_masks, dim):
     """
     Test for pruning masks check (_set_binary_masks_for_filters, _set_binary_masks_for_all_filters_together).
     :param all_weights: whether mask will be calculated for all weights in common or not
     :param pruning_flops_target: prune model by flops, if None then by number of channels
     :param prune_first: whether to prune first convolution or not
     :param ref_masks: reference masks values
+    :param dim: dimension of the model
     """
 
     def check_mask(module, num):
@@ -187,14 +192,14 @@ def test_pruning_masks_correctness(all_weights, pruning_flops_target, prune_firs
         assert hasattr(pruning_op, 'binary_filter_pruning_mask')
         assert torch.allclose(pruning_op.binary_filter_pruning_mask, ref_masks[num])
 
-    config = get_basic_pruning_config(input_sample_size=[1, 1, 8, 8])
+    config = get_basic_pruning_config(input_sample_size=[1, 1] + [8] * dim)
     config['compression']['params']['all_weights'] = all_weights
     config['compression']['params']['prune_first_conv'] = prune_first
     config['compression']['pruning_init'] = 0.5
     if pruning_flops_target:
         config['compression']['params']['pruning_flops_target'] = pruning_flops_target
 
-    pruned_model, pruning_algo, _ = create_pruning_algo_with_config(config)
+    pruned_model, pruning_algo, _ = create_pruning_algo_with_config(config, dim)
     pruned_module_info = pruning_algo.pruned_module_groups_info.get_all_nodes()
     pruned_modules = [minfo.module for minfo in pruned_module_info]
     assert pruning_algo.pruning_level == 0.5

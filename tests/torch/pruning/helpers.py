@@ -216,24 +216,29 @@ class PruningTestModelEltwise(nn.Module):
 
 
 class BigPruningTestModel(nn.Module):
-    def __init__(self):
+    def __init__(self, dim=2):
         super().__init__()
-        self.conv1 = create_conv(1, 16, 2, 0, 1)
+        bn_dim_map = {
+            1: nn.BatchNorm1d,
+            2: nn.BatchNorm2d,
+            3: nn.BatchNorm3d,
+        }
+        self.conv1 = create_conv(1, 16, 2, 0, 1, dim=dim)
         for i in range(16):
             self.conv1.weight.data[i] += i
-        self.bn1 = nn.BatchNorm2d(16)
+        self.bn1 = bn_dim_map[dim](16)
         self.relu = nn.ReLU()
-        self.conv_depthwise = create_depthwise_conv(16, 3, 0, 1)
+        self.conv_depthwise = create_depthwise_conv(16, 3, 0, 1, dim=dim)
         for i in range(16):
             self.conv_depthwise.weight.data[i] += i
-        self.conv2 = create_conv(16, 32, 3, 20, 0)
+        self.conv2 = create_conv(16, 32, 3, 20, 0, dim=dim)
         for i in range(32):
             self.conv2.weight.data[i] += i
-        self.bn2 = nn.BatchNorm2d(32)
-        self.up = create_transpose_conv(32, 64, 3, 3, 1, 2)
+        self.bn2 = bn_dim_map[dim](32)
+        self.up = create_transpose_conv(32, 64, 3, 3, 1, 2, dim=dim)
         for i in range(64):
             self.up.weight.data[0][i] += i
-        self.conv3 = create_conv(64, 1, 5, 5, 1)
+        self.conv3 = create_conv(64, 1, 5, 5, 1, dim=dim)
 
     def forward(self, x):
         x = self.conv1(x)
