@@ -114,11 +114,25 @@ class PTExporter(Exporter):
                 retval = dummy_forward(self._model)
                 output_names = generate_output_names_list(count_tensors(retval))
 
+            DEBUG=False
+            import os
+            if DEBUG is True:
+                torch.onnx.export(model, tuple(input_tensor_list), os.path.join(os.path.dirname(save_path), "graph-only."+os.path.basename(save_path)),
+                                export_params=False,
+                                input_names=input_names,
+                                output_names=output_names,
+                                enable_onnx_checker=False,
+                                opset_version=10,
+                                do_constant_folding=False,
+                                # Do not fuse Conv+BN in ONNX. May cause dropout elements to appear in ONNX.
+                                training=True)
+
             torch.onnx.export(model, tuple(input_tensor_list), save_path,
                               input_names=input_names,
                               output_names=output_names,
                               enable_onnx_checker=False,
                               opset_version=10,
+                              do_constant_folding=False,
                               # Do not fuse Conv+BN in ONNX. May cause dropout elements to appear in ONNX.
                               training=True)
             model.enable_dynamic_graph_building()

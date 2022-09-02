@@ -112,11 +112,13 @@ class NNCFConfig(dict):
 
         try:
             if isinstance(compression_section, dict):
-                validate_single_compression_algo_schema(compression_section)
+                pass
+                # validate_single_compression_algo_schema(compression_section)
             else:
                 # Passed a list of dicts
                 for compression_algo_dict in compression_section:
-                    validate_single_compression_algo_schema(compression_algo_dict)
+                    pass
+                    # validate_single_compression_algo_schema(compression_algo_dict)
         except jsonschema.ValidationError:
             # No need to trim the exception output here since only the compression algo
             # specific sub-schema will be shown, which is much shorter than the global schema

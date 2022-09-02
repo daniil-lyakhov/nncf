@@ -724,6 +724,62 @@ RB_SPARSITY_SCHEMA = {
     "additionalProperties": False
 }
 
+MOVEMENT_SPARSITY_ALGO_NAME_IN_CONFIG = "movement_sparsity"
+MOVEMENT_SPARSITY_SCHEMA = {
+    **BASIC_COMPRESSION_ALGO_SCHEMA,
+    "properties": {
+        "algorithm": {
+            "const": MOVEMENT_SPARSITY_ALGO_NAME_IN_CONFIG
+        },
+        **COMPRESSION_LR_MULTIPLIER_PROPERTY,
+        "sparsity_init": with_attributes(_NUMBER,
+                                         description="Initial value of the sparsity level applied to the "
+                                                     "model"),
+        "params":
+            {
+                # TODO: revise config to expose
+                "type": "object",
+                "properties": {
+                    "schedule": with_attributes(_STRING,
+                                                description="The type of scheduling to use for adjusting the"
+                                                            "importance threshold and its regularization factor"),
+                    "power": with_attributes(_NUMBER,
+                                             description="For polynomial scheduler - determines the corresponding power value."),
+                    "init_importance_threshold": with_attributes(_NUMBER,
+                                                                 description="importance masking threshold @ warmup_start_epoch"),
+                    "warmup_start_epoch": with_attributes(_NUMBER,
+                                                          description="Index of the starting epoch of the importance masking threshold"
+                                                                        "warmup at the value of init_importance_threshold"),
+                    "final_importance_threshold": with_attributes(_NUMBER,
+                                                                  description="importance masking threshold @ warmup_end_epoch"),
+                    "warmup_end_epoch": with_attributes(_NUMBER,
+                                                        description="Index of the ending epoch of the importance masking threshold"
+                                                                    "warmup at the value of final_importance_threshold"),
+                    "importance_regularization_factor": with_attributes(_NUMBER,
+                                                                        description="regularization final lambda"),
+                    "steps_per_epoch": with_attributes(_NUMBER,
+                                       description="Number of optimizer steps in one epoch. Required to start proper "
+                                                   " scheduling in the first training epoch if "
+                                                   "'update_per_optimizer_step' is true"),
+                    "update_per_optimizer_step": with_attributes(_BOOLEAN,
+                                                                description="Whether the function-based sparsity level schedulers "
+                                                                            "should update the sparsity level after each optimizer "
+                                                                            "step instead of each epoch step."),
+                    "sparsity_level_setting_mode": with_attributes(_STRING,
+                                                                description="The mode of sparsity level setting( "
+                                                                            "'global' - one sparsity level is set for all layer, "
+                                                                            "'local' - sparsity level is set per-layer.)"),
+                    # TODO
+                    # "sparse_structure_by_scopes": with_attributes(make_object_or_array_of_objects_schema(_ARRAY_OF_STRINGS),
+                    #                   description="specification of sparsity grain size by NNCF scope. "),
+                },
+                "additionalProperties": False
+            },
+        **COMMON_COMPRESSION_ALGORITHM_PROPERTIES
+    },
+    "additionalProperties": False
+}
+
 FILTER_PRUNING_ALGO_NAME_IN_CONFIG = 'filter_pruning'
 FILTER_PRUNING_SCHEMA = {
     **BASIC_COMPRESSION_ALGO_SCHEMA,
@@ -863,6 +919,7 @@ REF_VS_ALGO_SCHEMA = {BINARIZATION_ALGO_NAME_IN_CONFIG: BINARIZATION_SCHEMA,
                       CONST_SPARSITY_ALGO_NAME_IN_CONFIG: CONST_SPARSITY_SCHEMA,
                       MAGNITUDE_SPARSITY_ALGO_NAME_IN_CONFIG: MAGNITUDE_SPARSITY_SCHEMA,
                       RB_SPARSITY_ALGO_NAME_IN_CONFIG: RB_SPARSITY_SCHEMA,
+                      MOVEMENT_SPARSITY_ALGO_NAME_IN_CONFIG: MOVEMENT_SPARSITY_SCHEMA,
                       FILTER_PRUNING_ALGO_NAME_IN_CONFIG: FILTER_PRUNING_SCHEMA,
                       KNOWLEDGE_DISTILLATION_ALGO_NAME_IN_CONFIG: KNOWLEDGE_DISTILLATION_SCHEMA}
 

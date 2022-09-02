@@ -192,7 +192,8 @@ def _get_layer_attributes(module: TorchModule, operator_name: str) -> BaseLayerA
     if isinstance(module, Linear):
         return LinearLayerAttributes(weight_requires_grad=module.weight.requires_grad,
                                      in_features=module.in_features,
-                                     out_features=module.out_features)
+                                     out_features=module.out_features,
+                                     bias=module.bias is not None)
 
     if hasattr(module, 'weight'):
         return GenericWeightedLayerAttributes(weight_requires_grad=module.weight.requires_grad,
