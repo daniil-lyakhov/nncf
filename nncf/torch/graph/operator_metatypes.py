@@ -26,7 +26,7 @@ from nncf.common.graph.operator_metatypes import OUTPUT_NOOP_METATYPES
 from nncf.common.graph.operator_metatypes import OperatorMetatype
 from nncf.common.graph.operator_metatypes import OperatorMetatypeRegistry
 from nncf.common.hardware.opset import HWConfigOpName
-from nncf.torch.dynamic_graph.patch_pytorch import NamespaceTarget
+from nncf.torch.dynamic_graph.namespace_targets import NamespaceTarget
 
 ModuleAttributes = TypeVar('ModuleAttributes', bound=BaseLayerAttributes)
 
@@ -793,3 +793,6 @@ def get_operator_metatypes() -> List[Type[OperatorMetatype]]:
     :return: List of operator metatypes .
     """
     return list(PT_OPERATOR_METATYPES.registry_dict.values())
+
+
+OP_NAMES_REQUIRING_ATTRIBUTES_FROM_ARGS_KWARGS = [PTTransposeMetatype.get_all_aliases()]

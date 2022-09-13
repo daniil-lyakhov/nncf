@@ -28,6 +28,7 @@ from nncf.common.graph import OperatorMetatype
 from nncf.common.graph.layer_attributes import ConvolutionLayerAttributes
 from nncf.common.graph.layer_attributes import MultipleInputLayerAttributes
 from nncf.common.graph.layer_attributes import ReshapeLayerAttributes
+from nncf.common.graph.layer_attributes import TransposeLayerAttributes
 from nncf.common.graph.layer_attributes import LinearLayerAttributes
 from nncf.common.graph.layer_attributes import MultipleOutputLayerAttributes
 from nncf.common.graph.layer_attributes import Dtype
@@ -43,6 +44,7 @@ from nncf.tensorflow.graph.metatypes.common import \
 from nncf.tensorflow.graph.metatypes.common import GENERAL_CONV_LAYER_METATYPES
 from nncf.tensorflow.graph.metatypes.common import LINEAR_LAYER_METATYPES
 from nncf.tensorflow.graph.metatypes.common import RESHAPE_METATYPES
+from nncf.tensorflow.graph.metatypes.common import DIMENSION_PERMUTATION_METATYPES
 from nncf.tensorflow.graph.metatypes.matcher import get_keras_layer_metatype
 from nncf.tensorflow.graph.metatypes.matcher import get_op_metatype
 from nncf.common.graph.operator_metatypes import OutputNoopMetatype
@@ -573,6 +575,8 @@ class FunctionalConverter(BaseFunctionalSequentialConverter):
                 layer_attributes = _get_multiple_input_layer_attributes(layer)
             elif metatype in RESHAPE_METATYPES:
                 layer_attributes = _get_reshape_layer_attributes(layer)
+            elif metatype in DIMENSION_PERMUTATION_METATYPES:
+                layer_attributes = _get_transpose_layer_attributes(layer)
             elif metatype in LAYER_METATYPES_AGNOSTIC_TO_DATA_PRECISION_WITH_MULTIPLE_OUTPUTS:
                 layer_attributes = _get_multiple_output_layer_attributes(layer)
             else:
@@ -672,6 +676,8 @@ class SequentialConverter(BaseFunctionalSequentialConverter):
                 layer_attributes = _get_multiple_input_layer_attributes(model_layer)
             elif layer_metatype in RESHAPE_METATYPES:
                 layer_attributes = _get_reshape_layer_attributes(model_layer)
+            elif metatype in DIMENSION_PERMUTATION_METATYPES:
+                layer_attributes = _get_transpose_layer_attributes(layer)
             elif layer_metatype in LAYER_METATYPES_AGNOSTIC_TO_DATA_PRECISION_WITH_MULTIPLE_OUTPUTS:
                 layer_attributes = _get_multiple_output_layer_attributes(model_layer)
 
@@ -773,6 +779,10 @@ def _get_reshape_layer_attributes(layer: tf.keras.layers.Layer) -> ReshapeLayerA
     if isinstance(output_shape, list):
         output_shape = output_shape[0]
     return ReshapeLayerAttributes(input_shape, output_shape)
+
+
+def _get_transpose_layer_attributes(layer: tf.keras.layers.Layer) -> TransposeLayerAttributes:
+    return TransposeLayerAttributes([1, 2, 3])
 
 
 def _get_multiple_output_layer_attributes(layer: tf.keras.layers.Layer) -> MultipleOutputLayerAttributes:

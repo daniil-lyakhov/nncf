@@ -17,6 +17,7 @@ from nncf.common.graph.definitions import MODEL_INPUT_OP_NAME
 from nncf.common.graph.definitions import MODEL_OUTPUT_OP_NAME
 from nncf.common.graph.definitions import NNCFGraphNodeType
 from nncf.common.graph.layer_attributes import MultipleInputLayerAttributes
+from nncf.common.graph.layer_attributes import TransposeLayerAttributes
 from typing import List
 from typing import Tuple
 from torch import nn
@@ -37,6 +38,7 @@ from nncf.torch.dynamic_graph.context import TracingContext
 from nncf.torch.graph.graph_builder import GraphBuilder
 from nncf.torch.graph.operator_metatypes import PTCatMetatype, PTSplitMetatype
 from nncf.torch.graph.operator_metatypes import PTReshapeMetatype
+from nncf.torch.graph.operator_metatypes import PTTransposeMetatype
 from nncf.common.graph.layer_attributes import ReshapeLayerAttributes
 from nncf.common.graph.layer_attributes import MultipleOutputLayerAttributes
 from tests.torch.helpers import create_compressed_model_and_algo_for_test
@@ -281,6 +283,53 @@ def test_reshape_attributes_saved_during_graph_building(input_shape):
             else:
                 assert node.layer_attributes is None
                 assert reshape_nodes_with_attributes[node.node_name] is None
+
+
+class ModelWithPermute(nn.Module):
+    def forward(self, x: torch.Tensor):
+        # x.shape == [1, 10, 20, 10]
+        # without kwargs
+        x = x.transpose(1, 3)
+        x = x.permute(3, 2, 1, 0)
+        # with kwargs
+        x = x.transpose(1, dim1=3)
+        x = x.transpose(dim0=1, dim1=3)
+        x = x.permute(dims=[3, 2, 1, 0])
+        return x
+
+
+transpose_input_shapes = [(1, 10, 20, 10),
+                          (10, 10, 10, 10)]
+
+
+@pytest.mark.parametrize("input_shape", transpose_input_shapes)
+def test_permute_attributes_saved_during_graph_building(input_shape):
+    model = ModelWithPermute()
+    input_info = ModelInputInfo(input_shape)
+    graph_builder = GraphBuilder(create_dummy_forward_fn([input_info, ], with_input_tracing=True,
+                                                         with_output_tracing=True))
+    graph = graph_builder.build_graph(model)
+    reshape_nodes_with_attributes = {
+        'ModelForTestWithReshapeFlattenAndConcat/view_0':
+            {'input_shape': (input_shape[0], ModelForTest.OUT_CHANNELS, input_shape[2], input_shape[3]),
+             'output_shape': (input_shape[0], ModelForTest.OUT_CHANNELS, input_shape[2], input_shape[3], 1, 1)},
+        'ModelForTestWithReshapeFlattenAndConcat/flatten_0':
+            {'input_shape': (2, input_shape[0], ModelForTest.OUT_CHANNELS, input_shape[2], input_shape[3], 1, 2),
+             'output_shape': (input_shape[0] * ModelForTest.OUT_CHANNELS * input_shape[2] * input_shape[3] * 4,)},
+        'ModelForTestWithReshapeFlattenAndConcat/view_1': None
+    }
+
+    for node in graph.get_all_nodes():
+        if node.metatype is PTTransposeMetatype:
+            assert node.node_name in reshape_nodes_with_attributes
+            if isinstance(node.layer_attributes, TransposeLayerAttributes):
+                ref_attrs = reshape_nodes_with_attributes[node.node_name]
+                assert node.layer_attributes.input_shape == ref_attrs['input_shape']
+                assert node.layer_attributes.output_shape == ref_attrs['output_shape']
+            else:
+                assert node.layer_attributes is None
+                assert reshape_nodes_with_attributes[node.node_name] is None
+
 
 class ModelForTestWithSplit(ModelForTest):
     def __init__(self):
