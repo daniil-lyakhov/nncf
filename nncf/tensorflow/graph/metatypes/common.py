@@ -164,6 +164,10 @@ RESHAPE_METATYPES = [
     op_metatypes.TFReshapeOpMetatype
 ]
 
+DIMENSION_PERMUTATION_METATYPES = [
+    op_metatypes.TFTransposeOpMetatype
+]
+
 def get_operator_metatypes() -> List[Type[OperatorMetatype]]:
     keras_metatypes_list = list(layer_metatypes.KERAS_LAYER_METATYPES.registry_dict.values())
     tf_metatypes_list = list(op_metatypes.TF_OPERATION_METATYPES.registry_dict.values())
