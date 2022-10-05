@@ -17,6 +17,7 @@ from nncf.common.graph.definitions import MODEL_INPUT_OP_NAME
 from nncf.common.graph.definitions import MODEL_OUTPUT_OP_NAME
 from nncf.common.graph.definitions import NNCFGraphNodeType
 from nncf.common.graph.layer_attributes import MultipleInputLayerAttributes
+from nncf.common.graph.layer_attributes import PermuteLayerAttributes
 from nncf.common.graph.layer_attributes import TransposeLayerAttributes
 from typing import List
 from typing import Tuple
@@ -309,26 +310,23 @@ def test_permute_attributes_saved_during_graph_building(input_shape):
     graph_builder = GraphBuilder(create_dummy_forward_fn([input_info, ], with_input_tracing=True,
                                                          with_output_tracing=True))
     graph = graph_builder.build_graph(model)
-    reshape_nodes_with_attributes = {
-        'ModelForTestWithReshapeFlattenAndConcat/view_0':
-            {'input_shape': (input_shape[0], ModelForTest.OUT_CHANNELS, input_shape[2], input_shape[3]),
-             'output_shape': (input_shape[0], ModelForTest.OUT_CHANNELS, input_shape[2], input_shape[3], 1, 1)},
-        'ModelForTestWithReshapeFlattenAndConcat/flatten_0':
-            {'input_shape': (2, input_shape[0], ModelForTest.OUT_CHANNELS, input_shape[2], input_shape[3], 1, 2),
-             'output_shape': (input_shape[0] * ModelForTest.OUT_CHANNELS * input_shape[2] * input_shape[3] * 4,)},
-        'ModelForTestWithReshapeFlattenAndConcat/view_1': None
+    transpose_nodes_with_attributes = {
+        'ModelWithPermute/transpose_0': TransposeLayerAttributes(1, 3),
+        'ModelWithPermute/transpose_1': TransposeLayerAttributes(1, 3),
+        'ModelWithPermute/transpose_2': TransposeLayerAttributes(1, 3),
+        'ModelWithPermute/permute_0': PermuteLayerAttributes((3, 2, 1, 0)),
+        'ModelWithPermute/permute_1': PermuteLayerAttributes((3, 2, 1, 0))
     }
 
     for node in graph.get_all_nodes():
         if node.metatype is PTTransposeMetatype:
-            assert node.node_name in reshape_nodes_with_attributes
-            if isinstance(node.layer_attributes, TransposeLayerAttributes):
-                ref_attrs = reshape_nodes_with_attributes[node.node_name]
-                assert node.layer_attributes.input_shape == ref_attrs['input_shape']
-                assert node.layer_attributes.output_shape == ref_attrs['output_shape']
+            assert node.node_name in transpose_nodes_with_attributes
+            if isinstance(node.layer_attributes, (TransposeLayerAttributes, PermuteLayerAttributes)):
+                ref_attrs = transpose_nodes_with_attributes[node.node_name]
+                assert node.layer_attributes == ref_attrs
             else:
                 assert node.layer_attributes is None
-                assert reshape_nodes_with_attributes[node.node_name] is None
+                assert transpose_nodes_with_attributes[node.node_name] is None
 
 
 class ModelForTestWithSplit(ModelForTest):

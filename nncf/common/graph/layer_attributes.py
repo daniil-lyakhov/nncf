@@ -217,6 +217,11 @@ class TransposeLayerAttributes(BaseLayerAttributes):
         self.dim0 = dim0
         self.dim1 = dim1
 
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, TransposeLayerAttributes) \
+               and super().__eq__(other) \
+               and self.dim0 == other.dim0 \
+               and self.dim1 == other.dim1
 
 class PermuteLayerAttributes(BaseLayerAttributes):
     """
@@ -226,3 +231,9 @@ class PermuteLayerAttributes(BaseLayerAttributes):
     def __init__(self,
                  permutation: List[int]):
         self.permutation = permutation
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, PermuteLayerAttributes) \
+               and super().__eq__(other) \
+               and len(self.permutation) == len(other.permutation) \
+               and (l == r for l, r in zip(self.permutation, other.permutation))
