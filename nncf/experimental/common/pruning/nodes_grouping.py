@@ -19,7 +19,7 @@ class MaskProducer:
         self.id = id_
         self.blocks = blocks
         if not blocks:
-            self.blocks = [DimensionBlock(size=1, offset=1)]
+            self.blocks = [DimensionBlock(size=1, offset=0)]
 
     def split_block_by_reshape(self, block, shape_map):
         # TODO: make it common !!!
@@ -45,7 +45,7 @@ class PropagationMask:
     def __init__(self, producers: List[MaskProducer],
                  dim_block_map: Dict[DimensionBlock, int] = None):
         self.producers = producers
-        self.dim_block_map = dim_block_map
+        self.dim_block_map = dim_block_map if dim_block_map is not None else {}
 
 
 class PruningNodeGroup:
