@@ -6,45 +6,92 @@ from nncf.common.pruning.mask_propagation import MaskPropagationAlgorithm
 
 
 class DimensionBlock:
-    def __init__(self, size: int, offset: int,
+    def __init__(self,
+                 producer,
+                 size: int = 1, offset: int = 0,
                  opened_branches: int = 0, closed_branches: int = 0) -> None:
         self.size = size
         self.offset = offset
-        self.opened_branches = opened_branches
-        self.closed_branches = closed_branches
+        self._producer = producer
+        self._opened_branches = opened_branches
+        self._closed_branches = closed_branches
+        self._childs = []
+        self._group = None
+
+    def split_by_reshape(self, shape_map):
+        # TODO: make it common !!!
+        if len(shape_map[1]) == 1:
+            raise RuntimeError
+        if len(shape_map[1]) > 2:
+            raise NotImplementedError
+        if self._childs:
+            raise NotImplementedError
+
+        a = DimensionBlock(size=shape_map[1][-1], offset=0,
+                           producer=self._producer,
+                           opened_branches=self._opened_branches,
+                           closed_branches=self._closed_branches)
+        b = DimensionBlock(size=1, offset=shape_map[1][-1],
+                           producer=self._producer,
+                           opened_branches=self._opened_branches,
+                           closed_branches=self._closed_branches)
+
+        self._childs.extend([a, b])
+
+    def get_childs(self):
+        return self._childs.copy()
+
+    def open_branch(self):
+        self._opened_branches += 1
+
+    def close_branch(self):
+        self._closed_branches += 1
+
+    def set_group(self, group):
+        self._group = group
+
+
+class BlockGroup:
+    def __init__(self, blocks) -> None:
+        self._blocks = blocks # type: DimensionBlock
+        for block in blocks:
+            block.set_group(self)
+
+    def split_blocks_by_reshape(self, shape_map):
+        new_blocks = []
+        for block in self._blocks:
+            block.split_by_reshape(shape_map)
+            new_blocks.append(block.get_childs())
+        retval = []
+        for group in zip(*new_blocks):
+            retval.append(BlockGroup(list(group)))
+        return retval
+
+    # TODO: work on open branches
+    def close_branch(self):
+        for block in self._blocks:
+            block.close_branch()
+
+    def get_blocks(self):
+        return self._blocks.copy()
+
+    @staticmethod
+    def join_groups(*args):
+        blocks_union = []
+        for group in args:
+            for block in group.get_blocks():
+                blocks_union.append(block)
+        return BlockGroup(blocks_union)
 
 
 class MaskProducer:
-    def __init__(self, id_, blocks: List[DimensionBlock] = None) -> None:
+    def __init__(self, id_)  -> None:
         self.id = id_
-        self.blocks = blocks
-        if not blocks:
-            self.blocks = [DimensionBlock(size=1, offset=0)]
-
-    def split_block_by_reshape(self, block, shape_map):
-        # TODO: make it common !!!
-        if len(self.blocks) > 1:
-            raise NotImplementedError
-        for block_ in self.blocks:
-            if block_ == block:
-                if len(shape_map[1]) > 2:
-                    raise NotImplementedError
-                if len(shape_map[1]) == 1:
-                    raise RuntimeError
-
-                a = DimensionBlock(size=shape_map[1][-1], offset=0,
-                                   opened_branches=block.opened_branches,
-                                   closed_branches=block.closed_branches)
-                b = DimensionBlock(size=1, offset=shape_map[1][-1],
-                                   opened_branches=block.opened_branches,
-                                   closed_branches=block.closed_branches)
-                self.blocks = [a, b]
 
 
 class PropagationMask:
-    def __init__(self, producers: List[MaskProducer],
+    def __init__(self,
                  dim_block_map: Dict[DimensionBlock, int] = None):
-        self.producers = producers
         self.dim_block_map = dim_block_map if dim_block_map is not None else {}
 
 
@@ -61,12 +108,12 @@ def get_pruning_groups(graph: NNCFGraph,
     # 1. Initialize masks for producing nodes
     # TODO: clarify that all possibly pruned nodes will be collected here
     all_nodes_to_prune = graph.get_nodes_by_types(prune_operations_types)  # type: List[NNCFNode]
-    producers = []
+    roots = []
     for node in all_nodes_to_prune:
-        producer = MaskProducer(node.node_id)
-        producers.append(producer)
-        # TODO: make dimention map common here
-        mask = PropagationMask([producer], {1: producer.blocks[0]})
+        root_block = DimensionBlock(MaskProducer(node.node_id))
+        roots.append(root_block)
+        # TODO: make dimension map common here
+        mask = PropagationMask({1: BlockGroup([root_block])})
         node.data['output_mask'] = mask
 
     # 2. Propagate masks
