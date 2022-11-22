@@ -15,7 +15,6 @@ class DimensionBlock:
         self._producer = producer
         self._opened_branches = opened_branches
         self._closed_branches = closed_branches
-        self._childs = []
         self._group = None
 
     def split_by_reshape(self, shape_map):
@@ -23,8 +22,6 @@ class DimensionBlock:
         if len(shape_map[1]) == 1:
             raise RuntimeError
         if len(shape_map[1]) > 2:
-            raise NotImplementedError
-        if self._childs:
             raise NotImplementedError
 
         a = DimensionBlock(size=shape_map[1][-1], offset=0,
@@ -35,11 +32,8 @@ class DimensionBlock:
                            producer=self._producer,
                            opened_branches=self._opened_branches,
                            closed_branches=self._closed_branches)
+        return [a, b]
 
-        self._childs.extend([a, b])
-
-    def get_childs(self):
-        return self._childs.copy()
 
     def open_branch(self):
         self._opened_branches += 1
@@ -56,16 +50,34 @@ class BlockGroup:
         self._blocks = blocks # type: DimensionBlock
         for block in blocks:
             block.set_group(self)
+        self._childs = []
+
+    def get_actual_groups(self):
+        if not self._childs:
+            return self._blocks
+        retval = []
+        for child in self._childs:
+            groups = child.get_actual_groups()
+            retval.append(groups[0] if len(groups) == 1 else groups)
+        return retval
+
+    def has_childs(self):
+        return bool(self._childs)
+
+    def add_childs(self, childs):
+        self._childs.extend(childs)
 
     def split_blocks_by_reshape(self, shape_map):
+        if self._childs:
+            raise NotImplementedError('Splitting BlockGroup with childs isn\'t implemented yet')
+
         new_blocks = []
         for block in self._blocks:
-            block.split_by_reshape(shape_map)
-            new_blocks.append(block.get_childs())
-        retval = []
+            new_blocks.append(block.split_by_reshape(shape_map))
+        self._childs = []
         for group in zip(*new_blocks):
-            retval.append(BlockGroup(list(group)))
-        return retval
+            self._childs.append(BlockGroup(list(group)))
+        return self._childs.copy()
 
     # TODO: work on open branches
     def close_branch(self):
@@ -77,11 +89,16 @@ class BlockGroup:
 
     @staticmethod
     def join_groups(*args):
-        blocks_union = []
         for group in args:
+            assert isinstance(group, BlockGroup), \
+                f'Couldn\'t join args {args}, all elements should be BlockGroup instances'
+
+        retval = BlockGroup([])
+        for group in args:
+            group.add_childs([retval])
             for block in group.get_blocks():
-                blocks_union.append(block)
-        return BlockGroup(blocks_union)
+                retval._blocks.append(block)
+        return retval
 
 
 class MaskProducer:
@@ -100,6 +117,7 @@ class PruningNodeGroup:
         self.producing_nodes = []
         self.adjusted_nodes = []
         self.closing_nodes = []
+        self.block = None
 
 
 def get_pruning_groups(graph: NNCFGraph,
@@ -108,16 +126,20 @@ def get_pruning_groups(graph: NNCFGraph,
     # 1. Initialize masks for producing nodes
     # TODO: clarify that all possibly pruned nodes will be collected here
     all_nodes_to_prune = graph.get_nodes_by_types(prune_operations_types)  # type: List[NNCFNode]
-    roots = []
+    roots = {}
     for node in all_nodes_to_prune:
-        root_block = DimensionBlock(MaskProducer(node.node_id))
-        roots.append(root_block)
+        root_group = BlockGroup([DimensionBlock(MaskProducer(node.node_id))])
+        roots[node.node_id] = root_group
         # TODO: make dimension map common here
-        mask = PropagationMask({1: BlockGroup([root_block])})
+        mask = PropagationMask({1: root_group})
         node.data['output_mask'] = mask
 
     # 2. Propagate masks
     MaskPropagationAlgorithm(graph, pruning_operations_metatypes).mask_propagation()
 
     # 3. Collect groups from producers
-    pass
+    blocks_map = {}
+    for id, group in roots.items():
+        blocks_map[id] = group.get_actual_groups()
+
+    return blocks_map

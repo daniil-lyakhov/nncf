@@ -1,4 +1,5 @@
 from typing import Type, List, Optional
+from collections import defaultdict
 
 from nncf.common.graph.graph import NNCFNode
 from nncf.common.graph.graph import NNCFGraph
@@ -108,9 +109,20 @@ class LinearPruningOp(BasePruningOp):
                          tensor_processor: Type[NNCFPruningBaseTensorProcessor]) -> None:
         input_masks = get_input_masks(node, graph)
         assert len(input_masks) in [1, 2]
-        if len(input_masks) == 1:
-            assert input_masks[0] is None
-        if len(input_masks) == 2:
+        if len(input_masks) == 1 and input_masks[0] is not None:
+            output_mask = node.data['output_mask']
+            # Propagating batch dims
+            input_tensors_shapes = [x.tensor_shape for x in graph.get_input_edges(node)]
+            input_shape_len = len(input_tensors_shapes[0])
+            for dim, block in input_masks[0].dim_block_map.items():
+                if dim ==  input_shape_len - 1:
+                    blocks = block if isinstance(block, list) else [block]
+                    for block in blocks:
+                        block.close_branch()
+                else:
+                    output_mask.dim_block_map[dim] = block
+
+        elif len(input_masks) == 2:
             input_tensors_shapes = [x.tensor_shape for x in graph.get_input_edges(node)]
             assert len(input_tensors_shapes[0]) == len(input_tensors_shapes[1])
             input_shape_len = len(input_tensors_shapes[0])
@@ -245,7 +257,7 @@ class ReshapePruningOp(BasePruningOp):
             accum = dims_to[idx]
             while accum < dim_from:
                 idx += 1
-                accum *= output_shape[idx]
+                accum *= dims_to[idx]
             if accum > dim_from:
                 return (False, idx)
             return (True, idx)
@@ -313,17 +325,21 @@ class ReshapePruningOp(BasePruningOp):
         if mode == 'extend':
             map = mask.dim_block_map
             for dim, group in mask.dim_block_map.items():
+                if isinstance(group, list):
+                    raise NotImplementedError('Extend reshape for several groups is not supported yet')
                 shape_map = [input_shape[dim], [output_shape[x] for x in inp_map[dim]]]
                 new_groups = group.split_blocks_by_reshape(shape_map)
-                for group, in_dim in zip(new_groups, inp_map[dim]):
-                    output_mask.dim_block_map[in_dim] = group
+                for new_group, in_dim in zip(new_groups, inp_map[dim]):
+                    output_mask.dim_block_map[in_dim] = new_group
             return output_mask
 
         if mode == 'shrink':
-            for dim, group in mask.dim_block_map.items():
-                output_mask.dim_block_map[inp_map[dim]] = group
-
-        return output_mask
+            grouping = defaultdict(list)
+            for inp_idx, groups in mask.dim_block_map.items():
+                groups = groups if isinstance(groups, list) else [groups]
+                grouping[inp_map[inp_idx]].extend(groups)
+            output_mask.dim_block_map = dict(grouping)
+            return output_mask
 
 
     @classmethod

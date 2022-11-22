@@ -38,8 +38,7 @@ def test_graph():
     model = SelfAttention()
     _, compression_ctrl = create_compressed_model(model, config)
     pruning_producing_types =  [x.op_func_name for x in NNCF_PRUNING_MODULES_DICT]
-    get_pruning_groups(
-        compression_ctrl .get_graph(),
-        PT_EXPERIMENTAL_PRUNING_OPERATOR_METATYPES,
-        pruning_producing_types)
-    a = 6
+    blocks_map = get_pruning_groups(compression_ctrl .get_graph(),
+                                PT_EXPERIMENTAL_PRUNING_OPERATOR_METATYPES,
+                                pruning_producing_types)
+    print(blocks_map)
