@@ -61,7 +61,9 @@ class PTOperatorMetatype(OperatorMetatype):
 
     @classmethod
     def get_subtypes(cls) -> List[Type['PTOperatorMetatype']]:
-        return cls.subtypes
+        if cls.module_metatype is not None:
+            return [cls.module_metatype]
+        return cls.subtypes.copy()
 
     @classmethod
     def get_all_namespace_to_function_names(cls) -> Dict[NamespaceTarget, List[str]]:
@@ -79,6 +81,11 @@ class PTOperatorMetatype(OperatorMetatype):
         return output
 
     @classmethod
+    def set_module_metatype(cls, module_metatype: 'PTModuleOperatorSubtype'):
+        cls.subtypes = []
+        cls.module_metatype = module_metatype
+
+    @classmethod
     def determine_subtype(cls,
                           layer_attributes: Optional[BaseLayerAttributes] = None,
                           function_args=None,
@@ -94,19 +101,12 @@ class PTOperatorMetatype(OperatorMetatype):
         if not matches:
             return None
 
-        return matches[0]
-
-
-def add_module_metatype(operator_metatype: PTOperatorMetatype):
-    module_subtypes = []
-    prefix = 'PTModule'
-    for subtype in operator_metatype.get_subtypes():
-        module_subtype = type(prefix + subtype.__name__[2:], (subtype,), {})
-        subtype.module_metatype = module_subtype
-        module_subtypes.append(module_subtype)
-    operator_metatype.module_metatype = type(prefix + operator_metatype.__name__[2:], (operator_metatype,),
-                      {'subtypes': module_subtypes})
-    return operator_metatype
+        subtype = matches[0]
+        nested_subtype = subtype.determine_subtype(layer_attributes, function_args,
+                                                   functions_kwargs)
+        if nested_subtype:
+            return nested_subtype
+        return subtype
 
 
 class PTOperatorSubtype(PTOperatorMetatype):
@@ -121,6 +121,39 @@ class PTOperatorSubtype(PTOperatorMetatype):
                 function_args=None,
                 functions_kwargs=None) -> bool:
         raise NotImplementedError
+
+
+class PTModuleOperatorSubtype(PTOperatorSubtype):
+    @classmethod
+    def matches(cls, layer_attributes: Optional[BaseLayerAttributes] = None,
+                function_args=None,
+                functions_kwargs=None) -> bool:
+        key = 'is_called_inside_nncf_module'
+        if functions_kwargs is None or key not in functions_kwargs:
+            return False
+        return functions_kwargs[key]
+
+
+def add_module_metatype(operator_metatype: PTOperatorMetatype):
+    prefix = 'PTModule'
+    module_metatype = type(prefix + operator_metatype.__name__[2:], (PTModuleOperatorSubtype,),
+                           {'hw_config_names': operator_metatype.hw_config_names,
+                            'subtypes': operator_metatype.get_subtypes()})
+    operator_metatype.set_module_metatype(module_metatype)
+    PT_OPERATOR_METATYPES.register()(module_metatype)
+    return operator_metatype
+    module_subtypes = []
+    prefix = 'PTModule'
+    for subtype in operator_metatype.get_subtypes():
+        module_subtype = type(prefix + subtype.__name__[2:], (subtype,), {})
+        #PT_OPERATOR_METATYPES.register()(module_subtype)
+        subtype.module_metatype = module_subtype
+        module_subtypes.append(module_subtype)
+    module_metatype = type(prefix + operator_metatype.__name__[2:], (operator_metatype,),
+                           {'subtypes': module_subtypes})
+    #PT_OPERATOR_METATYPES.register()(module_metatype)
+    operator_metatype.module_metatype = module_metatype
+    return operator_metatype
 
 
 @PT_OPERATOR_METATYPES.register()
@@ -813,13 +846,16 @@ def get_operator_metatypes() -> List[Type[OperatorMetatype]]:
 OPERATORS_WITH_WEIGHTS_METATYPES = [
     add_module_metatype(
         PT_OPERATOR_METATYPES.get_operator_metatype_by_op_name(
-            module.op_func_name)).module_metatype
-    for module in NNCF_MODULES_DICT
+            op_func_name)).module_metatype
+    for op_func_name in {module.op_func_name for module in NNCF_MODULES_DICT}
 ]
 
 OPERATORS_WITH_WEIGHTS_METATYPES.extend([
     subtype for metatype in OPERATORS_WITH_WEIGHTS_METATYPES
     for subtype in metatype.get_subtypes()
 ])
+
+#for operator in OPERATORS_WITH_WEIGHTS_METATYPES:
+#    PT_OPERATOR_METATYPES.register()(operator)
 
 OPERATORS_WITH_WEIGHTS_METATYPES = list(set(OPERATORS_WITH_WEIGHTS_METATYPES))

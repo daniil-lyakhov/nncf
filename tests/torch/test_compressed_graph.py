@@ -662,9 +662,9 @@ SYNTHETIC_MODEL_DESC_LIST = [
     TensorUnaryMethodsDesc(tensor_method='chunk', chunks=1),
     TensorUnaryMethodsDesc(tensor_method='expand', size=(1,)),
 
-    TorchBinaryMethodDesc(model_name='embedding_function', torch_method=F.embedding,
+    TorchBinaryMethodDesc(model_name='embedding_function', torch_method=F.embedding,#
                           input_info=[{"sample_size": [1], "type": "long"}, {"sample_size": [2, 1]}]),
-    SingleLayerModelDesc(model_name='embedding_bag', layer=F.embedding_bag,
+    SingleLayerModelDesc(model_name='embedding_bag', layer=F.embedding_bag,#
                          wrap_inputs_fn=partial(n_inputs_fn, nargs=3),
                          input_info=[{"sample_size": [1], "type": "long", "filler": "zeros"},
                                      {"sample_size": [1, 1]},
@@ -718,6 +718,7 @@ def test_synthetic_model_quantization(synthetic_model_desc: IModelDesc):
     register_bn_adaptation_init_args(config)
 
     model = synthetic_model_desc.get_model()
+    breakpoint()
     compressed_model, _ = create_compressed_model_and_algo_for_test(
         model, config, wrap_inputs_fn=synthetic_model_desc.get_wrap_inputs_fn())
 

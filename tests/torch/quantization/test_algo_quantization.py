@@ -34,15 +34,19 @@ from nncf.common.quantization.structs import WeightQuantizerId
 from nncf.common.utils.debug import nncf_debug
 from nncf.torch import create_compressed_model
 from nncf.torch import register_default_init_args
+from nncf.torch import register_module
 from nncf.torch.checkpoint_loading import load_state
 from nncf.torch.compression_method_api import PTCompressionLoss
+from nncf.torch.dynamic_graph.graph_tracer import ModelInputInfo
 from nncf.torch.dynamic_graph.scope import Scope
 from nncf.torch.dynamic_graph.scope import ScopeElement
 from nncf.torch.layers import NNCFConv2d
 from nncf.torch.model_creation import create_compression_algorithm_builder
 from nncf.torch.module_operations import UpdateInputs
 from nncf.torch.module_operations import UpdateWeight
+from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.nncf_network import ExtraCompressionModuleType
+from nncf.torch.quantization.algo import QUANTIZATION_LAYER_METATYPES
 from nncf.torch.quantization.algo import QuantizationBuilder
 from nncf.torch.quantization.algo import QuantizationController
 from nncf.torch.quantization.layers import AsymmetricQuantizer
@@ -53,6 +57,7 @@ from nncf.torch.quantization.layers import SymmetricQuantizer
 from nncf.torch.utils import get_all_modules_by_type
 from nncf.torch.utils import get_model_device
 from tests.torch.helpers import BasicConvTestModel
+from tests.torch.helpers import TwoConvTestModel
 from tests.torch.helpers import LeNet
 from tests.torch.helpers import TwoConvTestModel
 from tests.torch.helpers import create_compressed_model_and_algo_for_test
@@ -850,3 +855,42 @@ def test_activation_ignored_scope(update_config_info, should_ignore_quantizers):
     ctrl, _ = create_compressed_model(model, config)
     assert Counter([item.target_node_name for item in ctrl.all_quantizations.keys()]) == \
            Counter(ref_quantization_names)
+
+
+
+@register_module()
+class ModuleOfUser(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.ones([1]))
+        self.conv = torch.nn.Conv2d(1, 2, 1)
+        self.conv_depthwise = torch.nn.Conv2d(2,2,1,groups=2)
+
+    def forward(self, input_):
+        x = input_ * self.weight
+        x += torch.rand_like(x)
+        F.conv2d(x, self.conv.weight)
+        F.conv2d(x, self.conv_depthwise.weight)
+        shape = x.shape
+        return x.view(-1).view(shape)
+
+
+class TwoConvTestModelWithUserModule(TwoConvTestModel):
+    def __init__(self):
+        super().__init__()
+        self.user_module = ModuleOfUser()
+
+    def forward(self, x):
+        x = super().forward(x)
+        x = self.user_module(x)
+        return x
+
+
+def test_weighted_wrapped_nncf_modules():
+    model = TwoConvTestModelWithUserModule()
+    nncf_model = NNCFNetwork(model, input_infos=[ModelInputInfo([1, 1, 4, 4])])  # type: NNCFNetwork
+
+    weighted_nodes = nncf_model.get_weighted_original_graph_nodes()
+    weighted_nodes_by_metatypes =\
+        nncf_model.get_original_graph().get_nodes_by_metatypes(QUANTIZATION_LAYER_METATYPES)
+    pass

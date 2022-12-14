@@ -26,6 +26,7 @@ from nncf.common.graph.layer_attributes import MultipleInputLayerAttributes
 from nncf.common.graph.layer_attributes import MultipleOutputLayerAttributes
 from nncf.common.graph.layer_attributes import ReshapeLayerAttributes
 from nncf.torch import nncf_model_input
+from nncf.torch import register_module
 from nncf.torch.dynamic_graph.context import TracingContext
 from nncf.torch.dynamic_graph.context import get_current_context
 from nncf.torch.dynamic_graph.context import no_nncf_trace
@@ -40,6 +41,7 @@ from nncf.torch.graph.operator_metatypes import PTReshapeMetatype
 from nncf.torch.graph.operator_metatypes import PTSplitMetatype
 from tests.torch.helpers import create_compressed_model_and_algo_for_test
 from tests.torch.helpers import register_bn_adaptation_init_args
+from tests.torch.helpers import TwoConvTestModel
 from tests.torch.test_compressed_graph import get_basic_quantization_config
 from tests.torch.test_get_modules_by_type import ModelForNameTest
 
@@ -203,6 +205,15 @@ def test_activation_shape_tracing(input_shape: Tuple):
         output_tensor_shapes = [x.tensor_shape for x in output_edges]
         assert input_tensor_shapes == ref_input_shapes, "Failed for node ID: {}".format(node_id)
         assert output_tensor_shapes == ref_output_shapes, "Failed for node ID: {}".format(node_id)
+
+
+
+def test_user_submodule_metatype():
+    pass
+
+
+def test_embeddings_metatypes():
+    pass
 
 
 class ModelForTestWithReshapeFlattenAndConcat(ModelForTest):
