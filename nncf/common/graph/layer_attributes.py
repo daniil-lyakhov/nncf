@@ -204,3 +204,36 @@ class ReshapeLayerAttributes(BaseLayerAttributes):
                  output_shape: List[int]):
         self.input_shape = input_shape
         self.output_shape = output_shape
+
+
+class TransposeLayerAttributes(BaseLayerAttributes):
+    """
+    This class stores attributes of transpose modules/layers
+    that are useful for some algorithms.
+    """
+    def __init__(self,
+                 dim0: int,
+                 dim1: int):
+        self.dim0 = dim0
+        self.dim1 = dim1
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, TransposeLayerAttributes) \
+               and super().__eq__(other) \
+               and self.dim0 == other.dim0 \
+               and self.dim1 == other.dim1
+
+class PermuteLayerAttributes(BaseLayerAttributes):
+    """
+    This class stores attributes of permute modules/layers
+    that are useful for some algorithms.
+    """
+    def __init__(self,
+                 permutation: List[int]):
+        self.permutation = permutation
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, PermuteLayerAttributes) \
+               and super().__eq__(other) \
+               and len(self.permutation) == len(other.permutation) \
+               and (l == r for l, r in zip(self.permutation, other.permutation))
