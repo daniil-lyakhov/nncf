@@ -49,6 +49,10 @@ def test_range_type_per_tensor(range_type, original_model):
     for _, stat_point in stat_points.items():
         for stat_point_ in stat_point:
             for tensor_collector in stat_point_.algorithm_to_tensor_collectors[MinMaxQuantization]:
+                if stat_point_.target_point.is_weight_target_point():
+                    # default tensor_collector for weights
+                    assert isinstance(tensor_collector, ONNXMinMaxStatisticCollector)
+                    continue
                 if range_type is None:
                     # default tensor_collector for per-tensor
                     assert isinstance(tensor_collector, ONNXMeanMinMaxStatisticCollector)

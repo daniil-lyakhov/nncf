@@ -12,7 +12,7 @@
 """
 
 from copy import deepcopy
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import numpy as np
 import onnx
 
@@ -38,7 +38,6 @@ from nncf.onnx.hardware.config import ONNXHWConfig
 from nncf.onnx.hardware.fused_patterns import ONNX_HW_FUSED_PATTERNS
 from nncf.onnx.quantization.default_quantization import DEFAULT_ONNX_QUANT_TRAIT_TO_OP_DICT
 from nncf.onnx.quantization.quantizer_parameters import calculate_activation_quantizer_parameters
-from nncf.onnx.quantization.quantizer_parameters import calculate_weight_quantizer_parameters
 from nncf.onnx.statistics.collectors import ONNXMeanMinMaxStatisticCollector
 from nncf.onnx.statistics.collectors import ONNXMinMaxStatisticCollector
 from nncf.onnx.graph.onnx_graph import ONNXGraph
@@ -126,7 +125,7 @@ class ONNXMinMaxAlgoBackend(MinMaxAlgoBackend):
     @staticmethod
     def _get_axis(nncf_graph: NNCFGraph,
                   target_point: ONNXTargetPoint,
-                  quantizer_config: QuantizerConfig):
+                  quantizer_config: QuantizerConfig) -> Optional[int]:
         if not quantizer_config.per_channel:
             return None
         if target_point.is_activation_target_point():
@@ -143,8 +142,6 @@ class ONNXMinMaxAlgoBackend(MinMaxAlgoBackend):
         if not quantizer_config.per_channel:
             return None, use_abs_max
 
-        axis = ONNXMinMaxAlgoBackend._get_axis(nncf_graph, target_point,
-                                               quantizer_config)
         if target_point.is_activation_target_point():
             return (0, 2, 3), use_abs_max
 
@@ -152,6 +149,9 @@ class ONNXMinMaxAlgoBackend(MinMaxAlgoBackend):
         assert isinstance(node.layer_attributes, ONNXWeightedNodesLayerAttributes)
         weight_shape = node.layer_attributes.weight_shape
         reduction_shape = list(range(len(weight_shape)))
+
+        axis = ONNXMinMaxAlgoBackend._get_axis(nncf_graph, target_point,
+                                               quantizer_config)
         reduction_shape.pop(axis)
         return tuple(reduction_shape), use_abs_max
 
