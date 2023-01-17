@@ -57,6 +57,10 @@ def quantize_impl(model: onnx.ModelProto,
         fast_bias_correction=fast_bias_correction
     )
 
+    from nncf.quantization.algorithms.min_max.algorithm import MinMaxQuantization
+    min_max_params = quantization_parameters.algorithms[MinMaxQuantization]
+    quantization_parameters.algorithms = {MinMaxQuantization: min_max_params}
+
     quantization_algorithm = PostTrainingQuantization(quantization_parameters)
     quantized_model = quantization_algorithm.apply(model, dataset=calibration_dataset)
 
