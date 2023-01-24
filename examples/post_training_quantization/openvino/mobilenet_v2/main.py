@@ -118,9 +118,10 @@ To validate the transform function use the following code:
 >> for data_item in val_loader:
 >>    model(transform_fn(data_item))
 '''
+input_name = model.inputs[0].names.pop()
 def transform_fn(data_item):
     images, _ = data_item
-    return images
+    return {input_name: images}
 
 '''
 The calibration dataset is a small, no label, representative dataset

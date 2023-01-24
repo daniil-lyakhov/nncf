@@ -97,6 +97,10 @@ def _create_ignored_scope_config(ignored_scope: Optional[IgnoredScope]) -> Dict:
     return ignored
 
 
+from nncf.common.quantization.structs import QuantizationPreset
+from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
+from nncf.quantization.algorithms.post_training.algorithm  import PostTrainingQuantizationParameters
+from nncf.telemetry import tracked_function
 @tracked_function(NNCF_OV_CATEGORY, [CompressionStartedWithQuantizeApi(), "target_device", "preset"])
 def quantize_impl(model: ov.Model,
                   calibration_dataset: Dataset,
@@ -109,6 +113,23 @@ def quantize_impl(model: ov.Model,
     """
     Implementation of the `quantize()` method for the OpenVINO backend.
     """
+    quantization_parameters = PostTrainingQuantizationParameters(
+        preset=preset,
+        target_device=target_device,
+        number_samples=subset_size,
+        #ignored_scopes=convert_ignored_scope_to_list(ignored_scope),
+        fast_bias_correction=fast_bias_correction
+    )
+
+    from nncf.quantization.algorithms.min_max.algorithm import MinMaxQuantization
+    min_max_params = quantization_parameters.algorithms[MinMaxQuantization]
+    quantization_parameters.algorithms = {MinMaxQuantization: min_max_params}
+
+    quantization_algorithm = PostTrainingQuantization(quantization_parameters)
+    quantized_model = quantization_algorithm.apply(model, dataset=calibration_dataset)
+
+    return quantized_model
+
     pot.utils.logger.init_logger(
         level=logging.getLevelName(nncf_logger.getEffectiveLevel())
     )

@@ -210,14 +210,7 @@ def calculate_weight_quantizer_parameters(weight_tensor: np.ndarray, quantizer_c
     min_values = np.amin(weight_tensor, axis=axes, keepdims=True)
     max_values = np.amax(weight_tensor, axis=axes, keepdims=True)
 
-    levels = compute_levels(quantizer_config, is_weights=True)
-    if quantizer_config.mode == QuantizationMode.SYMMETRIC:
-        level_low, level_high = symmetric_range(min_values, max_values, levels, quantizer_config, is_weights=True)
-    else:
-        level_low, level_high = asymmetric_range(min_values, max_values, quantizer_config)
-
-    output_low, output_high = level_low, level_high
-    return OVQuantizerLayerParameters(level_low, level_high, output_low, output_high, levels)
+    return calculate_quantizer_parameters(min_values, max_values, quantizer_config, True)
 
 
 def calculate_activation_quantizer_parameters(statistics: MinMaxTensorStatistic,
@@ -229,12 +222,17 @@ def calculate_activation_quantizer_parameters(statistics: MinMaxTensorStatistic,
     :param quantizer_config: Config of the quantization configuration.
     :return: Parameters of the FakeQuantize layer.
     """
-    levels = compute_levels(quantizer_config, is_weights=False)
     min_values = np.array(statistics.min_values)
     max_values = np.array(statistics.max_values)
+    return calculate_quantizer_parameters(min_values, max_values, quantizer_config, False)
 
+
+def calculate_quantizer_parameters(min_values: np.array, max_values: np.array,
+                                   quantizer_config: QuantizerConfig, is_weights: bool):
+    levels = compute_levels(quantizer_config, is_weights=is_weights)
     if quantizer_config.mode == QuantizationMode.SYMMETRIC:
-        level_low, level_high = symmetric_range(min_values, max_values, levels, quantizer_config, is_weights=False)
+        level_low, level_high = symmetric_range(min_values, max_values, levels,
+                                                quantizer_config, is_weights=is_weights)
     else:
         level_low, level_high = asymmetric_range(min_values, max_values, quantizer_config)
 
