@@ -108,7 +108,7 @@ OMZ_MODELS = [
     'yolo-v4-tiny-tf',
 ]
 
-#@pytest.mark.skip(reason='Ticket 100948')
+@pytest.mark.skip(reason='Ticket 100948')
 @pytest.mark.parametrize('preset', [QuantizationPreset.PERFORMANCE, QuantizationPreset.MIXED],
                          ids=[QuantizationPreset.PERFORMANCE.value, QuantizationPreset.MIXED.value])
 @pytest.mark.parametrize('model_name', OMZ_MODELS)

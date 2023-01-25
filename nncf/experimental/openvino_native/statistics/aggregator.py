@@ -56,7 +56,6 @@ class OVStatisticsAggregator(StatisticsAggregator):
             node = node.input_value(0).get_node()
         weight_tensor = node.get_vector().reshape(node.get_output_shape(0))
         statistic_point.register_tensor(OVNNCFTensor(weight_tensor))
-        #raise RuntimeError(f'Weight target point with name {target_name} is not found.')
 
 
     def _register_statistics(self,
