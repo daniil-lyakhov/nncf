@@ -18,7 +18,7 @@ def get_validation_scope() -> List[dict]:
     model_scope.append({"name": "efficientnet_b0", "quantization_params": {"preset":QuantizationPreset.MIXED}})
     model_scope.append({"name": "efficientnet_b0", "quantization_params": {"preset":QuantizationPreset.MIXED, "fast_bias_correction": False}})
     model_scope.append({"name": "darknet53", "quantization_params": {"preset":QuantizationPreset.MIXED}})
-    # ResNets   
+    # ResNets
     model_scope.append({"name": "seresnet18", "quantization_params": {"preset":QuantizationPreset.MIXED}})
     model_scope.append({"name": "resnest14d", "quantization_params": {"preset":QuantizationPreset.MIXED}})
     model_scope.append({"name": "inception_resnet_v2", "quantization_params": {}})
@@ -43,5 +43,5 @@ def get_validation_scope() -> List[dict]:
     model_scope.append({"name": "ghostnet_050", "quantization_params": {"preset":QuantizationPreset.MIXED}}) 
     model_scope.append({"name": "dpn68", "quantization_params": {"preset":QuantizationPreset.MIXED}})
     model_scope.append({"name": "dla34", "quantization_params": {"preset":QuantizationPreset.MIXED}})
-    
+
     return model_scope
