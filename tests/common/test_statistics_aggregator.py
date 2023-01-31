@@ -37,7 +37,7 @@ from tests.onnx.quantization.common import get_dataset_for_test
 
 class TemplateTestStatisticsAggregator:
     @abstractmethod
-    def get_algo_backend(self) -> MinMaxAlgoBackend:
+    def get_algo_backend_cls(self) -> MinMaxAlgoBackend:
         pass
 
     @abstractmethod
@@ -110,7 +110,7 @@ class TemplateTestStatisticsAggregator:
                                               QuantizationMode.ASYMMETRIC, True, np.array((1, 0.1, 128)), np.array((-10, -1, -128)))),
                              ))
     def test_statistics_aggregator(self, test_parameters, dataset_samples):
-        algo_backend = self.get_algo_backend()
+        algo_backend = self.get_algo_backend_cls()
         model = self.get_backend_model(dataset_samples)
         nncf_graph = NNCFGraphFactory.create(model)
 
@@ -147,5 +147,7 @@ class TemplateTestStatisticsAggregator:
                 filter_func,
                 algorithm_name):
             stat = tensor_collector.get_statistics()
-            assert np.allclose(stat.max_values, test_parameters.ref_max_val)
-            assert np.allclose(stat.min_values, test_parameters.ref_min_val)
+            # Torch backend tensor collector returns values in shape of scale
+            # in comparison with ONNX/Openvino backends. To unify this reshape was added
+            assert np.allclose(stat.max_values.reshape(-1), test_parameters.ref_max_val)
+            assert np.allclose(stat.min_values.reshape(-1), test_parameters.ref_min_val)

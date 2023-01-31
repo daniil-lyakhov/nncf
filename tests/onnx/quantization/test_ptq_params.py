@@ -14,10 +14,11 @@
 import pytest
 
 from nncf.parameters import TargetDevice
-from nncf.onnx.statistics.collectors import ONNXMeanMinMaxStatisticCollector
-from nncf.onnx.statistics.collectors import ONNXMinMaxStatisticCollector
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantizationParameters
+from nncf.onnx.statistics.collectors import ONNXMeanMinMaxStatisticCollector
+from nncf.onnx.statistics.collectors import ONNXMinMaxStatisticCollector
+from nncf.onnx.graph.metatypes.onnx_metatypes import ONNXConvolutionMetatype
 from nncf.quantization.algorithms.min_max.onnx_backend import \
     ONNXMinMaxAlgoBackend
 
@@ -63,16 +64,19 @@ class TestPTQParams(TemplateTestPTQParams):
             assert act_num_q == 1
         assert weight_num_q == 1
 
-    @pytest.fixture
-    def model_dict(self):
-        return {self.test_range_type_per_tensor:
-            LinearModel().onnx_model,
-        self.test_range_type_per_channel:
-            OneDepthwiseConvolutionalModel().onnx_model,
-        self.test_quantize_outputs:
-            NNCFGraphToTest().nncf_graph,
-        self.test_ignored_scopes:
-            NNCFGraphToTest().nncf_graph,
+    @pytest.fixture(scope='session')
+    def test_params(self):
+        return {
+        'test_range_type_per_tensor':
+            {'model': LinearModel().onnx_model,
+             'stat_points_num': 5},
+        'test_range_type_per_channel':
+            {'model': OneDepthwiseConvolutionalModel().onnx_model,
+             'stat_points_num': 2},
+        'test_quantize_outputs':
+            {'nncf_graph': NNCFGraphToTest(ONNXConvolutionMetatype).nncf_graph},
+        'test_ignored_scopes':
+            {'nncf_graph': NNCFGraphToTest(ONNXConvolutionMetatype).nncf_graph},
         }
 
     @pytest.fixture(params=[[], ['/Conv_1_0']])

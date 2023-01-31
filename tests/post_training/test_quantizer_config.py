@@ -17,6 +17,8 @@ from abc import abstractmethod
 from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.quantization.structs import QuantizerGroup
 from nncf.common.quantization.structs import QuantizerConfig
+from nncf.common.graph import NNCFGraph
+from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.quantization.structs import QuantizationMode
 from nncf.quantization.algorithms.definitions import RangeType
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
@@ -41,21 +43,29 @@ class TemplateTestQuantizerConfig:
         pass
 
     @abstractmethod
-    @pytest.fixture
-    def conv_layer_attrs(self):
+    def get_target_point(self, target_type: TargetType,
+                         target_node_name):
         pass
 
     @abstractmethod
     @pytest.fixture
-    def target_point(self, request):
+    def single_conv_nncf_graph(self) -> NNCFGraphToTest:
         pass
 
-    @pytest.mark.parametrize('nncf_graph', [NNCFGraphToTest()])
-    def test_default_quantizer_config(self, nncf_graph):
+    @abstractmethod
+    @pytest.fixture
+    def depthwise_conv_nncf_graph(self) -> NNCFGraphToTestDepthwiseConv:
+        pass
+
+    @pytest.fixture
+    def target_node_name(self):
+        return '/Conv_1_0'
+
+    def test_default_quantizer_config(self, single_conv_nncf_graph):
         algo = PostTrainingQuantization(PostTrainingQuantizationParameters())
         min_max_algo = algo.algorithms[0]
         min_max_algo._backend_entity = self.get_algo_backend()
-        q_setup = min_max_algo._get_quantizer_setup(nncf_graph.nncf_graph)
+        q_setup = min_max_algo._get_quantizer_setup(single_conv_nncf_graph.nncf_graph)
 
         weight_default_config = QuantizerConfig(mode=QuantizationMode.SYMMETRIC,
                                                 num_bits=8,
@@ -65,6 +75,8 @@ class TemplateTestQuantizerConfig:
                                                     num_bits=8,
                                                     signedness_to_force=None,
                                                     per_channel=False)
+
+        assert len(q_setup.quantization_points) == 2
 
         for quantization_point in q_setup.quantization_points.values():
             if quantization_point.is_weight_quantization_point():
@@ -80,10 +92,9 @@ class TemplateTestQuantizerConfig:
     @pytest.mark.parametrize('activation_bits', [8])
     @pytest.mark.parametrize('signed_weights', [None])
     @pytest.mark.parametrize('signed_activations', [None])
-    @pytest.mark.parametrize('nncf_graph', [NNCFGraphToTest()])
     # TODO(kshpv): add signed_activations and signed_weights which should be independent from HW config.
     def test_quantizer_config_from_ptq_params(self, weight_granularity, activation_granularity, preset, weight_bits,
-                                              activation_bits, signed_weights, signed_activations, nncf_graph):
+                                              activation_bits, signed_weights, signed_activations, single_conv_nncf_graph):
         algo = PostTrainingQuantization(
             PostTrainingQuantizationParameters(preset=preset,
                                                weight_bits=weight_bits,
@@ -95,10 +106,13 @@ class TemplateTestQuantizerConfig:
                                                ))
         min_max_algo = algo.algorithms[0]
         min_max_algo._backend_entity = self.get_algo_backend()
-        q_setup = min_max_algo._get_quantizer_setup(nncf_graph.nncf_graph)
+        q_setup = min_max_algo._get_quantizer_setup(single_conv_nncf_graph.nncf_graph)
         q_g_to_quantization_mode = {}
         for q_g in QuantizerGroup:
             q_g_to_quantization_mode[q_g] = preset.get_params_configured_by_preset(q_g)['mode']
+
+        assert len(q_setup.quantization_points) == 2
+
         for quantization_point in q_setup.quantization_points.values():
             if quantization_point.is_weight_quantization_point():
                 assert quantization_point.qconfig.mode == q_g_to_quantization_mode[QuantizerGroup.WEIGHTS]
@@ -114,12 +128,11 @@ class TemplateTestQuantizerConfig:
                     assert quantization_point.qconfig.signedness_to_force == signed_activations
 
 
-    @pytest.mark.parametrize('nncf_graph', [NNCFGraphToTestDepthwiseConv()])
-    def test_depthwise_conv_default_quantizer_config(self, nncf_graph):
+    def test_depthwise_conv_default_quantizer_config(self, depthwise_conv_nncf_graph):
         algo = PostTrainingQuantization(PostTrainingQuantizationParameters())
         min_max_algo = algo.algorithms[0]
         min_max_algo._backend_entity = self.get_algo_backend()
-        q_setup = min_max_algo._get_quantizer_setup(nncf_graph.nncf_graph)
+        q_setup = min_max_algo._get_quantizer_setup(depthwise_conv_nncf_graph.nncf_graph)
 
         weight_default_config = QuantizerConfig(mode=QuantizationMode.SYMMETRIC,
                                                 num_bits=8,
@@ -130,6 +143,8 @@ class TemplateTestQuantizerConfig:
                                                     signedness_to_force=None,
                                                     per_channel=True)
 
+        assert len(q_setup.quantization_points) == 2
+
         for quantization_point in q_setup.quantization_points.values():
             if quantization_point.is_weight_quantization_point():
                 assert quantization_point.qconfig == weight_default_config
@@ -139,16 +154,18 @@ class TemplateTestQuantizerConfig:
     @pytest.mark.parametrize('range_type', [RangeType.MINMAX, RangeType.MEAN_MINMAX])
     @pytest.mark.parametrize('q_config_mode', [QuantizationMode.SYMMETRIC, QuantizationMode.ASYMMETRIC])
     @pytest.mark.parametrize('q_config_per_channel', [True, False])
-    def test_get_stat_collector(self, conv_layer_attrs, target_point, range_type,
-                                q_config_mode, q_config_per_channel):
+    @pytest.mark.parametrize('target_type',[TargetType.POST_LAYER_OPERATION, TargetType.OPERATION_WITH_WEIGHTS])
+    def test_get_stat_collector(self, target_type, target_node_name, range_type,
+                                q_config_mode, q_config_per_channel, single_conv_nncf_graph):
         algo = PostTrainingQuantization(PostTrainingQuantizationParameters(range_type=range_type))
         min_max_algo = algo.algorithms[0]
         min_max_algo._backend_entity = self.get_algo_backend()
         q_config = QuantizerConfig(num_bits=8,
                                    mode=q_config_mode,
                                    per_channel=q_config_per_channel)
-        nncf_graph = NNCFGraphToTest(conv_layer_attrs=conv_layer_attrs)
-        tensor_collector = min_max_algo._get_stat_collector(nncf_graph.nncf_graph,
+
+        target_point = self.get_target_point(target_type, target_node_name)
+        tensor_collector = min_max_algo._get_stat_collector(single_conv_nncf_graph.nncf_graph,
                                                             target_point, q_config)
 
         is_weight_tp = target_point.is_weight_target_point()
@@ -166,7 +183,10 @@ class TemplateTestQuantizerConfig:
             ref_reduction_shape = (1, 2, 3) if is_weight_tp else (0, 2, 3)
             assert tensor_collector._reduction_shape == ref_reduction_shape
         else:
-            assert tensor_collector._reduction_shape is None
+            # Torch backend doesn't use None as reduction shape.
+            # It enumerates all dims instead
+            assert tensor_collector._reduction_shape is None or\
+                tensor_collector._reduction_shape == (0, 1, 2, 3)
 
         # use_abs_max check
         if q_config_mode == QuantizationMode.SYMMETRIC:

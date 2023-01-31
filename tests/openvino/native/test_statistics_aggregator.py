@@ -67,7 +67,7 @@ def get_StatisticAgregatorTestModel(input_shape, kernel):
 
 
 class TestStatisticsAggregator(TemplateTestStatisticsAggregator):
-    def get_algo_backend(self) -> OVMinMaxAlgoBackend:
+    def get_algo_backend_cls(self) -> OVMinMaxAlgoBackend:
         return OVMinMaxAlgoBackend
 
     def get_backend_model(self, dataset_samples):

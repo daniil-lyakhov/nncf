@@ -75,9 +75,9 @@ def mark_input_ports_lexicographically_based_on_input_node_key(graph: nx.DiGraph
             graph.edges[edge][NNCFGraph.INPUT_PORT_ID_EDGE_ATTR] = idx
 
 
-def get_nncf_graph_from_mock_nx_graph(nx_graph: nx.DiGraph) -> NNCFGraph:
+def get_nncf_graph_from_mock_nx_graph(nx_graph: nx.DiGraph, nncf_graph_cls = NNCFGraph) -> NNCFGraph:
     # pylint:disable=too-many-branches
-    mock_graph = NNCFGraph()
+    mock_graph = nncf_graph_cls()
     key_vs_id = {}
     edge_vs_output_idx_and_creator_id = {}  # type: Dict[Tuple[str, str], Tuple[int, int]]
     from networkx.algorithms.dag import lexicographical_topological_sort

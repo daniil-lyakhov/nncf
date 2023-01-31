@@ -34,7 +34,6 @@ class NNCFGraphFactory:
         model_backend = get_backend(model)
         if model_backend == BackendType.ONNX:
             from nncf.onnx.graph.nncf_graph_builder import GraphConverter
-
             return GraphConverter.create_nncf_graph(model)
         if model_backend == BackendType.OPENVINO:
             from nncf.experimental.openvino_native.graph.nncf_graph_builder import GraphConverter

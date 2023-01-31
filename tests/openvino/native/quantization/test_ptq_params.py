@@ -24,7 +24,6 @@ from nncf.experimental.openvino_native.statistics.collectors import OVMinMaxStat
 
 from tests.openvino.native.models import LinearModel
 from tests.post_training.test_ptq_params import TemplateTestPTQParams
-from tests.post_training.models import NNCFGraphToTest
 
 
 # pylint: disable=protected-access
@@ -62,16 +61,18 @@ class TestPTQParams(TemplateTestPTQParams):
             assert act_num_q == 1
         assert weight_num_q == 1
 
-    @pytest.fixture
-    def model_dict(self):
-        return {self.test_range_type_per_tensor:
-            LinearModel().ov_model,
-        self.test_range_type_per_channel:
+    @pytest.fixture(scope='session')
+    def test_params(self):
+        return {
+        'test_range_type_per_tensor':
+            {'model': LinearModel().ov_model,
+             'stat_points_num': 2},
+        'test_range_type_per_channel':
             None,
-        self.test_quantize_outputs:
-            GraphConverter.create_nncf_graph(LinearModel().ov_model),
-        self.test_ignored_scopes:
-            GraphConverter.create_nncf_graph(LinearModel().ov_model)
+        'test_quantize_outputs':
+            {'nncf_graph': GraphConverter.create_nncf_graph(LinearModel().ov_model)},
+        'test_ignored_scopes':
+            {'nncf_graph': GraphConverter.create_nncf_graph(LinearModel().ov_model)}
         }
 
     @pytest.fixture(params=[[], ['MatMul'], ['Add'],

@@ -2,8 +2,6 @@
 from nncf.common.graph import NNCFGraph
 from nncf.common.graph.operator_metatypes import OutputNoopMetatype
 from nncf.common.graph.operator_metatypes import InputNoopMetatype
-from nncf.onnx.graph.metatypes.onnx_metatypes import ONNXConvolutionMetatype
-from nncf.onnx.graph.metatypes.onnx_metatypes import ONNXDepthwiseConvolutionMetatype
 
 from tests.common.quantization.test_filter_constant_nodes import create_mock_graph
 from tests.common.quantization.test_filter_constant_nodes import get_nncf_graph_from_mock_nx_graph
@@ -12,7 +10,8 @@ from tests.common.quantization.mock_graphs import NodeWithType
 
 # pylint: disable=protected-access
 class NNCFGraphToTest:
-    def __init__(self, conv_layer_attrs = None,
+    def __init__(self, conv_metatype,
+                 conv_layer_attrs = None,
                  nncf_graph_cls = NNCFGraph):
         #       Original graph
         #          Input_1
@@ -21,7 +20,7 @@ class NNCFGraphToTest:
         #             |
         #           Output_1
         nodes = [NodeWithType('Input_1', InputNoopMetatype),
-                 NodeWithType('Conv_1', ONNXConvolutionMetatype,
+                 NodeWithType('Conv_1', conv_metatype,
                               conv_layer_attrs),
                  NodeWithType('Output_1', OutputNoopMetatype),
                  ]
@@ -31,7 +30,7 @@ class NNCFGraphToTest:
 
 
 class NNCFGraphToTestDepthwiseConv:
-    def __init__(self):
+    def __init__(self, depthwise_conv_metatype):
         #       Original graph
         #          Input_1
         #             |
@@ -39,7 +38,7 @@ class NNCFGraphToTestDepthwiseConv:
         #             |
         #           Output_1
         nodes = [NodeWithType('Input_1', InputNoopMetatype),
-                 NodeWithType('Conv_1', ONNXDepthwiseConvolutionMetatype),
+                 NodeWithType('Conv_1', depthwise_conv_metatype),
                  NodeWithType('Output_1', OutputNoopMetatype),
                  ]
         node_edges = [('Input_1', 'Conv_1'), ('Conv_1', 'Output_1')]
