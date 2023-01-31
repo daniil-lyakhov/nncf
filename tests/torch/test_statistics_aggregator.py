@@ -20,7 +20,6 @@ from torch import nn
 from nncf import Dataset
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.quantization.algorithms.min_max.torch_backend import PTMinMaxAlgoBackend
-from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.statistics.aggregator import PTStatisticsAggregator
 
 from tests.common.test_statistics_aggregator import TemplateTestStatisticsAggregator
@@ -29,7 +28,6 @@ from tests.torch.ptq.test_ptq_params import ToNNCFNetworkInterface
 
 
 
-INPUT_NAME = 'X'
 IDENTITY_NODE_NAME = 'PTIdentityConvModel/__add___0'
 CONV_NODE_NAME = 'PTIdentityConvModel/NNCFConv2d[conv]/conv2d_0'
 INPUT_SHAPE = [1, 3, 3, 3]

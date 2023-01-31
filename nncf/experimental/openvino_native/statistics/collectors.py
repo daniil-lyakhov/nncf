@@ -76,14 +76,8 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
     def sum(tensor: NNCFTensor) -> TensorElementsType:
         return np.sum(tensor.tensor)
 
-from nncf.common.tensor_statistics.collectors import ReductionShape
+
 class OVMinMaxStatisticCollector(MinMaxStatisticCollector):
-
-    def __init__(self, use_abs_max: bool,
-                 reduction_shape: ReductionShape,
-                 num_samples: int = None):
-        super().__init__(use_abs_max, reduction_shape, num_samples)
-
     @staticmethod
     def _get_processor() -> NNCFCollectorTensorProcessor:
         return OVNNCFCollectorTensorProcessor()

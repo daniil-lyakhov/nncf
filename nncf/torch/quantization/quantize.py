@@ -224,7 +224,10 @@ def quantize_impl(model: torch.nn.Module,
     # Keep only MinMaxQuantization
 
     #params = PostTrainingQuantizationParameters(number_samples=1)
-    params = PostTrainingQuantizationParameters()
+    params = PostTrainingQuantizationParameters(number_samples=subset_size,
+                                                preset=preset,
+                                                target_device=target_device,
+                                                ignored_scopes=ignored_scope)
     min_max_params = params.algorithms[MinMaxQuantization]
     params.algorithms = {MinMaxQuantization: min_max_params}
     nncf_network = create_nncf_network(

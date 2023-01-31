@@ -14,7 +14,7 @@
 import pytest
 import numpy as np
 from abc import abstractmethod
-from typing import Optional, Tuple, Union
+from typing import Union
 from dataclasses import dataclass
 
 from nncf.common.factory import NNCFGraphFactory
@@ -24,15 +24,8 @@ from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.quantization.structs import QuantizationMode
 from nncf.common.tensor_statistics.statistic_point import StatisticPoint
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
-from nncf.onnx.statistics.aggregator import ONNXStatisticsAggregator
-from nncf.onnx.statistics.collectors import ONNXMeanMinMaxStatisticCollector
-from nncf.onnx.statistics.collectors import ONNXMinMaxStatisticCollector
-from nncf.onnx.graph.transformations.commands import ONNXTargetPoint
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.quantization.algorithms.min_max.backend import MinMaxAlgoBackend
-
-from tests.onnx.models import InputOutputModel
-from tests.onnx.quantization.common import get_dataset_for_test
 
 
 class TemplateTestStatisticsAggregator:

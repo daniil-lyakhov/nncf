@@ -12,7 +12,6 @@
 """
 
 import pytest
-
 import numpy as np
 
 from nncf import Dataset

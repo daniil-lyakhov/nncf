@@ -17,7 +17,6 @@ from abc import abstractmethod
 from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.quantization.structs import QuantizerGroup
 from nncf.common.quantization.structs import QuantizerConfig
-from nncf.common.graph import NNCFGraph
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.quantization.structs import QuantizationMode
 from nncf.quantization.algorithms.definitions import RangeType

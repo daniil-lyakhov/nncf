@@ -13,15 +13,14 @@
 
 import pytest
 
-from nncf.common.graph import NNCFGraph
 from nncf.common.graph.transformations.commands import TargetType
+from nncf.quantization.algorithms.min_max.onnx_backend import ONNXMinMaxAlgoBackend
 from nncf.onnx.statistics.collectors import ONNXMeanMinMaxStatisticCollector
 from nncf.onnx.statistics.collectors import ONNXMinMaxStatisticCollector
+from nncf.onnx.graph.nncf_graph_builder import ONNXWeightedNodesLayerAttributes
 from nncf.onnx.graph.metatypes.onnx_metatypes import ONNXConvolutionMetatype
 from nncf.onnx.graph.metatypes.onnx_metatypes import ONNXDepthwiseConvolutionMetatype
-from nncf.onnx.graph.nncf_graph_builder import ONNXWeightedNodesLayerAttributes
 from nncf.onnx.graph.transformations.commands import ONNXTargetPoint
-from nncf.quantization.algorithms.min_max.onnx_backend import ONNXMinMaxAlgoBackend
 
 from tests.post_training.test_quantizer_config import TemplateTestQuantizerConfig
 from tests.post_training.models import NNCFGraphToTest

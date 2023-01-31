@@ -12,7 +12,6 @@
  limitations under the License.
 """
 
-import torch
 from typing import Any, Dict
 from torch import nn
 
@@ -21,24 +20,17 @@ from nncf.common.engine import Engine
 
 class PTEngine(Engine):
     """
-    Engine for ONNX backend using ONNXRuntime to infer the model.
+    Engine for Torch backend.
     """
 
     def __init__(self, model: nn.Module):
         self._model = model
         model.eval()
-        #self.input_names = set()
-        #rt_session_options['providers'] = ['CPUExecutionProvider']
-        #serialized_model = model.SerializeToString()
-        #self.sess = rt.InferenceSession(serialized_model, **rt_session_options)
-
-        #for inp in self.sess.get_inputs():
-        #    self.input_names.add(inp.name)
 
     def infer(self, input_data) -> Dict[str, Any]:
         """
-        Runs model on the provided input via ONNXRuntime InferenceSession.
-        Returns the dictionary of model outputs by node names.
+        Runs Torch model on the provided input.
+
         :param input_data: inputs for the model
         :return output_data: models outputs
         """

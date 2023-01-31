@@ -13,39 +13,18 @@
 
 import pytest
 import numpy as np
-from typing import Optional, Tuple, Union
-from dataclasses import dataclass
+import openvino.runtime as ov
+from openvino.runtime import opset9 as opset
 
 from nncf import Dataset
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.commands import TargetPoint
-from nncf.common.tensor_statistics.statistic_point import StatisticPoint
-from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
-from nncf.quantization.algorithms.definitions import RangeType
 from nncf.experimental.openvino_native.statistics.aggregator import OVStatisticsAggregator
-from nncf.experimental.openvino_native.statistics.collectors import OVMeanMinMaxStatisticCollector
-from nncf.experimental.openvino_native.statistics.collectors import OVMinMaxStatisticCollector
 from nncf.experimental.openvino_native.graph.transformations.commands import OVTargetPoint
-
-from tests.openvino.native.models import LinearModel
-
-from nncf.quantization.algorithms.definitions import RangeType
 from nncf.experimental.openvino_native.quantization.algorithms.min_max.openvino_backend import\
     OVMinMaxAlgoBackend
-from nncf.onnx.graph.transformations.commands import ONNXTargetPoint
-from nncf.onnx.statistics.aggregator import ONNXStatisticsAggregator
-from nncf.onnx.statistics.collectors import ONNXMeanMinMaxStatisticCollector
-from nncf.onnx.statistics.collectors import ONNXMinMaxStatisticCollector
-from nncf.common.tensor_statistics.statistic_point import StatisticPoint
-from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
-from nncf.common.graph.transformations.commands import TargetType
-import openvino.runtime as ov
-from openvino.runtime import opset9 as opset
 
-from tests.onnx.models import InputOutputModel
-from tests.onnx.quantization.common import get_dataset_for_test
 from tests.common.test_statistics_aggregator import TemplateTestStatisticsAggregator
-from tests.openvino.native.models import OVReferenceModel
 
 
 INPUT_NAME = 'Input'

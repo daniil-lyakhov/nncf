@@ -1,6 +1,5 @@
 {
     "model": "mobilenet_v2_32x32",
-    "pretrained": true,
     "batch_size": 128,
     "input_info": {
         "sample_size": [
