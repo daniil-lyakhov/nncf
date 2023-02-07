@@ -1,41 +1,19 @@
-from nncf.common.graph.layer_attributes import ConvolutionLayerAttributes
-from nncf.torch.graph.graph import PTNNCFGraph
-from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
-from nncf.torch.graph.operator_metatypes import PTDepthwiseConv2dSubtype
-
-from tests.post_training.models import NNCFGraphToTest
-from tests.post_training.models import NNCFGraphToTestDepthwiseConv
-
-from copy import deepcopy
-from typing import Any, Dict, Optional, Tuple, List
-
+from typing import List
 import torch
-from nncf.common.quantization.structs import QuantizationPreset
-from nncf.config import NNCFConfig
-from nncf.config.structures import BNAdaptationInitArgs
-from nncf.config.structures import QuantizationRangeInitArgs
-from nncf.data import Dataset
-from nncf.parameters import convert_ignored_scope_to_list
-from nncf.parameters import IgnoredScope
-from nncf.parameters import ModelType
-from nncf.parameters import TargetDevice
-from nncf.torch.nncf_network import NNCFNetwork
-from nncf.torch.dynamic_graph.context import no_nncf_trace
-from nncf.torch.dynamic_graph.io_handling import replicate_same_tensors
-from nncf.torch.dynamic_graph.io_handling import wrap_nncf_model_inputs_with_objwalk
-from nncf.torch.dynamic_graph.io_handling import wrap_nncf_model_outputs_with_objwalk
-from nncf.torch.initialization import PTInitializingDataLoader
-from nncf.torch.model_creation import create_compressed_model
-from nncf.torch.model_creation import create_nncf_network
-from nncf.torch.nested_objects_traversal import objwalk
-from nncf.torch.utils import get_model_device
-from nncf.torch.utils import is_tensor
-from nncf.torch.dynamic_graph.graph_tracer import create_dummy_forward_fn
-from nncf.torch.dynamic_graph.graph_tracer import ModelInputInfo
 
+from nncf import NNCFConfig
+from nncf.common.graph.layer_attributes import ConvolutionLayerAttributes
+from nncf.common.quantization.structs import QuantizationMode
 from nncf.quantization.algorithms.min_max.algorithm import MinMaxQuantization
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
 from nncf.quantization.algorithms.post_training.algorithm  import PostTrainingQuantizationParameters
+from nncf.torch.graph.graph import PTNNCFGraph
+from nncf.torch.model_creation import create_nncf_network
+from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
+from nncf.torch.graph.operator_metatypes import PTDepthwiseConv2dSubtype
+from nncf.torch.tensor_statistics.statistics import PTMinMaxTensorStatistic
+from tests.post_training.models import NNCFGraphToTest
+from tests.post_training.models import NNCFGraphToTestDepthwiseConv
 
 
 def get_single_conv_nncf_graph() -> NNCFGraphToTest:
@@ -51,20 +29,32 @@ def get_depthwise_conv_nncf_graph() -> NNCFGraphToTestDepthwiseConv:
     return NNCFGraphToTestDepthwiseConv(PTDepthwiseConv2dSubtype)
 
 
-def _create_nncf_config(input_shape):
-    return NNCFConfig({
-        'input_info': {
-            'sample_size': input_shape
-        }
-    })
-
-
 def get_nncf_network(model: torch.nn.Module,
                      input_shape: List[int] = [1, 3, 32, 32]):
-    #input_shape = [1, 3, 32, 32]
-    nncf_config = _create_nncf_config(input_shape)
+    nncf_config = NNCFConfig({
+        'input_info': {
+            'sample_size': input_shape.copy()
+        }
+    })
     nncf_network = create_nncf_network(
         model=model,
         config=nncf_config,
     )
     return nncf_network
+
+
+def get_min_max_algo_for_test():
+    params = PostTrainingQuantizationParameters()
+    min_max_params = params.algorithms[MinMaxQuantization]
+    params.algorithms = {MinMaxQuantization: min_max_params}
+    return PostTrainingQuantization(params)
+
+
+def mock_collect_statistics(mocker):
+    _ = mocker.patch(
+        'nncf.common.tensor_statistics.aggregator.StatisticsAggregator.collect_statistics', return_value=None)
+    min_, max_ = 0., 1.
+    min_, max_ = map(lambda x: torch.tensor(x), [min_, max_])
+    _ = mocker.patch(
+        'nncf.common.tensor_statistics.collectors.TensorStatisticCollectorBase.get_statistics',
+        return_value=PTMinMaxTensorStatistic(min_, max_))

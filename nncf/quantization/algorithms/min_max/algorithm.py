@@ -155,13 +155,19 @@ class MinMaxQuantization(Algorithm):
         self.nncf_graph = None
         # It prevents the duplicate weight quantizers from being added.
         # It can happen when you have layers that share the identical weight tensor.
-        self._quantization_target_points_to_qconfig = \
-            collections.OrderedDict()  # type: OrderedDict[TargetPoint, QuantizerConfig]
+        self._quantization_target_points_to_qconfig = {
+            QuantizerGroup.ACTIVATIONS: collections.OrderedDict(),
+            QuantizerGroup.WEIGHTS: collections.OrderedDict(),
+        } # type: Dict[QuantizerGroup, OrderedDict[TargetPoint, QuantizerConfig]]
         self._parameters = parameters
 
     @property
     def available_backends(self) -> Dict[str, BackendType]:
         return ALGO_BACKENDS.registry_dict
+
+    def _quantization_target_points_collected(self):
+        return self._quantization_target_points_to_qconfig[QuantizerGroup.ACTIVATIONS] or\
+            self._quantization_target_points_to_qconfig[QuantizerGroup.WEIGHTS]
 
     def _set_backend_entity(self, model: TModel) -> None:
         """
@@ -279,11 +285,12 @@ class MinMaxQuantization(Algorithm):
         node_name = quantization_point.insertion_point.target_node_name
         node = nncf_graph.get_node_by_name(node_name)
         port_id = self._backend_entity.get_weight_tensor_port_id(node)
-        weight_quantization_target_point = self._backend_entity.target_point(TargetType.OPERATION_WITH_WEIGHTS,
+        weight_quantization_tp = self._backend_entity.target_point(TargetType.OPERATION_WITH_WEIGHTS,
                                                                              node_name,
                                                                              port_id)
         weight_quantizer_config = self._backend_entity.get_weight_config(quantization_point.qconfig, model)
-        self._quantization_target_points_to_qconfig[weight_quantization_target_point] = weight_quantizer_config
+        self._quantization_target_points_to_qconfig[QuantizerGroup.WEIGHTS][weight_quantization_tp] =\
+            weight_quantizer_config
 
     def _add_activation_quantization_target_point(self,
                                                   quantization_point: SingleConfigQuantizationPoint) -> None:
@@ -297,16 +304,17 @@ class MinMaxQuantization(Algorithm):
         # If Quantization of node's input
         if quantization_point.insertion_point.input_port_id is not None:
             input_port_id = quantization_point.insertion_point.input_port_id
-            activation_quantization_target_point = self._backend_entity.target_point(TargetType.PRE_LAYER_OPERATION,
+            activation_quantization_tp = self._backend_entity.target_point(TargetType.PRE_LAYER_OPERATION,
                                                                                      node_name,
                                                                                      input_port_id)
         # If quantization of node's output or Model Input node
         else:
             output_port_id = 0
-            activation_quantization_target_point = self._backend_entity.target_point(TargetType.POST_LAYER_OPERATION,
+            activation_quantization_tp = self._backend_entity.target_point(TargetType.POST_LAYER_OPERATION,
                                                                                      node_name,
                                                                                      output_port_id)
-        self._quantization_target_points_to_qconfig[activation_quantization_target_point] = quantization_point.qconfig
+        self._quantization_target_points_to_qconfig[QuantizerGroup.ACTIVATIONS][activation_quantization_tp] =\
+            quantization_point.qconfig
 
     def _get_quantization_target_points(self, model: TModel) -> OrderedDict[TargetPoint, QuantizerConfig]:
         """
@@ -321,7 +329,7 @@ class MinMaxQuantization(Algorithm):
         """
         nncf_graph = NNCFGraphFactory.create(model) if self.nncf_graph is None else self.nncf_graph
 
-        if self._quantization_target_points_to_qconfig:
+        if self._quantization_target_points_collected():
             return self._quantization_target_points_to_qconfig
         quantizer_setup = self._get_quantizer_setup(nncf_graph)
         for quantization_point in quantizer_setup.quantization_points.values():
@@ -344,38 +352,47 @@ class MinMaxQuantization(Algorithm):
         model_transformer = ModelTransformerFactory.create(model)
 
         quantization_target_points = self._get_quantization_target_points(model)
-        weight_layer_names = set()
+
         def filter_func(point):
             return MinMaxQuantization in point.algorithm_to_tensor_collectors and \
                    point.target_point.type == quantization_target_point.type
 
-        for quantization_target_point, qconfig in quantization_target_points.items():
+        def get_statistics_for_node(target_node_name):
+            return statistic_points.get_algo_statistics_for_node(
+                target_node_name,
+                filter_func,
+                MinMaxQuantization)
+
+        # Collect shared weight quantization target points
+        shared_weights_quantizers = collections.defaultdict(list)
+        for quantization_target_point, qconfig in quantization_target_points[QuantizerGroup.WEIGHTS].items():
             target_node_name = quantization_target_point.target_node_name
-            for tensor_collector in statistic_points.get_algo_statistics_for_node(
-                    target_node_name,
-                    filter_func,
-                    MinMaxQuantization):
-                if quantization_target_point.is_weight_target_point():
-                    # If the nodes share one weight tensor, we should have only one quantizer on that
-                    layer_name = nncf_graph.get_node_by_name(target_node_name).layer_name
-                    if layer_name in weight_layer_names:
-                        continue
-                    weight_layer_names.add(layer_name)
-                    command = self._backend_entity.create_weight_quantizer_insertion_command(
-                        nncf_graph,
-                        quantization_target_point,
-                        qconfig,
-                        tensor_collector.get_statistics())
-                    transformation_commands.append(command)
-                elif quantization_target_point.is_activation_target_point():
-                    command = self._backend_entity.create_activation_quantizer_insertion_command(
-                                    nncf_graph,
-                                    quantization_target_point,
-                                    qconfig,
-                                    tensor_collector.get_statistics())
-                    transformation_commands.append(command)
-                else:
-                    raise RuntimeError('Inccorrect type of Quantization Target Point!')
+            layer_name = nncf_graph.get_node_by_name(target_node_name).layer_name
+            shared_weights_quantizers[layer_name].append((quantization_target_point, qconfig))
+
+        # Add one fq for each shared target points group
+        for shared_weights_target_points, qconfig in shared_weights_quantizers.values():
+            target_node_name = shared_weights_quantizers[0].target_node_name
+            for tensor_collector in get_statistics_for_node(target_node_name):
+                command = self._backend_entity.create_weight_quantizer_insertion_command(
+                    nncf_graph,
+                    model,
+                    shared_weights_target_points,
+                    qconfig,
+                    tensor_collector.get_statistics())
+                transformation_command.append(command)
+
+        # Add quantization target points
+        for activation_target_point, qconfig in\
+            quantization_target_points[QuantizerGroup.ACTIVATIONS].items():
+            target_node_name = activation_target_point.target_node_name
+            for tensor_collector in get_statistics_for_node(target_node_name):
+                command = self._backend_entity.create_activation_quantizer_insertion_command(
+                                nncf_graph,
+                                quantization_target_point,
+                                qconfig,
+                                tensor_collector.get_statistics())
+                transformation_commands.append(command)
 
         for transformation_command in transformation_commands:
             transformation_layout.register(transformation_command)

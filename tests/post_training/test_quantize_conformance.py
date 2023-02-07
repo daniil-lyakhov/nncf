@@ -228,14 +228,14 @@ def quantize_ov_native(model: ov.Model,
                        ignored_scope: Optional[nncf.IgnoredScope] = None) -> ov.Model:
     if model_type is not None:
         RuntimeError('Model type is not supported')
-    
+
     min_max_algo = MinMaxQuantization(
         MinMaxQuantizationParameters(
-            number_samples=subset_size, 
+            number_samples=subset_size,
             preset=preset,
             target_device=target_device,
             ignored_scopes=ignored_scope))
-    
+
     statistics_aggregator = OVStatisticsAggregator(calibration_dataset)
     statistic_points = min_max_algo.get_statistic_points(model)
     statistics_aggregator.register_stastistic_points(statistic_points)
@@ -333,7 +333,7 @@ def test_ptq_timm(data, output, result, model_args): # pylint: disable=W0703
             input_names = set(inp.get_friendly_name() for inp in ov_native_model.get_parameters())
             if len(input_names) != 1:
                 RuntimeError('Number of inputs != 1')
-            
+
             def ov_native_transform_fn(data_item):
                 images, _ = data_item
                 return {next(iter(input_names)): images.numpy()}

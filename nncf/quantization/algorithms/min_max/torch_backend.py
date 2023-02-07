@@ -116,15 +116,29 @@ class PTMinMaxAlgoBackend(MinMaxAlgoBackend):
                                                                        target_point,
                                                                        quantizer_config,
                                                                        statistics)
+    from nncf.torch.nncf_network import NNCFNetwork
     @staticmethod
-    def create_weight_quantizer_insertion_command(nncf_graph: NNCFGraph,
+    def create_weight_quantizer_insertion_command(#model: NNCFNetwork,
+                                                  nncf_graph: NNCFGraph,
                                                   target_point: PTTargetPoint,
                                                   quantizer_config: QuantizerConfig,
-                                                  statistics: MinMaxTensorStatistic) -> PTInsertionCommand:
-        return PTMinMaxAlgoBackend._create_quantizer_insertion_command(nncf_graph,
-                                                                       target_point,
-                                                                       quantizer_config,
-                                                                       statistics)
+                                                  statistics: PTMinMaxTensorStatistic) -> PTInsertionCommand:
+        from nncf.torch.nncf_network import ExtraCompressionModuleType
+        from nncf.common.quantization.structs import WeightQuantizerId
+        from nncf.torch.quantization.algo import QuantizationBuilder
+        wid = WeightQuantizerId(target_point.target_node_name)
+        external_quantizer_storage_key = str(wid)
+        compression_modules_dict = model.get_compression_modules_by_type(ExtraCompressionModuleType.EXTERNAL_QUANTIZER)
+        assert external_quantizer_storage_key not in compression_modules_dict
+        _, scale_shape, _ =\
+            PTMinMaxAlgoBackend._get_input_scale_shape(nncf_graph, target_point, quantizer_config)
+        quantizer = PTMinMaxAlgoBackend._create_quantizer(quantizer_config,
+                                                          scale_shape, statistics)
+        model.add_compression_module(external_quantizer_storage_key, quantizer,
+                                     ExtraCompressionModuleType.EXTERNAL_QUANTIZER)
+        callable_obj = QuantizationBuilder.ExternalQuantizerCallHook(model.get_tracing_context(),
+                                                                     external_quantizer_storage_key)
+        return PTInsertionCommand(target_point, callable_obj, TransformationPriority.QUANTIZATION_PRIORITY)
 
     @staticmethod
     def minmax_statistic_collector(nncf_graph: NNCFGraph,
