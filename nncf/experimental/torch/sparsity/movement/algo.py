@@ -39,7 +39,7 @@ from nncf.experimental.torch.sparsity.movement.structured_mask_strategy import d
 from nncf.torch.algo_selector import PT_COMPRESSION_ALGORITHMS
 from nncf.torch.compression_method_api import PTCompressionAlgorithmController
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.graph.transformations.commands import TransformationPriority
 from nncf.torch.layers import NNCFLinear
 from nncf.torch.module_operations import UpdateWeightAndBias
@@ -98,7 +98,7 @@ class MovementSparsityBuilder(BaseSparsityAlgoBuilder):
             hook = UpdateWeightAndBias(sparsifying_operation).to(device)
             insertion_commands.append(
                 PTInsertionCommand(
-                    PTTargetPoint(TargetType.PRE_LAYER_OPERATION, target_node_name=node_name),
+                    TargetPoint(TargetType.PRE_LAYER_OPERATION, target_node_name=node_name),
                     hook,
                     TransformationPriority.SPARSIFICATION_PRIORITY
                 )

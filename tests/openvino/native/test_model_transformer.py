@@ -18,7 +18,7 @@ import openvino.runtime as ov
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.experimental.openvino_native.graph.model_transformer import OVModelTransformer
-from nncf.experimental.openvino_native.graph.transformations.commands import OVTargetPoint
+from nncf.experimental.openvino_native.graph.transformations.commands import TargetPoint
 from nncf.experimental.openvino_native.graph.transformations.commands import OVOutputInsertionCommand
 from nncf.experimental.openvino_native.graph.transformations.commands import OVFQNodeRemovingCommand
 from nncf.experimental.openvino_native.graph.transformations.commands import OVQuantizerInsertionCommand
@@ -45,7 +45,7 @@ TARGET_WEIGHTS_FQS = [['Add/fq_weights_1'], ['MatMul/fq_weights_1'], ['Add/fq_we
 def create_transformed_model(model, target_layers, target_type, command_type, port_id=0, **kwargs):
     transformation_layout = TransformationLayout()
     for target_layer in target_layers:
-        target_point = OVTargetPoint(target_type, target_layer, port_id=port_id)
+        target_point = TargetPoint(target_type, target_layer, port_id=port_id)
         command = command_type(target_point, **kwargs)
         transformation_layout.register(command)
 
@@ -108,7 +108,7 @@ def test_node_removing(target_layers):
     transformation_layout = TransformationLayout()
 
     for target_layer in target_layers:
-        target_point = OVTargetPoint(TargetType.LAYER, target_layer, 0)
+        target_point = TargetPoint(TargetType.LAYER, target_layer, 0)
         command = OVFQNodeRemovingCommand(target_point)
         transformation_layout.register(command)
 

@@ -38,7 +38,7 @@ class ONNXTargetPoint(TargetPoint):
 
     def __eq__(self, other: 'ONNXTargetPoint') -> bool:
         return isinstance(other, ONNXTargetPoint) and \
-               self.type == other.type and self.target_node_name == other.target_node_name and \
+               self.target_type == other.target_type and self.target_node_name == other.target_node_name and \
                self.port_id == other.port_id
 
     def __hash__(self) -> int:

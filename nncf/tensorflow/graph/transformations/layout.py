@@ -116,18 +116,18 @@ class TFTransformationLayout(TransformationLayout):
 
 def check_target_points(tp0: TargetPoint, tp1: TargetPoint) -> bool:
     return isinstance(tp0, TFLayerPoint) and isinstance(tp1, TFLayerPoint) and \
-           tp0.type in GRAPH_NODE_TYPES and \
-           tp1.type in GRAPH_NODE_TYPES and \
+           tp0.target_type in GRAPH_NODE_TYPES and \
+           tp1.target_type in GRAPH_NODE_TYPES and \
            tp0.layer_name == tp1.layer_name
 
 
 def is_object_removed(removed_target: TargetPoint, command_target: TargetPoint) -> bool:
-    layer_removed = removed_target.type == TargetType.LAYER and \
-                    command_target.type in GRAPH_NODE_TYPES and \
+    layer_removed = removed_target.target_type == TargetType.LAYER and \
+                    command_target.target_type in GRAPH_NODE_TYPES and \
                     removed_target.layer_name == command_target.layer_name
 
-    operation_removed = removed_target.type == TargetType.OPERATION_WITH_WEIGHTS and \
-                        removed_target.type == command_target.type and \
+    operation_removed = removed_target.target_type == TargetType.OPERATION_WITH_WEIGHTS and \
+                        removed_target.target_type == command_target.target_type and \
                         removed_target.layer_name == command_target.layer_name and \
                         removed_target.weights_attr_name == command_target.weights_attr_name
 

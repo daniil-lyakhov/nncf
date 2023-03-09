@@ -30,7 +30,7 @@ from nncf.experimental.openvino_native.graph.metatypes.openvino_metatypes import
 from nncf.experimental.openvino_native.graph.metatypes.openvino_metatypes import OVFakeQuantizeMetatype
 from nncf.experimental.openvino_native.graph.transformations.commands import OVBiasCorrectionCommand
 from nncf.experimental.openvino_native.graph.transformations.commands import OVModelExtractionCommand
-from nncf.experimental.openvino_native.graph.transformations.commands import OVTargetPoint
+from nncf.experimental.openvino_native.graph.transformations.commands import TargetPoint
 from nncf.experimental.openvino_native.statistics.collectors import OVMeanStatisticCollector
 from nncf.experimental.openvino_native.statistics.collectors import OVNNCFCollectorTensorProcessor
 from nncf.experimental.openvino_native.tensor import OVNNCFTensor
@@ -63,8 +63,8 @@ class OVFastBiasCorrectionAlgoBackend(FastBiasCorrectionAlgoBackend):
     @staticmethod
     def target_point(target_type: TargetType,
                      target_node_name: str,
-                     port_id: int) -> OVTargetPoint:
-        return OVTargetPoint(target_type, target_node_name, port_id)
+                     port_id: int) -> TargetPoint:
+        return TargetPoint(target_type, target_node_name, port_id)
 
     @staticmethod
     def create_bias_correction_command(node: NNCFNode,

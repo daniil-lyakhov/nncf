@@ -209,7 +209,7 @@ class StatCollectorGenerator:
             input_shape = layer_attributes.get_weight_shape()
             channel_idx = layer_attributes.get_target_dim_for_compression()
         else:
-            input_shape = target_nncf_graph.get_input_shape_for_insertion_point(qp.insertion_point)
+            input_shape = target_nncf_graph.get_input_shape(qp.insertion_point.target_node_name)
             channel_idx = 1  # channel dim for activations
 
         retval = {}

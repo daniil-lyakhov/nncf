@@ -81,7 +81,7 @@ class Hook:
         :return: `True` if hook should be applied before target operation,
             `False` otherwise.
         """
-        return self._target_point.type == TargetType.OPERATOR_PRE_HOOK
+        return self._target_point.target_type == TargetType.OPERATOR_PRE_HOOK
 
     def get_operation_weights(self, op_name: str) -> Any:
         """

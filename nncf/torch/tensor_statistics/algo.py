@@ -21,7 +21,7 @@ from nncf.common.statistics import NNCFStatistics
 from nncf.config import NNCFConfig
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.graph.transformations.commands import TransformationPriority
 from nncf.common.tensor_statistics.collectors import ReductionShape
@@ -29,7 +29,7 @@ from nncf.common.tensor_statistics.collectors import TensorStatisticCollectorBas
 
 
 class TensorStatisticObservationPoint:
-    def __init__(self, target_point: PTTargetPoint,
+    def __init__(self, target_point: TargetPoint,
                  reduction_shapes: Set[ReductionShape] = None):
         self.target_point = target_point
         self.reduction_shapes = reduction_shapes
@@ -78,7 +78,7 @@ class TensorStatisticsCollectionBuilder(PTCompressionAlgorithmBuilder):
 
 class TensorStatisticsCollectionController(PTCompressionAlgorithmController):
     def __init__(self, target_model: NNCFNetwork,
-                 ip_vs_collector_dict: Dict[PTTargetPoint, TensorStatisticCollectorBase]):
+                 ip_vs_collector_dict: Dict[TargetPoint, TensorStatisticCollectorBase]):
         super().__init__(target_model)
         self.ip_vs_collector_dict = ip_vs_collector_dict
         self._scheduler = StubCompressionScheduler()

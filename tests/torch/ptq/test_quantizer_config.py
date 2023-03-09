@@ -16,7 +16,7 @@ import pytest
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.torch.tensor_statistics.collectors import PTMinMaxStatisticCollector
 from nncf.torch.tensor_statistics.collectors import PTMeanMinMaxStatisticCollector
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.quantization.algorithms.min_max.torch_backend import PTMinMaxAlgoBackend
 
 from tests.post_training.test_quantizer_config import TemplateTestQuantizerConfig

@@ -20,7 +20,7 @@ from nncf import Dataset
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.commands import TargetPoint
 from nncf.experimental.openvino_native.statistics.aggregator import OVStatisticsAggregator
-from nncf.experimental.openvino_native.graph.transformations.commands import OVTargetPoint
+from nncf.experimental.openvino_native.graph.transformations.commands import TargetPoint
 from nncf.experimental.openvino_native.quantization.algorithms.min_max.openvino_backend import\
     OVMinMaxAlgoBackend
 
@@ -66,7 +66,7 @@ class TestStatisticsAggregator(TemplateTestStatisticsAggregator):
         if target_type == TargetType.OPERATION_WITH_WEIGHTS:
             target_node_name = CONV_NODE_NAME
             port_id = 1
-        return OVTargetPoint(target_type, target_node_name, port_id)
+        return TargetPoint(target_type, target_node_name, port_id)
 
     @pytest.fixture
     def dataset_samples(self, dataset_values):

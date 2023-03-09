@@ -14,13 +14,13 @@ from typing import List
 
 import torch
 
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.quantization.layers import BaseQuantizer
 
 
 class QuantizerInfo:
     def __init__(self, quantizer_module_ref: BaseQuantizer,
-                 affected_insertions: List[PTTargetPoint]):
+                 affected_insertions: List[TargetPoint]):
         self.quantizer_module_ref = quantizer_module_ref
         self.affected_insertions = affected_insertions
 
@@ -33,6 +33,6 @@ class WeightQuantizerInfo(QuantizerInfo):
     def __init__(self,
                  quantizer_module_ref: BaseQuantizer,
                  quantized_module: torch.nn.Module,
-                 affected_insertions: List[PTTargetPoint]):
+                 affected_insertions: List[TargetPoint]):
         super().__init__(quantizer_module_ref, affected_insertions)
         self.quantized_module = quantized_module

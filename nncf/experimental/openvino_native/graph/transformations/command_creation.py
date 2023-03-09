@@ -16,7 +16,7 @@ import numpy as np
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.graph.graph import NNCFNode
-from nncf.experimental.openvino_native.graph.transformations.commands import OVTargetPoint
+from nncf.experimental.openvino_native.graph.transformations.commands import TargetPoint
 from nncf.experimental.openvino_native.graph.transformations.commands import OVBiasCorrectionCommand
 
 
@@ -33,5 +33,5 @@ def create_bias_correction_command(node: NNCFNode,
     """
     add_node = nncf_graph.get_next_nodes(node)[0]
     bias_port_id = add_node.layer_attributes.const_port_id
-    target_point = OVTargetPoint(TargetType.LAYER, node.node_name, bias_port_id)
+    target_point = TargetPoint(TargetType.LAYER, node.node_name, bias_port_id)
     return OVBiasCorrectionCommand(target_point, bias_value)

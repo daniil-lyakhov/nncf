@@ -29,7 +29,7 @@ from nncf.torch.algo_selector import ZeroCompressionLoss
 from nncf.torch.compression_method_api import PTCompressionAlgorithmBuilder
 from nncf.torch.compression_method_api import PTCompressionAlgorithmController
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.graph.transformations.commands import TransformationPriority
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.nncf_network import NNCFNetwork
@@ -76,7 +76,7 @@ class BaseSparsityAlgoBuilder(PTCompressionAlgorithmBuilder):
             hook = operation.to(device)
             insertion_commands.append(
                 PTInsertionCommand(
-                    PTTargetPoint(TargetType.OPERATION_WITH_WEIGHTS, target_node_name=node_name),
+                    TargetPoint(TargetType.OPERATION_WITH_WEIGHTS, target_node_name=node_name),
                     hook,
                     TransformationPriority.SPARSIFICATION_PRIORITY,
                 )

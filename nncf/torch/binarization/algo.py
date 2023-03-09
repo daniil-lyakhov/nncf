@@ -37,7 +37,7 @@ from nncf.torch.binarization.layers import WeightBinarizer
 from nncf.torch.compression_method_api import PTCompressionAlgorithmBuilder
 from nncf.torch.compression_method_api import PTCompressionAlgorithmController
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.layers import NNCFConv2d
 from nncf.torch.module_operations import UpdateInputs
@@ -92,12 +92,12 @@ class BinarizationBuilder(PTCompressionAlgorithmBuilder):
                 compression_lr_multiplier=compression_lr_multiplier
             )).to(device)
 
-            ip_w = PTTargetPoint(TargetType.OPERATION_WITH_WEIGHTS,
+            ip_w = TargetPoint(TargetType.OPERATION_WITH_WEIGHTS,
                                  target_node_name=module_node.node_name)
             insertion_commands.append(PTInsertionCommand(ip_w, op_weights,
                                                          TransformationPriority.QUANTIZATION_PRIORITY))
 
-            ip_i = PTTargetPoint(TargetType.PRE_LAYER_OPERATION,
+            ip_i = TargetPoint(TargetType.PRE_LAYER_OPERATION,
                                  target_node_name=module_node.node_name, input_port_id=0)
             insertion_commands.append(PTInsertionCommand(ip_i, op_inputs,
                                                          TransformationPriority.QUANTIZATION_PRIORITY))

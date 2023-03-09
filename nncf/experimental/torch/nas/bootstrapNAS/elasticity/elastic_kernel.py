@@ -37,7 +37,7 @@ from nncf.experimental.torch.nas.bootstrapNAS.elasticity.base_handler import Sin
 from nncf.experimental.torch.nas.bootstrapNAS.elasticity.base_handler import SingleElasticityHandler
 from nncf.experimental.torch.nas.bootstrapNAS.elasticity.elasticity_dim import ElasticityDim
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.layers import NNCFConv2d
 from nncf.torch.module_operations import UpdateInputs
 from nncf.torch.module_operations import UpdatePadding
@@ -474,7 +474,7 @@ class ElasticKernelBuilder(SingleElasticityBuilder):
             update_conv_params_op = UpdateWeight(elastic_kernel_op)
             transformation_commands.append(
                 PTInsertionCommand(
-                    PTTargetPoint(
+                    TargetPoint(
                         TargetType.PRE_LAYER_OPERATION,
                         target_node_name=node_name
                     ),
@@ -499,7 +499,7 @@ class ElasticKernelBuilder(SingleElasticityBuilder):
                     nncf_logger.debug(f'Padded input will be cropped for {node_name}')
                     pad_commands.append(
                         PTInsertionCommand(
-                            PTTargetPoint(
+                            TargetPoint(
                                 target_type=TargetType.PRE_LAYER_OPERATION,
                                 target_node_name=node_name
                             ),
@@ -514,7 +514,7 @@ class ElasticKernelBuilder(SingleElasticityBuilder):
                 nncf_logger.debug(f'Padding will be adjusted for {node_name}')
                 pad_commands.append(
                     PTInsertionCommand(
-                        PTTargetPoint(
+                        TargetPoint(
                             target_type=TargetType.PRE_LAYER_OPERATION,
                             target_node_name=node_name
                         ),

@@ -124,7 +124,7 @@ class ONNXModelTransformer(ModelTransformer):
         for transformation in transformations:
             port_id = transformation.target_point.port_id
             node_name = transformation.target_point.target_node_name
-            transform_type = transformation.target_point.type
+            transform_type = transformation.target_point.target_type
             nncf_input_node_next_onnx_nodes = transformation.nncf_input_node_next_onnx_nodes
             target_edge_name = self._get_target_edge(port_id, node_name, transform_type, onnx_graph,
                                                      nncf_input_node_next_onnx_nodes)
@@ -270,7 +270,7 @@ class ONNXModelTransformer(ModelTransformer):
         """
         port_id = transformation.target_point.port_id
         node_name = transformation.target_point.target_node_name
-        transform_type = transformation.target_point.type
+        transform_type = transformation.target_point.target_type
         nncf_input_node_next_onnx_nodes = transformation.nncf_input_node_next_onnx_nodes
         target_edge_name = self._get_target_edge(port_id, node_name, transform_type, onnx_graph,
                                                  nncf_input_node_next_onnx_nodes)
@@ -300,7 +300,7 @@ class ONNXModelTransformer(ModelTransformer):
             raise RuntimeError(
                 f'Can not add the quantizer to the {target_edge_name} edge. This edge does not have end node.')
 
-        if transformation.target_point.type == TargetType.PRE_LAYER_OPERATION:
+        if transformation.target_point.target_type == TargetType.PRE_LAYER_OPERATION:
             # If we need to change only target nodes input
             target_node = onnx_graph.get_node_by_name(transformation.target_point.target_node_name)
             for i, inp in enumerate(target_node.input):

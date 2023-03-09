@@ -129,7 +129,7 @@ class BitwidthGraph:
             nncf_node = nncf_graph.get_node_by_name(nncf_node_name)
             node_id = nncf_node.node_id
 
-            input_port_id = target_point.input_port_id
+            input_port_id = target_point.port_id
 
             if input_port_id is None:
                 # Post-hooking used for activation quantization

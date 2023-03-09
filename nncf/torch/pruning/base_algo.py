@@ -33,7 +33,7 @@ from nncf.torch.algo_selector import ZeroCompressionLoss
 from nncf.torch.compression_method_api import PTCompressionAlgorithmBuilder
 from nncf.torch.compression_method_api import PTCompressionAlgorithmController
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.graph.transformations.commands import TransformationPriority
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.module_operations import UpdateWeightAndBias
@@ -120,7 +120,7 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
                 hook = UpdateWeightAndBias(pruning_block).to(device)
                 insertion_commands.append(
                     PTInsertionCommand(
-                        PTTargetPoint(TargetType.PRE_LAYER_OPERATION,
+                        TargetPoint(TargetType.PRE_LAYER_OPERATION,
                                       target_node_name=node_name),
                         hook,
                         TransformationPriority.PRUNING_PRIORITY
@@ -160,7 +160,7 @@ class BasePruningAlgoBuilder(PTCompressionAlgorithmBuilder):
             hook = UpdateWeightAndBias(pruning_block).to(device)
             insertion_commands.append(
                 PTInsertionCommand(
-                    PTTargetPoint(TargetType.PRE_LAYER_OPERATION,
+                    TargetPoint(TargetType.PRE_LAYER_OPERATION,
                                   target_node_name=node_name),
                     hook,
                     TransformationPriority.PRUNING_PRIORITY

@@ -172,7 +172,7 @@ class TFModelTransformer(ModelTransformer):
                                       insertion_objects)
         else:
             raise TypeError('Insertion transform does not support {} '
-                            'target point type'.format(target_point.type))
+                            'target point type'.format(target_point.target_type))
 
     # pylint:disable=too-many-branches
     def _shared_insert_layers(self, target_points: List[TargetPoint], layers_to_insert: List[Callable]):
@@ -200,7 +200,7 @@ class TFModelTransformer(ModelTransformer):
                                 [config['name'], i, 0, inbound[3]]
                     else:
                         raise TypeError(
-                            f'Insertion transform does not support {target_points[0].type} target point type')
+                            f'Insertion transform does not support {target_points[0].target_type} target point type')
 
             layer_configs.append(config)
 
@@ -230,15 +230,15 @@ class TFModelTransformer(ModelTransformer):
     def _multi_insertion(self, target_point: TargetPoint, commands: List[TransformationCommand]):
         if not isinstance(target_point, TFLayer):
             raise TypeError('Multiple insertion transform does not support '
-                            '{} target point type'.format(target_point.type))
+                            '{} target point type'.format(target_point.target_type))
 
         weight_operations = []
         for cmd in commands:
             if cmd.type != TransformationType.INSERT or \
-                    cmd.target_point.type != TargetType.OPERATION_WITH_WEIGHTS:
+                    cmd.target_point.target_type != TargetType.OPERATION_WITH_WEIGHTS:
                 raise TypeError('Multiple insertion transform does not support command: '
                                 'command type - {}; target point type - {}'
-                                .format(cmd.type, cmd.target_point.type))
+                                .format(cmd.type, cmd.target_point.target_type))
             weight_operations.append(
                 WeightOperations(
                     cmd.target_point.weights_attr_name,
@@ -255,7 +255,7 @@ class TFModelTransformer(ModelTransformer):
                 target_point.weights_attr_name,
                 target_point.operation_name)
         else:
-            raise TypeError('{} removal does not support'.format(target_point.type))
+            raise TypeError('{} removal does not support'.format(target_point.target_type))
 
     def _remove_weight_operation(self, layer_name: str, weights_attr_name: str, operation_name: str):
         _, layer_config = self._find_layer_config(layer_name)

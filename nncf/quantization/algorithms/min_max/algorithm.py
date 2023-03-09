@@ -368,7 +368,7 @@ class MinMaxQuantization(Algorithm):
         weight_layer_names = set()
         def filter_func(point: StatisticPoint) -> bool:
             return MinMaxQuantization in point.algorithm_to_tensor_collectors and \
-                   point.target_point.type == quantization_target_point.type
+                   point.target_point.target_type == quantization_target_point.target_type
 
         for quantization_target_point, qconfig in quantization_target_points.items():
             target_node_name = quantization_target_point.target_node_name
@@ -405,7 +405,7 @@ class MinMaxQuantization(Algorithm):
         output = StatisticPointsContainer()
         for quantization_target_point, qconfig in quantization_target_points.items():
             nncf_logger.debug(f'Adding target point {quantization_target_point.target_node_name}'
-                              f' with type {quantization_target_point.type} for statistics collection')
+                              f' with type {quantization_target_point.target_type} for statistics collection')
             stat_collector = self._get_stat_collector(nncf_graph, quantization_target_point,
                                                       qconfig)
             output.add_statistic_point(StatisticPoint(target_point=quantization_target_point,

@@ -24,7 +24,7 @@ from nncf.common.graph import NNCFNodeName
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.torch.dynamic_graph.operation_address import OperationAddress
 from nncf.common.hardware.config import HWConfigType
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.quantization.layers import AsymmetricQuantizer
 from nncf.common.quantization.structs import NonWeightQuantizerId
 from nncf.common.quantization.quantizer_propagation.solver import QuantizerPropagationSolver
@@ -46,10 +46,10 @@ def make_op_address_for_coalescing_test(scope_str: str) -> OperationAddress:
 
 def make_insertion_point_for_coalescing_test(node_name: NNCFNodeName,
                                              input_port_id: int = None) \
-        -> PTTargetPoint:
-    retval = PTTargetPoint(TargetType.OPERATOR_POST_HOOK,
+        -> TargetPoint:
+    retval = TargetPoint(TargetType.OPERATOR_POST_HOOK,
                            target_node_name=node_name,
-                           input_port_id=input_port_id)
+                           port_id=input_port_id)
     return retval
 
 
@@ -394,9 +394,9 @@ def make_insertion_point_for_coalescing_test(node_name: NNCFNodeName,
                                      None
                              ),
                          ])
-def test_insertion_point_coalescing(input_insertion_points: List[PTTargetPoint],
+def test_insertion_point_coalescing(input_insertion_points: List[TargetPoint],
                                     linked_scopes_groups_list: List[List[str]],
-                                    ref_coalesced_ip_lists: List[List[PTTargetPoint]]):
+                                    ref_coalesced_ip_lists: List[List[TargetPoint]]):
     if ref_coalesced_ip_lists is None:
         with pytest.raises(RuntimeError):
             _ = QuantizerPropagationSolver.coalesce_insertion_points(input_insertion_points,

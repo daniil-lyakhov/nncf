@@ -119,7 +119,7 @@ class NNCFNetwork(tf.keras.Model):
         hooks = getattr(self, '_pre_hooks') if hook.is_pre_hook else getattr(self, '_post_hooks')
         # TODO(andrey-churkin): What we should do if the hook with the same `target_point`
         # already exists inside `hooks`? Is it a valid case?
-        hooks.setdefault(hook.target_point.op_name, []).append(hook)
+        hooks.setdefault(hook.target_point.target_node_name, []).append(hook)
 
     @property
     def _hooks(self):

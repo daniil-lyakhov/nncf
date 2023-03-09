@@ -25,6 +25,7 @@ from torch import nn
 
 from nncf.common.graph import NNCFNodeName
 from nncf.common.logging import nncf_logger
+from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.quantization.quantizer_setup import QuantizationPointId
 from nncf.common.quantization.quantizer_setup import QuantizerSetupBase
 from nncf.common.quantization.quantizers import calculate_asymmetric_level_ranges
@@ -37,8 +38,7 @@ from nncf.common.utils.registry import Registry
 from nncf.torch.checkpoint_loading import OPTIONAL_PARAMETERS_REGISTRY
 from nncf.torch.dynamic_graph.context import no_nncf_trace
 from nncf.torch.functions import clamp
-from nncf.torch.graph.transformations.commands import PTTargetPoint
-from nncf.torch.graph.transformations.commands import TargetType
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.layer_utils import COMPRESSION_MODULES
 from nncf.torch.layer_utils import CompressionParameter
 from nncf.torch.quantization.quantize_functions import ExportQuantizeToFakeQuantize
@@ -158,7 +158,7 @@ class PTQPointStateNames:
 class PTQuantizationPoint:
     _state_names = PTQPointStateNames
 
-    def __init__(self, qspec: PTQuantizerSpec, target_point: PTTargetPoint,
+    def __init__(self, qspec: PTQuantizerSpec, target_point: TargetPoint,
                  directly_quantized_operator_node_names: List[NNCFNodeName]):
         self.qspec = qspec
         self.target_point = target_point
@@ -194,7 +194,7 @@ class PTQuantizationPoint:
         :param state: Output of `get_state()` method.
         """
         kwargs = {
-            cls._state_names.TARGET_POINT: PTTargetPoint.from_state(state[cls._state_names.TARGET_POINT]),
+            cls._state_names.TARGET_POINT: TargetPoint.from_state(state[cls._state_names.TARGET_POINT]),
             cls._state_names.QSPEC: PTQuantizerSpec.from_state(state[cls._state_names.QSPEC]),
             cls._state_names.NAMES_OF_QUANTIZED_OPS: state[cls._state_names.NAMES_OF_QUANTIZED_OPS]
         }

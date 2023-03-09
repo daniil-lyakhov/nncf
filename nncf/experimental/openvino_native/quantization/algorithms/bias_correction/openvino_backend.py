@@ -34,7 +34,7 @@ from nncf.experimental.openvino_native.graph.transformations.commands import OVB
 from nncf.experimental.openvino_native.graph.transformations.commands import OVModelExtractionCommand
 from nncf.experimental.openvino_native.graph.transformations.commands import OVOutputInsertionCommand
 from nncf.experimental.openvino_native.graph.transformations.commands import OVFQNodeRemovingCommand
-from nncf.experimental.openvino_native.graph.transformations.commands import OVTargetPoint
+from nncf.experimental.openvino_native.graph.transformations.commands import TargetPoint
 from nncf.experimental.openvino_native.statistics.collectors import OVNNCFCollectorTensorProcessor
 from nncf.experimental.openvino_native.statistics.collectors import OVBatchStatisticCollector
 from nncf.experimental.openvino_native.statistics.collectors import OVMeanStatisticCollector
@@ -67,8 +67,8 @@ class OVBiasCorrectionAlgoBackend(BiasCorrectionAlgoBackend):
     @staticmethod
     def target_point(target_type: TargetType,
                      target_node_name: str,
-                     port_id: int) -> OVTargetPoint:
-        return OVTargetPoint(target_type, target_node_name, port_id)
+                     port_id: int) -> TargetPoint:
+        return TargetPoint(target_type, target_node_name, port_id)
 
     @staticmethod
     def create_bias_correction_command(node: NNCFNode,
@@ -81,11 +81,11 @@ class OVBiasCorrectionAlgoBackend(BiasCorrectionAlgoBackend):
         return OVModelExtractionCommand(inputs, outputs)
 
     @staticmethod
-    def output_insertion_command(nncf_graph: NNCFGraph, target_point: OVTargetPoint) -> OVOutputInsertionCommand:
+    def output_insertion_command(nncf_graph: NNCFGraph, target_point: TargetPoint) -> OVOutputInsertionCommand:
         return OVOutputInsertionCommand(target_point)
 
     @staticmethod
-    def node_removing_command(target_point: OVTargetPoint) -> OVFQNodeRemovingCommand:
+    def node_removing_command(target_point: TargetPoint) -> OVFQNodeRemovingCommand:
         return OVFQNodeRemovingCommand(target_point)
 
     @staticmethod

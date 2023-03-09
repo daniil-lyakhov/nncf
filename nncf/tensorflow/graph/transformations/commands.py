@@ -52,7 +52,7 @@ class TFLayerPoint(TargetPoint):
 
     def __eq__(self, other: 'TFLayerPoint') -> bool:
         if isinstance(other, TFLayerPoint):
-            return self.type == other.type and self.layer_name == other.layer_name
+            return self.target_type == other.target_type and self.layer_name == other.layer_name
         return False
 
     def __str__(self) -> str:
@@ -235,7 +235,7 @@ class TFAfterLayer(TFLayerPoint):
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, TFAfterLayer) \
-               and self.type == other.type \
+               and self.target_type == other.target_type \
                and self.layer_name == other.layer_name \
                and self.instance_idx == other.instance_idx \
                and self._output_port_id == other.output_port_id
@@ -297,7 +297,7 @@ class TFLayerWeight(TFLayerPoint):
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, TFLayerWeight) and \
-               self.type == other.type and \
+               self.target_type == other.target_type and \
                self.layer_name == other.layer_name and \
                self.weights_attr_name == other.weights_attr_name
 
@@ -356,7 +356,7 @@ class TFOperationWithWeights(TFLayerWeight):
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, TFOperationWithWeights) and \
-               self.type == other.type and \
+               self.target_type == other.target_type and \
                self.layer_name == other.layer_name and \
                self.weights_attr_name == other.weights_attr_name and \
                self.operation_name == other.operation_name

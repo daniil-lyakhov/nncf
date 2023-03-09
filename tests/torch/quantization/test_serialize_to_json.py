@@ -9,7 +9,7 @@ from nncf.common.quantization.quantizer_setup import SingleConfigQuantizerSetup
 from nncf.common.quantization.quantizer_setup import WeightQuantizationInsertionPoint
 from nncf.common.quantization.structs import QuantizerConfig
 from nncf.torch.dynamic_graph.context import Scope
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from tests.shared.serialization import check_serialization
 
 DUMMY_STR = 'dummy'
@@ -81,7 +81,7 @@ def test_quantizer_setup_serialization():
     scope = Scope.from_str('MyConv/1[2]/3[4]/5')
     assert scope == Scope.from_str(str(scope))
 
-    pttp_1 = PTTargetPoint(target_type_1, target_node_name=str(scope), input_port_id=7)
+    pttp_1 = TargetPoint(target_type_1, target_node_name=str(scope), input_port_id=7)
     check_serialization(pttp_1)
 
     wqip = WeightQuantizationInsertionPoint(target_node_name=DUMMY_STR)

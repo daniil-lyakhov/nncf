@@ -144,7 +144,7 @@ class TemplateTestStatisticsAggregator:
 
         def filter_func(point):
             return algorithm_name in point.algorithm_to_tensor_collectors and \
-                   point.target_point.type == target_point.type
+                   point.target_point.type == target_point.target_type
 
         for tensor_collector in statistics_points.get_algo_statistics_for_node(
                 target_point.target_node_name,

@@ -281,10 +281,10 @@ def test_transformation_layout_insertion_case():
     res_transformations = transformation_layout.transformations
     assert len(res_transformations) == 2
     assert res_transformations[0].type == TransformationType.MULTI_INSERT
-    assert res_transformations[0].target_point.type == TargetType.LAYER
+    assert res_transformations[0].target_point.target_type == TargetType.LAYER
     assert res_transformations[0].target_point.layer_name == 'layer_0'
     assert res_transformations[1].type == TransformationType.MULTI_INSERT
-    assert res_transformations[1].target_point.type == TargetType.LAYER
+    assert res_transformations[1].target_point.target_type == TargetType.LAYER
     assert res_transformations[1].target_point.layer_name == 'layer_1'
 
     res_cmds = res_transformations[0].commands
@@ -337,26 +337,26 @@ def test_transformation_layout_removal_case():
     res_transformations = transformation_layout.transformations
     assert len(res_transformations) == 5
     assert res_transformations[0].type == TransformationType.INSERT
-    assert res_transformations[0].target_point.type == TargetType.OPERATION_WITH_WEIGHTS
+    assert res_transformations[0].target_point.target_type == TargetType.OPERATION_WITH_WEIGHTS
     assert res_transformations[0].target_point.layer_name == 'layer_0'
     assert res_transformations[0].target_point.weights_attr_name == 'weight_0'
 
     assert res_transformations[1].type == TransformationType.REMOVE
-    assert res_transformations[1].target_point.type == TargetType.OPERATION_WITH_WEIGHTS
+    assert res_transformations[1].target_point.target_type == TargetType.OPERATION_WITH_WEIGHTS
     assert res_transformations[1].target_point.layer_name == 'layer_0'
     assert res_transformations[1].target_point.weights_attr_name == 'weight_0'
     assert res_transformations[1].target_point.operation_name == 'sparsity_operation'
 
     assert res_transformations[2].type == TransformationType.INSERT
-    assert res_transformations[2].target_point.type == TargetType.AFTER_LAYER
+    assert res_transformations[2].target_point.target_type == TargetType.AFTER_LAYER
     assert res_transformations[2].target_point.layer_name == 'layer_0'
 
     assert res_transformations[3].type == TransformationType.REMOVE
-    assert res_transformations[3].target_point.type == TargetType.LAYER
+    assert res_transformations[3].target_point.target_type == TargetType.LAYER
     assert res_transformations[3].target_point.layer_name == 'layer_1'
 
     assert res_transformations[4].type == TransformationType.INSERT
-    assert res_transformations[4].target_point.type == TargetType.OPERATION_WITH_WEIGHTS
+    assert res_transformations[4].target_point.target_type == TargetType.OPERATION_WITH_WEIGHTS
     assert res_transformations[4].target_point.layer_name == 'layer_0'
     assert res_transformations[4].target_point.weights_attr_name == 'weight_0'
 

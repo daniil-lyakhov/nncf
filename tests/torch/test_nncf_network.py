@@ -54,7 +54,7 @@ from nncf.torch.graph.operator_metatypes import PTReshapeMetatype
 from nncf.torch.graph.operator_metatypes import PTConv2dMetatype
 from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.layers import NNCFConv2d
@@ -312,31 +312,31 @@ class TestInsertionCommands:
                                             [ModelInputInfo([1, 1, 10, 10])])  # type: NNCFNetwork
 
     conv1_node_name = 'InsertionPointTestModel/NNCFConv2d[conv1]/conv2d_0'
-    point_for_conv1_weights = PTTargetPoint(target_type=TargetType.OPERATION_WITH_WEIGHTS,
+    point_for_conv1_weights = TargetPoint(target_type=TargetType.OPERATION_WITH_WEIGHTS,
                                             target_node_name=conv1_node_name)
-    point_for_conv1_inputs = PTTargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
+    point_for_conv1_inputs = TargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
                                            target_node_name=conv1_node_name)
-    point_for_conv1_activations = PTTargetPoint(target_type=TargetType.POST_LAYER_OPERATION,
+    point_for_conv1_activations = TargetPoint(target_type=TargetType.POST_LAYER_OPERATION,
                                                 target_node_name=conv1_node_name)
 
     conv2_node_name = 'InsertionPointTestModel/NNCFConv2d[conv2]/conv2d_0'
-    point_for_conv2_weights = PTTargetPoint(target_type=TargetType.OPERATION_WITH_WEIGHTS,
+    point_for_conv2_weights = TargetPoint(target_type=TargetType.OPERATION_WITH_WEIGHTS,
                                             target_node_name=conv2_node_name)
-    point_for_conv2_inputs = PTTargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
+    point_for_conv2_inputs = TargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
                                            target_node_name=conv2_node_name)
-    point_for_conv2_activations = PTTargetPoint(target_type=TargetType.POST_LAYER_OPERATION,
+    point_for_conv2_activations = TargetPoint(target_type=TargetType.POST_LAYER_OPERATION,
                                                 target_node_name=conv2_node_name)
 
     linear_node_name = 'InsertionPointTestModel/linear_0'
-    point_for_linear_weight_input = PTTargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
+    point_for_linear_weight_input = TargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
                                                   target_node_name=linear_node_name, input_port_id=0)
-    point_for_linear_activation = PTTargetPoint(target_type=TargetType.OPERATOR_POST_HOOK,
+    point_for_linear_activation = TargetPoint(target_type=TargetType.OPERATOR_POST_HOOK,
                                                 target_node_name=linear_node_name)
 
     relu_node_name = 'InsertionPointTestModel/ReLU[relu]/relu_0'
-    point_for_relu_inputs = PTTargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
+    point_for_relu_inputs = TargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
                                           target_node_name=relu_node_name, input_port_id=0)
-    point_for_relu_activations = PTTargetPoint(target_type=TargetType.OPERATOR_POST_HOOK,
+    point_for_relu_activations = TargetPoint(target_type=TargetType.OPERATOR_POST_HOOK,
                                                target_node_name=relu_node_name)
 
     available_points = [point_for_conv1_weights,
@@ -351,7 +351,7 @@ class TestInsertionCommands:
                         point_for_relu_inputs]
 
     @pytest.mark.parametrize("target_point", available_points)
-    def test_single_insertions(self, setup, target_point: PTTargetPoint):
+    def test_single_insertions(self, setup, target_point: TargetPoint):
         insertion_point = PTInsertionPoint(target_point.target_type,
                                            OperationAddress.from_str(target_point.target_node_name),
                                            target_point.input_port_id)

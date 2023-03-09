@@ -15,20 +15,20 @@ from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.quantization.quantizer_setup import ActivationQuantizationInsertionPoint
 from nncf.common.quantization.quantizer_setup import QuantizationInsertionPointBase
 from nncf.common.quantization.quantizer_setup import WeightQuantizationInsertionPoint
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 
 
 class PTTargetPointTranslator:
     @staticmethod
-    def translate(qip: QuantizationInsertionPointBase) -> PTTargetPoint:
+    def translate(qip: QuantizationInsertionPointBase) -> TargetPoint:
         if isinstance(qip, WeightQuantizationInsertionPoint):
-            return PTTargetPoint(target_type=TargetType.OPERATION_WITH_WEIGHTS,
+            return TargetPoint(target_type=TargetType.OPERATION_WITH_WEIGHTS,
                                  target_node_name=qip.target_node_name)
         assert isinstance(qip, ActivationQuantizationInsertionPoint)
         input_port_id = qip.input_port_id
         if input_port_id is not None:
-            return PTTargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
+            return TargetPoint(target_type=TargetType.OPERATOR_PRE_HOOK,
                                  target_node_name=qip.target_node_name,
-                                 input_port_id=input_port_id)
-        return PTTargetPoint(target_type=TargetType.OPERATOR_POST_HOOK,
+                                 port_id=input_port_id)
+        return TargetPoint(target_type=TargetType.OPERATOR_POST_HOOK,
                              target_node_name=qip.target_node_name)

@@ -60,7 +60,7 @@ from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
 from nncf.torch.graph.operator_metatypes import PTDepthwiseConv2dSubtype
 from nncf.torch.graph.operator_metatypes import PTModuleLinearMetatype
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.layers import NNCFConv2d
 from nncf.torch.layers import NNCFLinear
 from nncf.torch.module_operations import UpdateBatchNormParams
@@ -970,7 +970,7 @@ class ElasticWidthBuilder(SingleElasticityBuilder):
                 update_conv_params_op = UpdateWeightAndOptionalBias(elastic_width_operation)
                 transformation_commands.append(
                     PTInsertionCommand(
-                        PTTargetPoint(
+                        TargetPoint(
                             TargetType.PRE_LAYER_OPERATION,
                             target_node_name=node_name
                         ),
@@ -1008,7 +1008,7 @@ class ElasticWidthBuilder(SingleElasticityBuilder):
                 node_name_vs_dynamic_input_width_op_map[node_name] = update_module_params.op
                 transformation_commands.append(
                     PTInsertionCommand(
-                        PTTargetPoint(
+                        TargetPoint(
                             TargetType.PRE_LAYER_OPERATION,
                             target_node_name=node_name
                         ),

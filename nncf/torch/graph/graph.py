@@ -11,14 +11,12 @@
  limitations under the License.
 """
 
-from typing import Dict
-from typing import List
-from typing import Tuple
+from typing import Dict, List, Tuple, Optional
 from nncf.common.graph import NNCFGraph
 from nncf.common.graph import NNCFNode
 from nncf.common.graph import NNCFNodeName
 from nncf.torch.dynamic_graph.scope import Scope
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 
 
 class PTNNCFGraph(NNCFGraph):
@@ -41,11 +39,11 @@ class PTNNCFGraph(NNCFGraph):
             retval[port_id] = edge_attr_dict[NNCFGraph.ACTIVATION_SHAPE_EDGE_ATTR]
         return retval
 
-    def get_input_shape_for_insertion_point(self, insertion_point: PTTargetPoint) -> Tuple[int]:
-        target_node_name = insertion_point.target_node_name
-        if insertion_point.input_port_id is not None:
+    def get_input_shape(self, target_node_name: str, port_id: Optional[int] = None) -> Tuple[int]:
+        target_node_name = target_node_name
+        if port_id is not None:
             quantizer_input_shape = self.get_input_shapes_for_node(
-                target_node_name)[insertion_point.input_port_id]
+                target_node_name)[port_id]
         else:
             # Tailored for post-hook quantization and first output quantization only
             quantizer_input_shape = self.get_output_shapes_for_node(

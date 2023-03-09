@@ -12,8 +12,7 @@
 """
 
 from enum import IntEnum
-from typing import Any
-from typing import Dict
+from typing import Any, Dict, Optional
 
 from nncf.common.stateful_classes_registry import CommonStatefulClassesRegistry
 
@@ -119,6 +118,8 @@ class TransformationType(IntEnum):
 
 class TargetPointStateNames:
     TARGET_TYPE = 'target_type'
+    TARGET_NODE_NAME = 'target_node_name'
+    PORT_ID = 'port_id'
 
 
 @CommonStatefulClassesRegistry.register()
@@ -135,24 +136,45 @@ class TargetPoint:
     """
     _state_names = TargetPointStateNames
 
-    def __init__(self, target_type: TargetType):
+    def __init__(self, target_type: TargetType, target_node_name: str,
+                 port_id: Optional[int] = None):
         """
         Constructor.
 
         :param target_type: Type of the target point.
         """
         self._target_type = target_type
+        self._target_node_name = target_node_name
+        self._port_id = port_id
 
     @property
-    def type(self) -> TargetType:
+    def target_type(self) -> TargetType:
         return self._target_type
 
-    def __eq__(self, other: Any) -> bool:
-        return isinstance(other, TargetPoint) and \
-            self.type == other.type
+    @property
+    def target_node_name(self) -> str:
+        return self._target_node_name
+
+    @property
+    def port_id(self):
+        return self._port_id
+
+    def __lt__(self, other: 'TargetPoint') -> bool:
+        params = ['_target_type', '_target_node_name', '_port_id']
+        for param in params:
+            if self.__getattribute__(param) < other.__getattribute__(param):
+                return True
+            if self.__getattribute__(param) > other.__getattribute__(param):
+                return False
+        return False
 
     def __str__(self) -> str:
-        return str(self.type)
+        items = [
+            str(self._target_type),
+            str(self._target_node_name),
+            str(self.port_id),
+        ]
+        return ' '.join(items)
 
     def __hash__(self) -> int:
         return hash(str(self))
@@ -164,7 +186,9 @@ class TargetPoint:
 
         :return: state of the object
         """
-        return {self._state_names.TARGET_TYPE: self._target_type.get_state()}
+        return {self._state_names.TARGET_TYPE: self._target_type.get_state(),
+                self._state_names.TARGET_NODE_NAME: self._target_node_name,
+                self._state_names.PORT_ID: self._port_id}
 
     def is_weight_target_point(self):
         return self._target_type == TargetType.OPERATION_WITH_WEIGHTS
@@ -177,7 +201,9 @@ class TargetPoint:
         :param state: Output of `get_state()` method.
         """
         kwargs = {
-            cls._state_names.TARGET_TYPE: TargetType.from_state(state[cls._state_names.TARGET_TYPE])
+            cls._state_names.TARGET_TYPE: TargetType.from_state(state[cls._state_names.TARGET_TYPE]),
+            cls._state_names.TARGET_NODE_NAME: state[cls._state_names.TARGET_NODE_NAME],
+            cls._state_names.PORT_ID: state[cls._state_names.PORT_ID],
         }
         return cls(**kwargs)
 

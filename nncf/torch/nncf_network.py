@@ -62,7 +62,7 @@ from nncf.torch.graph.graph_builder import GraphBuilder
 from nncf.torch.graph.graph_builder import GraphConverter
 from nncf.torch.graph.operator_metatypes import OPERATORS_WITH_WEIGHTS_METATYPES
 from nncf.torch.graph.operator_metatypes import PTSplitMetatype
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.knowledge_distillation.knowledge_distillation_handler import KnowledgeDistillationLossHandler
 from nncf.torch.layer_utils import _NNCFModuleMixin
@@ -198,7 +198,7 @@ class NNCFNetwork(nn.Module, PostGraphBuildActing):
         self.debug_interface = CombinedDebugInterface() if is_debug() else None
         self._extra_module_types = []  # type: List[ExtraCompressionModuleType]
         # pylint:disable=line-too-long
-        self._insertions_into_original_graph = {}  # type: Dict[PTTargetPoint, List[Tuple[Callable, TransformationPriority]]]
+        self._insertions_into_original_graph = {}  # type: Dict[TargetPoint, List[Tuple[Callable, TransformationPriority]]]
 
         _orig_graph_build_forward_fn = self._get_dummy_forward_fn_for_graph_building(with_input_tracing=True,
                                                                                      with_output_tracing=True)
@@ -722,13 +722,13 @@ class PTModelTransformer(ModelTransformer):
     def transform(self, transformation_layout: PTTransformationLayout) -> NNCFNetwork:
         fns_grouped_by_points = {}  # type: Dict[PTInsertionPoint, List[Tuple[Callable, TransformationPriority]]]
         for transformation_command in transformation_layout.transformations:  # type: PTInsertionCommand
-            target_point = transformation_command.target_point  # type: PTTargetPoint
+            target_point = transformation_command.target_point  # type: TargetPoint
             target_node_name = target_point.target_node_name
             pt_ip = PTInsertionPoint(target_type=target_point.target_type,
                                      op_address=self._node_to_op_address_mapping[target_node_name],
-                                     input_port_id=target_point.input_port_id)
+                                     input_port_id=target_point.port_id)
             fn = transformation_command.fn
-            if target_point.type is TargetType.OPERATION_WITH_WEIGHTS:
+            if target_point.target_type is TargetType.OPERATION_WITH_WEIGHTS:
                 fn = UpdateWeight(fn)
             tup = (fn, transformation_command.priority)
             if pt_ip not in fns_grouped_by_points:

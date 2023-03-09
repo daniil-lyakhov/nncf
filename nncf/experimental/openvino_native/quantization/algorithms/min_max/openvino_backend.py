@@ -31,7 +31,7 @@ from nncf.experimental.openvino_native.graph.metatypes.openvino_metatypes import
 from nncf.experimental.openvino_native.graph.metatypes.openvino_metatypes import OVNonMaxSuppressionMetatype
 from nncf.experimental.openvino_native.graph.metatypes.openvino_metatypes import OVShapeMetatype
 from nncf.experimental.openvino_native.graph.transformations.commands import OVQuantizerInsertionCommand
-from nncf.experimental.openvino_native.graph.transformations.commands import OVTargetPoint
+from nncf.experimental.openvino_native.graph.transformations.commands import TargetPoint
 from nncf.experimental.openvino_native.hardware.config import OVHWConfig
 from nncf.experimental.openvino_native.quantization.default_quantization import DEFAULT_OV_QUANT_TRAIT_TO_OP_DICT
 from nncf.experimental.openvino_native.statistics.collectors import OVMeanMinMaxStatisticCollector
@@ -68,13 +68,13 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
     @staticmethod
     def target_point(target_type: TargetType,
                      target_node_name: str,
-                     port_id: int) -> OVTargetPoint:
-        return OVTargetPoint(target_type, target_node_name, port_id)
+                     port_id: int) -> TargetPoint:
+        return TargetPoint(target_type, target_node_name, port_id)
 
     @staticmethod
     def create_activation_quantizer_insertion_command(
             nncf_graph: NNCFGraph,
-            target_point: OVTargetPoint,
+            target_point: TargetPoint,
             quantizer_config: QuantizerConfig,
             statistics: MinMaxTensorStatistic) -> OVQuantizerInsertionCommand:
         parameters = calculate_quantizer_parameters(statistics, quantizer_config,
@@ -84,7 +84,7 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
     @staticmethod
     def create_weight_quantizer_insertion_command(
             nncf_graph: NNCFGraph,
-            target_point: OVTargetPoint,
+            target_point: TargetPoint,
             quantizer_config: QuantizerConfig,
             statistics: MinMaxTensorStatistic) -> OVQuantizerInsertionCommand:
         parameters = calculate_quantizer_parameters(statistics, quantizer_config,
@@ -94,7 +94,7 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
     @staticmethod
     def _get_reduction_shape_and_use_abs_max(
             nncf_graph: NNCFGraph,
-            target_point: OVTargetPoint,
+            target_point: TargetPoint,
             quantizer_config: QuantizerConfig) -> Tuple[ReductionShape, bool]:
         use_abs_max = quantizer_config.mode == QuantizationMode.SYMMETRIC
         if not quantizer_config.per_channel:
@@ -102,12 +102,12 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
 
         node = nncf_graph.get_node_by_name(target_point.target_node_name)
         if not target_point.is_weight_target_point():
-            if target_point.type == TargetType.PRE_LAYER_OPERATION:
+            if target_point.target_type == TargetType.PRE_LAYER_OPERATION:
                 shape = nncf_graph.get_input_edges(node)[target_point.port_id].tensor_shape
-            elif target_point.type == TargetType.POST_LAYER_OPERATION:
+            elif target_point.target_type == TargetType.POST_LAYER_OPERATION:
                 shape = nncf_graph.get_output_edges(node)[target_point.port_id].tensor_shape
             else:
-                raise NotImplementedError(f'Unsupported target point type {target_point.type}.')
+                raise NotImplementedError(f'Unsupported target point type {target_point.target_type}.')
 
             # TODO (l-bat): Disable quantizer propogation through layout changing operations
             channel_axis = 1  # OpenVINO activations have channel first layout: [N, C, Z, Y, X]
@@ -128,7 +128,7 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
 
     @staticmethod
     def minmax_statistic_collector(nncf_graph: NNCFGraph,
-                                   target_point: OVTargetPoint,
+                                   target_point: TargetPoint,
                                    quantizer_config: QuantizerConfig,
                                    num_samples: int = None) -> OVMinMaxStatisticCollector:
         reduction_shape, use_abs_max =\
@@ -138,7 +138,7 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
 
     @staticmethod
     def mean_minmax_statistic_collector(nncf_graph: NNCFGraph,
-                                        target_point: OVTargetPoint,
+                                        target_point: TargetPoint,
                                         quantizer_config: QuantizerConfig,
                                         use_per_sample_stats: bool,
                                         num_samples: int = None) -> OVMeanMinMaxStatisticCollector:

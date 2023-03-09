@@ -20,7 +20,7 @@ from nncf.common.stateful_classes_registry import TF_STATEFUL_CLASSES
 
 
 class TFTargetPointStateNames:
-    OP_NAME = 'op_name'
+    target_node_name = 'target_node_name'
     OP_TYPE_NAME = 'op_type_name'
     PORT_ID = 'port_id'
     TARGET_TYPE = 'target_type'
@@ -35,7 +35,7 @@ class TFTargetPoint(TargetPoint):
     _state_names = TFTargetPointStateNames
 
     def __init__(self,
-                 op_name: str,
+                 target_node_name: str,
                  op_type_name: str,
                  port_id: int,
                  target_type: TargetType):
@@ -47,26 +47,17 @@ class TFTargetPoint(TargetPoint):
         :param port_id: Port id.
         :param target_type: Type of the target point.
         """
-        super().__init__(target_type)
-        self.op_name = op_name
+        super().__init__(target_type, target_node_name, port_id)
+        # TODO(acurckin) move op_type_name to a different class
         self.op_type_name = op_type_name
-        self.port_id = port_id
 
     def __eq__(self, other: 'TFTargetPoint') -> bool:
         return isinstance(other, TFTargetPoint) and \
-               self.type == other.type and \
-               self.op_name == other.op_name and \
                self.op_type_name == other.op_type_name and \
-               self.port_id == other.port_id
+               super().__eq__()
 
     def __str__(self) -> str:
-        items = [
-            super().__str__(),
-            self.op_name,
-            self.op_type_name,
-            str(self.port_id),
-        ]
-        return ' '.join(items)
+        return super().__str__ + str(self.opt_type_name)
 
     def get_state(self) -> Dict[str, Any]:
         """
@@ -76,11 +67,9 @@ class TFTargetPoint(TargetPoint):
         :return: State of the object.
         """
         state = {
-            self._state_names.OP_NAME: self.op_name,
             self._state_names.OP_TYPE_NAME: self.op_type_name,
-            self._state_names.PORT_ID: self.port_id,
-            self._state_names.TARGET_TYPE: self.type.get_state(),
         }
+        state.update(super().get_state())
         return state
 
     @classmethod
@@ -91,7 +80,7 @@ class TFTargetPoint(TargetPoint):
         :param state: Output of `get_state()` method.
         """
         kwargs = {
-            cls._state_names.OP_NAME: state[cls._state_names.OP_NAME],
+            cls._state_names.target_node_name: state[cls._state_names.target_node_name],
             cls._state_names.OP_TYPE_NAME: state[cls._state_names.OP_TYPE_NAME],
             cls._state_names.PORT_ID: state[cls._state_names.PORT_ID],
             cls._state_names.TARGET_TYPE: TargetType.from_state(state[cls._state_names.TARGET_TYPE]),

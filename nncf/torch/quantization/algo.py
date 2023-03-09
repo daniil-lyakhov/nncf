@@ -97,7 +97,7 @@ from nncf.torch.graph.graph import PTNNCFGraph
 from nncf.torch.graph.operator_metatypes import PTDepthwiseConv2dSubtype
 from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import TargetPoint
 from nncf.torch.graph.transformations.commands import TransformationPriority
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.hardware.config import PTHWConfig
@@ -463,7 +463,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
         self._weight_quantizers = OrderedDict()  # Quantizers applied via UpdateWeights
         self._non_weight_quantizers = OrderedDict()  # All the other quantizers
         self._quantizers_input_shapes = OrderedDict()
-        self._processed_insertion_points = set()  # type: Set[PTTargetPoint]
+        self._processed_insertion_points = set()  # type: Set[TargetPoint]
         self._groups_of_adjacent_quantizers = GroupsOfAdjacentQuantizers()  # type: GroupsOfAdjacentQuantizers
         self._setup_to_module_id_translation_dict = {}  # type: Dict[QuantizationPointId, QuantizerId]
         self.eval_ops_exec_ctx = []
@@ -594,7 +594,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
 
     def _get_minmax_values_for_quantizer_locations(self,
                                                    quantizer_setup: SingleConfigQuantizerSetup,
-                                                   tensor_statistics: Dict[PTTargetPoint, Dict[ReductionShape,
+                                                   tensor_statistics: Dict[TargetPoint, Dict[ReductionShape,
                                                                                                TensorStatistic]],
                                                    target_model_graph: PTNNCFGraph) -> \
             Dict[QuantizationPointId, MinMaxTensorStatistic]:
@@ -613,7 +613,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
                     input_shape = layer_attrs.get_weight_shape()
                     channel_idx = layer_attrs.get_target_dim_for_compression()
                 else:
-                    input_shape = target_model_graph.get_input_shape_for_insertion_point(qp.insertion_point)
+                    input_shape = target_model_graph.get_input_shape(qp.insertion_point.target_node_name)
                     channel_idx = 1  # channel dim for activations
                 scale_shape = tuple(get_scale_shape(input_shape,
                                                     qp.is_weight_quantization_point(),
@@ -675,7 +675,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
     def get_statistics_for_quantizer_setup(target_model: NNCFNetwork,
                                            quantizer_setup: QuantizerSetupBase,
                                            range_init_params: PTRangeInitParams) \
-        -> Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]]:
+        -> Dict[TargetPoint, Dict[ReductionShape, TensorStatistic]]:
         if range_init_params is None:
             return {}
         observation_points_vs_collectors_dict = StatCollectorGenerator. \
@@ -701,7 +701,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
     def _get_statistics_for_final_range_init(self, target_model: NNCFNetwork,
                                              quantizer_setup: QuantizerSetupBase,
                                              range_init_params: PTRangeInitParams) \
-            -> Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]]:
+            -> Dict[TargetPoint, Dict[ReductionShape, TensorStatistic]]:
 
         return self.get_statistics_for_quantizer_setup(target_model, quantizer_setup, range_init_params)
 
@@ -784,7 +784,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
                                               per_channel=qconfig.per_channel,
                                               channel_idx=layer_attributes.get_target_dim_for_compression())
             else:
-                input_shape = target_model_graph.get_input_shape_for_insertion_point(insertion_point)
+                input_shape = target_model_graph.get_input_shape(insertion_point.target_node_name)
                 scale_shape = get_scale_shape(list(input_shape),
                                                     is_weights=False, per_channel=qconfig.per_channel)
 
@@ -854,7 +854,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
         for args in adjust_padding_args:
             ap = CalculatePaddingAdjustment(args.activation_quantizer)
             op = UpdatePaddingValue(ap).to(self._device_for_callable_obj_creation)
-            insertion_point = PTTargetPoint(target_type=TargetType.PRE_LAYER_OPERATION,
+            insertion_point = TargetPoint(target_type=TargetType.PRE_LAYER_OPERATION,
                                             target_node_name=args.module_op_node_name)
             nncf_logger.debug(f'Padding will be adjusted for {args.module_op_node_name}')
             commands.append(PTInsertionCommand(insertion_point, op, TransformationPriority.DEFAULT_PRIORITY))
@@ -1105,7 +1105,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
         return quantizer_config_list[0]
 
     def _quantize_at_points_by_single_module(self, target_model: NNCFNetwork,
-                                             insertion_points: List[PTTargetPoint],
+                                             insertion_points: List[TargetPoint],
                                              qspec: PTQuantizerSpec,
                                              range_init_minmax_values: Tuple[torch.Tensor, torch.Tensor] = None) -> \
             Tuple[QuantizerId, List[PTInsertionCommand]]:
@@ -1132,7 +1132,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
         if not insertion_points:
             raise RuntimeError("No insertion points to put quantizers into!")
 
-        def is_weights(ip: PTTargetPoint) -> bool:
+        def is_weights(ip: TargetPoint) -> bool:
             return ip.target_type is TargetType.OPERATION_WITH_WEIGHTS
 
         primary_ip = insertion_points[0]
@@ -1155,7 +1155,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
             if is_weights(ip):
                 qids.append(WeightQuantizerId(ip.target_node_name))
             else:
-                qids.append(NonWeightQuantizerId(ip.target_node_name, ip.input_port_id))
+                qids.append(NonWeightQuantizerId(ip.target_node_name, ip.port_id))
 
         serialized_insertions_list = [str(x) for x in qids]
         external_quantizer_storage_key = ";".join(serialized_insertions_list)
@@ -1175,10 +1175,10 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
             input_shape = layer_attributes.get_weight_shape()
             self._quantizers_input_shapes[primary_qid] = tuple(input_shape)
         else:
-            primary_qid = NonWeightQuantizerId(primary_ip.target_node_name, primary_ip.input_port_id)
+            primary_qid = NonWeightQuantizerId(primary_ip.target_node_name, primary_ip.port_id)
             self._non_weight_quantizers[primary_qid] = \
                 NonWeightQuantizerInfo(quantizer, insertion_points)
-            input_shape = target_model_graph.get_input_shape_for_insertion_point(insertion_points[0])
+            input_shape = target_model_graph.get_input_shape(insertion_points[0].target_node_name, insertion_points[0].port_id)
             self._quantizers_input_shapes[primary_qid] = input_shape
 
         if not (is_weights(primary_ip) and len(insertion_points) == 1):
@@ -1619,7 +1619,7 @@ class QuantizationDebugInterface(DebugInterface):
 class ExperimentalQuantizationBuilder(QuantizationBuilder):
     def __init__(self, quantizer_setup: MultiConfigQuantizerSetup,
                  initial_quantizer_setup: SingleConfigQuantizerSetup,
-                 tensor_stats_for_all_setup_variations: Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]],
+                 tensor_stats_for_all_setup_variations: Dict[TargetPoint, Dict[ReductionShape, TensorStatistic]],
                  hw_config: HWConfig = None):
         should_init = bool(tensor_stats_for_all_setup_variations)
         super().__init__(NNCFConfig(), should_init=should_init)
@@ -1639,7 +1639,7 @@ class ExperimentalQuantizationBuilder(QuantizationBuilder):
                                              target_model: NNCFNetwork,
                                              quantizer_setup: QuantizerSetupBase,
                                              range_init_params: PTRangeInitParams) -> Dict[
-        PTTargetPoint, Dict[ReductionShape, TensorStatistic]]:
+        TargetPoint, Dict[ReductionShape, TensorStatistic]]:
         return self._tensor_stats
 
     def _build_controller(self, model: NNCFNetwork) -> 'ExperimentalQuantizationController':
@@ -1690,7 +1690,7 @@ class ExperimentalQuantizationController(QuantizationController):
                  quantizer_setup: MultiConfigQuantizerSetup,
                  initial_quantizer_setup: SingleConfigQuantizerSetup,
                  setup_to_module_id_translation_dict: Dict[QuantizationPointId, QuantizerId],
-                 tensor_stats: Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]],
+                 tensor_stats: Dict[TargetPoint, Dict[ReductionShape, TensorStatistic]],
                  build_time_metric_info: QuantizationShareBuildTimeInfo,
                  should_setup_adjust_pad_ops=False,
                  hw_config: HWConfig = None):
