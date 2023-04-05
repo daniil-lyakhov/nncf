@@ -194,14 +194,15 @@ class ShapePruningProcessor:
         next_nodes = {}
         for cluster in pruning_groups.get_all_clusters():
             next_nodes_cluster = set()
-            cluster_nodes = set()
+            depthwise_cluster_nodes = set()
             for pruned_layer_info in cluster.elements:
                 nncf_cluster_node = graph.get_node_by_id(pruned_layer_info.nncf_node_id)
-                cluster_nodes.add(nncf_cluster_node)
+                if pruned_layer_info.is_depthwise:
+                    depthwise_cluster_nodes.add(nncf_cluster_node)
                 curr_next_nodes = get_next_nodes_of_types(graph, nncf_cluster_node, self._prunable_types)
-
                 next_nodes_cluster = next_nodes_cluster.union(curr_next_nodes)
-            next_nodes_cluster = next_nodes_cluster - cluster_nodes
+
+            next_nodes_cluster = next_nodes_cluster - depthwise_cluster_nodes
             next_nodes[cluster.id] = []
             for next_node in next_nodes_cluster:
                 sparse_multiplier = self._get_next_node_sparse_multiplier(graph, next_node, cluster)
