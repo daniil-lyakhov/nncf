@@ -13,7 +13,9 @@ from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import openvino.runtime as ov
+from collections import defaultdict
 
+from nncf.data import Sequence
 from nncf.common.engine import Engine
 from nncf.parameters import TargetDevice
 
@@ -57,6 +59,30 @@ class OVNativeEngine(Engine):
                     raise RuntimeError(f"Missing a required input: {name} to run the model.")
 
     def infer(
+        self, input_data: Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray], Dict[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        if isinstance(input_data, Sequence):
+            return self._sequential_infer(input_data)
+        return self._infer(input_data)
+
+    def _sequential_infer(self, sequence: Sequence):
+        model_output = None
+        model_outputs = defaultdict(list)
+        for token in sequence.get_tokens_iter():
+            filled_inputs = sequence.fill_inputs(token, model_output)
+            model_output = self._infer(filled_inputs)
+            for output_name, output_value in model_output.items():
+                model_outputs[output_name].append(output_value)
+
+        # Stack model outputs and return them
+        stacked_outputs = {}
+        for output_name, output_values in model_outputs.items():
+            stacked_outputs[output_name] = np.stack(output_values, 0)
+
+        return stacked_outputs
+
+
+    def _infer(
         self, input_data: Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray], Dict[str, np.ndarray]]
     ) -> Dict[str, np.ndarray]:
         """

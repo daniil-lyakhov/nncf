@@ -35,8 +35,7 @@ class TensorReducerBase(ABC):
         """
         :param reduction_shape: Reduction shape for reduction calculation. Equal to list(range(len(input.shape)))
             if empty.
-        :param: Wheather should be calculated inplace or out of place.
-
+        :param inplace: Wheather should be calculated inplace or out of place.
         """
         self._reduction_shape = reduction_shape
         self._init_reduction_shape = reduction_shape
@@ -104,6 +103,18 @@ class TensorReducerBase(ABC):
 
     def __hash__(self) -> int:
         return hash((self.__class__.__name__, self.inplace, self._init_reduction_shape))
+
+
+class SequentialTensorReducer:
+    def __init__(self, per_element_reducer: TensorReducerBase, per_sample_reducer: TensorReducerBase):
+        if per_sample_reducer.inplace:
+            raise RuntimeError(f'Per sample reducer could not be inplace.')
+        self._per_element_reducer = per_element_reducer
+        self._per_sample_reducer = per_sample_reducer
+
+    @classmethod
+    def name(self):
+        pass
 
 
 class TensorAggregatorBase:
