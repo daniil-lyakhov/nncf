@@ -21,10 +21,12 @@ from nncf.common.tensor_statistics.aggregator import StatisticsAggregator
 from nncf.common.tensor_statistics.statistic_point import StatisticPoint
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
 from nncf.experimental.common.tensor_statistics.collectors import MergedTensorCollector
+from nncf.experimental.common.tensor_statistics.collectors import SequentialTensorCollectorAdapter
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
 from nncf.openvino.graph.nncf_graph_builder import GraphConverter
 from nncf.openvino.graph.transformations.commands import OVInplaceFnInsertionCommand
 from nncf.openvino.graph.transformations.commands import OVOutputInsertionCommand
+from nncf.openvino.statistics.collectors import OVNNCFCollectorTensorProcessor
 from nncf.openvino.tensor import OVNNCFTensor
 
 
@@ -74,6 +76,14 @@ class OVStatisticsAggregator(StatisticsAggregator):
 
     @staticmethod
     # TODO(dlyakhov) Move this to common part
+    def _adapt_collectors(statistic_points: StatisticPointsContainer, stack_axis: int):
+        for _, _, tensor_collector in statistic_points.get_tensor_collectors():
+            tensor_collector.set_adapter(SequentialTensorCollectorAdapter(stack_axis, OVNNCFCollectorTensorProcessor))
+
+        return statistic_points
+
+    @staticmethod
+    # TODO(dlyakhov) Move this to common part
     def _get_merged_statistic_points(
         statistic_points: StatisticPointsContainer, model: ov.Model
     ) -> StatisticPointsContainer:
@@ -112,3 +122,7 @@ class OVStatisticsAggregator(StatisticsAggregator):
     @staticmethod
     def _process_outputs(outputs: Dict[str, np.ndarray]) -> Dict[str, OVNNCFTensor]:
         return {n: OVNNCFTensor(v) for n, v in outputs.items()}
+
+    @staticmethod
+    def _get_tensor_processor():
+        return OVNNCFCollectorTensorProcessor

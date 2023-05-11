@@ -104,6 +104,7 @@ model = onnx.load(model_path)
 # >> output_names = [output.name for output in sess.get_outputs()]
 # >> for data_item in val_loader:
 # >>    sess.run(output_names, input_feed=transform_fn(data_item))
+
 input_name = model.graph.input[0].name
 
 
