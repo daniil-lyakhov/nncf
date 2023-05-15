@@ -34,6 +34,7 @@ from nncf.openvino.statistics.collectors import OVNNCFCollectorTensorProcessor
 from nncf.openvino.statistics.collectors import get_mean_batch_stat_collector
 from nncf.openvino.statistics.collectors import get_mean_stat_collector
 from nncf.openvino.tensor import OVNNCFTensor
+from nncf.parameters import ModelType
 from nncf.quantization.algorithms.bias_correction.backend import ALGO_BACKENDS
 from nncf.quantization.algorithms.bias_correction.backend import BiasCorrectionAlgoBackend
 
@@ -77,8 +78,9 @@ class OVBiasCorrectionAlgoBackend(BiasCorrectionAlgoBackend):
         inplace: bool,
         num_samples: Optional[int] = None,
         window_size: Optional[int] = None,
+        model_type: Optional[ModelType] = None,
     ) -> TensorCollector:
-        return get_mean_stat_collector(num_samples, reduction_shape, window_size, inplace)
+        return get_mean_stat_collector(num_samples, reduction_shape, window_size, inplace, model_type)
 
     @staticmethod
     def batch_statistic_collector(inplace: bool, num_samples: int = None) -> TensorCollector:

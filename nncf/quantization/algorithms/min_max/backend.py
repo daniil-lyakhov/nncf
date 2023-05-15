@@ -157,6 +157,7 @@ class MinMaxAlgoBackend(ABC):
         target_point: TargetPoint,
         quantizer_config: QuantizerConfig,
         inplace: bool,
+        model_type: ModelType,
         num_samples: int = None,
     ) -> TensorStatisticCollectorBase:
         """

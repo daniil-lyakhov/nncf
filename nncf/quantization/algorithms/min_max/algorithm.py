@@ -275,6 +275,7 @@ class MinMaxQuantization(Algorithm):
             target_point,
             quantizer_config,
             inplace=self._inplace_statistics,
+            model_type=self._model_type,
             num_samples=self._subset_size,
         )
 

@@ -10,5 +10,5 @@
 # limitations under the License.
 
 from nncf.data.dataset import Dataset
-from nncf.data.dataset import Sequence
 from nncf.data.dataset import RecurentDataset
+from nncf.data.dataset import Sequence

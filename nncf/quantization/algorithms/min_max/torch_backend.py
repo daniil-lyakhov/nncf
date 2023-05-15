@@ -154,6 +154,7 @@ class PTMinMaxAlgoBackend(MinMaxAlgoBackend):
         target_point: PTTargetPoint,
         quantizer_config: QuantizerConfig,
         inplace: bool,
+        model_type: ModelType,
         num_samples: int = None,
     ) -> Union[PTMinMaxStatisticCollector, PTMeanMinMaxStatisticCollector]:
         if (

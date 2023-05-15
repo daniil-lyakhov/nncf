@@ -40,6 +40,7 @@ class ModelType(Enum):
     """
 
     TRANSFORMER = "transformer"
+    SEQUENTIAL = "sequential"
 
 
 @api(canonical_alias="nncf.DropType")

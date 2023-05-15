@@ -9,15 +9,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import defaultdict
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import openvino.runtime as ov
-from collections import defaultdict
 
-from nncf.data import Sequence
 from nncf.common.engine import Engine
+from nncf.data import Sequence
 from nncf.parameters import TargetDevice
+
+SEQUENTIAL_SAMPLE_STACK_AXIS = 0
 
 
 class OVNativeEngine(Engine):
@@ -77,10 +79,9 @@ class OVNativeEngine(Engine):
         # Stack model outputs and return them
         stacked_outputs = {}
         for output_name, output_values in model_outputs.items():
-            stacked_outputs[output_name] = np.stack(output_values, 0)
+            stacked_outputs[output_name] = np.stack(output_values, axis=SEQUENTIAL_SAMPLE_STACK_AXIS)
 
         return stacked_outputs
-
 
     def _infer(
         self, input_data: Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray], Dict[str, np.ndarray]]

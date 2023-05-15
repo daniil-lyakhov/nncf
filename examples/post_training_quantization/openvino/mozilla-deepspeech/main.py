@@ -1,18 +1,17 @@
-import subprocess
-import numpy as np
-import os
-import nncf
-import openvino.runtime as ov
 import json
+import os
+import subprocess
 
-
+import numpy as np
+import openvino.runtime as ov
 from openvino.tools.accuracy_checker.evaluators.quantization_model_evaluator import create_model_evaluator
 from openvino.tools.pot.configs.config import Config
 
+import nncf
 
 model_name = "mozilla-deepspeech-0.6.1"
 cache_dir = os.path.dirname(__file__)
-dataset_config = os.path.join(cache_dir, 'accuracy_checker.json')
+dataset_config = os.path.join(cache_dir, "accuracy_checker.json")
 
 command = f"omz_downloader --name {model_name} --cache_dir {cache_dir}"
 cmd_output = subprocess.call(command, shell=True)  # nosec
@@ -22,7 +21,7 @@ if not os.path.exists(model_dir):
     command = f"omz_converter --name {model_name} -o {os.path.join(cache_dir, model_name)}"
     cmd_output = subprocess.call(command, shell=True)  # nosec
 
-xml_path = os.path.join(model_dir, f'public/{model_name}/FP16/{model_name}.xml')
+xml_path = os.path.join(model_dir, f"public/{model_name}/FP16/{model_name}.xml")
 ov_model = ov.Core().read_model(xml_path)
 
 config = Config.read_config(dataset_config)
@@ -47,20 +46,10 @@ def get_tokens_from_sequence_func(data_item):
 def fill_sequential_inputs_fn(model_inputs, model_outputs):
     # Combine model inputs with state model outputs
     # or fill state model outputs if model_outputs is None
-
-    #state_inputs = {}
-    #for state_input_name, output_name in model_evaluator.launcher._lstm_inputs.items():
-    #    if model_outputs is None:
-    #        input_data = np.zeros(tuple(model_evaluator.launcher.inputs[state_input_name].shape))
-    #    else:
-    #        input_data = model_outputs[output_name]
-    #    state_inputs[state_input_name] = input_data
-
     state_inputs = model_evaluator.launcher._fill_lstm_inputs(model_outputs)
     model_inputs.update(state_inputs)
     return model_inputs
 
 
-dataset = nncf.RecurentDataset(
-    model_evaluator.dataset, get_tokens_from_sequence_func, fill_sequential_inputs_fn)
-quantized_model = nncf.quantize(ov_model, dataset)
+dataset = nncf.RecurentDataset(model_evaluator.dataset, get_tokens_from_sequence_func, fill_sequential_inputs_fn)
+quantized_model = nncf.quantize(ov_model, dataset, subset_size=3)
