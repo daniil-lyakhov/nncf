@@ -133,49 +133,50 @@ class TensorReducerBase(TensorReducerInterface, ABC):
         return hash((self.__class__.__name__, self.inplace, self._init_reduction_shape))
 
 
-class SequentialTensorReducer(TensorReducerInterface):
-    def __init__(self, per_element_reducer: TensorReducerBase, per_sample_reducer: TensorReducerBase):
-        super().__init__()
-        if per_sample_reducer.inplace:
-            raise RuntimeError(f"Per sample reducer could not be inplace.")
-        self._per_element_reducer = per_element_reducer
-        self._per_sample_reducer = per_sample_reducer
+class TensorReducersSequence(TensorReducerInterface):
+    def __init__(self, *args):
+        if any(reducer.inplace for reducer in args[1:]):
+            raise RuntimeError(f"Only first reducer of sequential tensor reducer could not be inplace.")
+        self._reducers = args
 
     @property
     def inplace(self):
-        return self._per_element_reducer.inplace
+        return self._reducers[0].inplace
 
     @property
     def output_port_id(self) -> int:
-        return self._per_element_reducer.output_port_id
+        return self._reducers[0].output_port_id
 
     @property
     def name(self):
-        return f"per_element_{self._per_element_reducer.name}_per_sample_{self._per_sample_reducer}"
+        name = ""
+        for i, reducer in enumerate(self._reducers):
+            name += f"{i}_{reducer.name}"
+        return name
 
     def get_output_names(self, target_node_name: str, port_id: int) -> List[str]:
-        return self._per_element_reducer.get_output_names(target_node_name, port_id)
+        return self._reducers[0].get_output_names(target_node_name, port_id)
 
     def get_inplace_fn(self) -> Optional[InplaceInsertionFNType]:
-        return self._per_element_reducer.get_inplace_fn()
+        return self._reducers[0].get_inplace_fn()
 
     def __call__(self, x: List[NNCFTensor]):
-        if not self._per_element_reducer.inplace:
-            x_reduced_per_element = self._per_element_reducer(x)
-        else:
-            x_reduced_per_element = x
+        if not self._reducers[0].inplace:
+            x = self._reducers[0](x)
 
-        return self._per_sample_reducer(x_reduced_per_element)
+        for reducer in self._reducers[1:]:
+            x = reducer(x)
+        return x
 
     def __eq__(self, __o: object) -> bool:
         return (
             isinstance(__o, self.__class__)
-            and self._per_element_reducer == __o._per_element_reducer
-            and self._per_sample_reducer == __o._per_sample_reducer
+            and len(self._reducers) == len(__o.reducers)
+            and all(self_r == o_r for self_r, o_r in zip(self._reducers, __o.reducers))
         )
 
     def __hash__(self) -> int:
-        return hash((hash(self._per_sample_reducer), hash(self._per_element_reducer)))
+        return hash(tuple(hash(reducer) for reducer in self._reducers))
 
 
 class TensorAggregatorBase:

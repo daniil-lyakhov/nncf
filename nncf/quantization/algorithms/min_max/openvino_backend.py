@@ -23,8 +23,8 @@ from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.tensor_statistics.collectors import ReductionShape
 from nncf.common.utils.backend import BackendType
 from nncf.experimental.common.tensor_statistics.collectors import AGGREGATORS_MAP
-from nncf.experimental.common.tensor_statistics.collectors import SequentialTensorReducer
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
+from nncf.experimental.common.tensor_statistics.collectors import TensorReducersSequence
 from nncf.openvino.engine import SEQUENTIAL_SAMPLE_STACK_AXIS
 from nncf.openvino.graph.metatypes.openvino_metatypes import GENERAL_WEIGHT_LAYER_METATYPES
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVAddMetatype
@@ -224,7 +224,7 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
                     {"reduction_shape": SEQUENTIAL_SAMPLE_STACK_AXIS, "inplace": False, "keepdims": False}
                 )
                 per_sample_reducer = reducer_cls(**per_sample_reducer_kwargs)
-                reducer = SequentialTensorReducer(per_element_reducer, per_sample_reducer)
+                reducer = TensorReducersSequence(per_element_reducer, per_sample_reducer)
             else:
                 reducer = reducer_cls(**kwargs)
 
