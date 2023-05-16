@@ -178,6 +178,7 @@ class ONNXMinMaxAlgoBackend(MinMaxAlgoBackend):
         target_point: ONNXTargetPoint,
         quantizer_config: QuantizerConfig,
         inplace: bool,
+        model_type: ModelType,
         num_samples: int = None,
     ) -> Union[ONNXMinMaxStatisticCollector, ONNXMeanMinMaxStatisticCollector]:
         reduction_shape, use_abs_max = ONNXMinMaxAlgoBackend._get_reduction_shape_and_use_abs_max(

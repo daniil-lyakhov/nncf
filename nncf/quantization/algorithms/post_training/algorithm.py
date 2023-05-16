@@ -114,6 +114,7 @@ class PostTrainingQuantization(Algorithm):
                 apply_for_all_nodes=bias_correction_params.apply_for_all_nodes,
                 inplace_statistics=advanced_parameters.inplace_statistics,
                 backend_params=advanced_parameters.backend_params,
+                model_type=model_type,
             )
         else:
             threshold = BIAS_CORRECTION_THRESHOLD
@@ -126,6 +127,7 @@ class PostTrainingQuantization(Algorithm):
                 apply_for_all_nodes=bias_correction_params.apply_for_all_nodes,
                 inplace_statistics=advanced_parameters.inplace_statistics,
                 backend_params=advanced_parameters.backend_params,
+                model_type=model_type,
             )
 
         self.algorithms.append(bias_correction)

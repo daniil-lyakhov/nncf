@@ -24,6 +24,8 @@ from nncf.common.tensor_statistics.collectors import ReductionShape
 from nncf.common.utils.backend import BackendType
 from nncf.experimental.common.tensor_statistics.collectors import AGGREGATORS_MAP
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
+from nncf.experimental.common.tensor_statistics.collectors import TensorReducersSequence
+from nncf.openvino.engine import SEQUENTIAL_SAMPLE_STACK_AXIS
 from nncf.openvino.graph.metatypes.openvino_metatypes import GENERAL_WEIGHT_LAYER_METATYPES
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVAddMetatype
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVConvolutionBackpropDataMetatype
@@ -179,6 +181,7 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
         target_point: OVTargetPoint,
         quantizer_config: QuantizerConfig,
         inplace: bool,
+        model_type: ModelType,
         num_samples: int = None,
     ) -> TensorCollector:
         reduction_shape, use_abs_max = OVMinMaxAlgoBackend._get_reduction_shape_and_use_abs_max(
@@ -212,7 +215,18 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
             statistic_type = params.statistics_type
             if use_abs_max and statistic_type == StatisticsType.MAX:
                 statistic_type = StatisticsType.ABS_MAX
-            reducer = OV_REDUCERS_MAP[statistic_type](**kwargs)
+
+            reducer_cls = OV_REDUCERS_MAP[statistic_type]
+            if model_type == ModelType.SEQUENTIAL:
+                per_element_reducer = reducer_cls(**kwargs)
+                per_sample_reducer_kwargs = kwargs.copy()
+                per_sample_reducer_kwargs.update(
+                    {"reduction_shape": SEQUENTIAL_SAMPLE_STACK_AXIS, "inplace": False, "keepdims": False}
+                )
+                per_sample_reducer = reducer_cls(**per_sample_reducer_kwargs)
+                reducer = TensorReducersSequence(per_element_reducer, per_sample_reducer)
+            else:
+                reducer = reducer_cls(**kwargs)
 
             kwargs = {"num_samples": _num_samples, "tensor_processor": OVNNCFCollectorTensorProcessor}
             aggregator = AGGREGATORS_MAP[params.aggregator_type](**kwargs)

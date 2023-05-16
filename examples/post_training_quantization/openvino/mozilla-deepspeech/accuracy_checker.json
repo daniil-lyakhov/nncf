@@ -1,0 +1,147 @@
+{
+    "compression": {
+        "algorithms": [
+            {
+                "name": "DefaultQuantization",
+                "params": {
+                    "preset": "performance",
+                    "stat_subset_size": 3
+                }
+            }
+        ],
+        "dump_intermediate_model": true
+    },
+    "engine": {
+        "datasets": [
+            {
+                "metrics": [
+                    {
+                        "type": "wer"
+                    }
+                ],
+                "name": "LibriSpeech_test_clean_wav",
+		"data_source": "/mnt/omz_new/nn_icv_cv_externalN/omz-validation-datasets/librispeech/test/LibriSpeech/test-clean.wav",
+
+		 "annotation_conversion": {
+      		 	"converter": "librispeech",
+      		 	"data_dir": "/mnt/omz_new/nn_icv_cv_externalN/omz-validation-datasets/librispeech/test/LibriSpeech/test-clean.wav"
+		 },
+                "preprocessing": [
+                    {
+                        "int16mode": true,
+                        "type": "audio_normalization"
+                    },
+                    {
+                        "duration": "512 samples",
+                        "overlap": "192 samples",
+                        "type": "clip_audio"
+                    },
+                    {
+                        "base": 512,
+                        "type": "hanning_window"
+                    },
+                    {
+                        "fftbase": 512,
+                        "magnitude_squared": true,
+                        "skip_channels": true,
+                        "type": "audio_spectrogram"
+                    },
+                    {
+                        "base": 257,
+                        "filterbank_channel_count": 40,
+                        "lower_frequency_limit": 20,
+                        "sample_rate": 16000,
+                        "type": "audio_triangle_filtering",
+                        "upper_frequency_limit": 4000
+                    },
+                    {
+                        "filterbank_channel_count": 40,
+                        "numceps": 26,
+                        "type": "audio_dct"
+                    },
+                    {
+                        "context": 9,
+                        "numceps": 26,
+                        "type": "clip_cepstrum"
+                    },
+                    {
+                        "step": 16,
+                        "type": "pack_cepstrum"
+                    }
+                ],
+                "reader": "wav_reader"
+            }
+        ],
+        "launchers": [
+            {
+                "adapter": {
+                    "beam_size": 32,
+                    "lm_alpha": 0.75,
+                    "lm_beta": 1.05,
+                    "lm_file": "/mnt/omz_new/nn_icv_cv_externalN/omz-validation-datasets/model_attributes/mozilla-deepspeech-0.6.1/lm.binary",
+                    "lm_oov_score": -1000,
+                    "lm_vocabulary_length": 4463723,
+                    "lm_vocabulary_offset": 941235601,
+                    "logarithmic_prob": false,
+                    "probability_out": "logits",
+                    "type": "ctc_beam_search_decoder_with_lm"
+                },
+                "framework": "dlsdk",
+                "inputs": [
+                    {
+                        "layout": "NHWC",
+                        "name": "input_node",
+                        "type": "INPUT"
+                    },
+                    {
+                        "name": "previous_state_c",
+                        "type": "LSTM_INPUT",
+                        "value": "cudnn_lstm/rnn/multi_rnn_cell/cell_0/cudnn_compatible_lstm_cell/BlockLSTM/TensorIterator.2"
+                    },
+                    {
+                        "name": "previous_state_h",
+                        "type": "LSTM_INPUT",
+                        "value": "cudnn_lstm/rnn/multi_rnn_cell/cell_0/cudnn_compatible_lstm_cell/BlockLSTM/TensorIterator.1"
+                    }
+                ]
+            },
+            {
+                "adapter": {
+                    "beam_size": 32,
+                    "lm_alpha": 0.75,
+                    "lm_beta": 1.05,
+                    "lm_file": "/mnt/omz_new/nn_icv_cv_externalN/omz-validation-datasets/model_attributes/mozilla-deepspeech-0.6.1/lm.binary",
+                    "lm_oov_score": -1000,
+                    "lm_vocabulary_length": 4463723,
+                    "lm_vocabulary_offset": 941235601,
+                    "logarithmic_prob": false,
+                    "probability_out": "logits",
+                    "type": "ctc_beam_search_decoder_with_lm"
+                },
+                "framework": "openvino",
+                "inputs": [
+                    {
+                        "layout": "NHWC",
+                        "name": "input_node",
+                        "type": "INPUT"
+                    },
+                    {
+                        "name": "previous_state_c",
+                        "type": "LSTM_INPUT",
+                        "value": "cudnn_lstm/rnn/multi_rnn_cell/cell_0/cudnn_compatible_lstm_cell/GatherNd:0"
+                    },
+                    {
+                        "name": "previous_state_h",
+                        "type": "LSTM_INPUT",
+                        "value": "cudnn_lstm/rnn/multi_rnn_cell/cell_0/cudnn_compatible_lstm_cell/GatherNd_1:0"
+                    }
+                ]
+            }
+        ]
+    },
+    "model": {
+        "model": "/mnt/omz/cv_bench_cache/ww18_weekly_23.0.0-10862-40bf400b189-API2.0/mozilla-deepspeech-0.6.1/tf/tf_frozen/FP16/1/dldt/mozilla-deepspeech-0.6.1.xml",
+        "model_name": "mozilla-deepspeech-0.6.1",
+        "weights": "/mnt/omz/cv_bench_cache/ww18_weekly_23.0.0-10862-40bf400b189-API2.0/mozilla-deepspeech-0.6.1/tf/tf_frozen/FP16/1/dldt/mozilla-deepspeech-0.6.1.bin"
+    }
+}

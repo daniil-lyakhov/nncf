@@ -24,6 +24,7 @@ from nncf.common.tensor import NNCFTensor
 from nncf.common.tensor_statistics.collectors import ReductionShape
 from nncf.common.tensor_statistics.collectors import TensorStatisticCollectorBase
 from nncf.common.utils.registry import Registry
+from nncf.parameters import ModelType
 
 TModel = TypeVar("TModel")
 OutputType = TypeVar("OutputType")
@@ -87,6 +88,7 @@ class FastBiasCorrectionAlgoBackend(ABC):
         inplace: bool,
         num_samples: Optional[int] = None,
         window_size: Optional[int] = None,
+        model_type: Optional[ModelType] = None,
     ) -> TensorStatisticCollectorBase:
         """
         Returns backend-specific mean statistic collector.

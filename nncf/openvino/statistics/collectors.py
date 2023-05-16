@@ -40,6 +40,7 @@ from nncf.openvino.graph.node_utils import get_result_node_name
 from nncf.openvino.statistics.statistics import OVBatchTensorStatistic
 from nncf.openvino.statistics.statistics import OVMeanTensorStatistic
 from nncf.openvino.tensor import OVNNCFTensor
+from nncf.parameters import ModelType
 from nncf.quantization.advanced_parameters import StatisticsType
 
 
@@ -242,7 +243,7 @@ class OVAbsQuantileReducer(AbsQuantileReducer):
         return get_reducer_output_node_names(self.name, target_node_name, port_id, self.output_port_id, self.inplace)
 
 
-def get_mean_stat_collector(num_samples, channel_axis, window_size=None, inplace=True):
+def get_mean_stat_collector(num_samples, channel_axis, window_size=None, inplace=True, model_type=None):
     # TODO(dlyakhov): use inplace OVBatchMeanReducer and OVMeanPerChanelReducer
     # after migration on openvino-dev=2023.0
     inplace = False
@@ -259,7 +260,7 @@ def get_mean_stat_collector(num_samples, channel_axis, window_size=None, inplace
         "window_size": window_size,
     }
     aggregate_mean = MeanAggregator(**kwargs)
-    aggregate_shape = ShapeAggregator()
+    aggregate_shape = ShapeAggregator(slice(1, None) if model_type == ModelType.SEQUENTIAL else None)
 
     collector = TensorCollector(OVMeanTensorStatistic)
     collector.register_statistic_branch(OVMeanTensorStatistic.MEAN_STAT, reducer, aggregate_mean)

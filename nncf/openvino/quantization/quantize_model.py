@@ -21,6 +21,7 @@ from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.utils.backend import get_backend
 from nncf.common.utils.timer import timer
 from nncf.data import Dataset
+from nncf.data import RecurentDataset
 from nncf.openvino.quantization.backend_parameters import BackendParameters
 from nncf.openvino.quantization.backend_parameters import is_weight_compression_needed
 from nncf.parameters import DropType
@@ -102,6 +103,9 @@ def native_quantize_impl(
     """
     Implementation of the `quantize()` method for the OpenVINO backend via the OpenVINO Runtime API.
     """
+    if isinstance(calibration_dataset, RecurentDataset):
+        model_type = ModelType.SEQUENTIAL
+
     quantization_algorithm = PostTrainingQuantization(
         preset=preset,
         target_device=target_device,

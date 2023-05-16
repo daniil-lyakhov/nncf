@@ -31,6 +31,7 @@ from nncf.onnx.graph.transformations.commands import ONNXTargetPoint
 from nncf.onnx.statistics.collectors import ONNXMeanStatisticCollector
 from nncf.onnx.statistics.collectors import ONNXNNCFCollectorTensorProcessor
 from nncf.onnx.tensor import ONNXNNCFTensor
+from nncf.parameters import ModelType
 from nncf.quantization.algorithms.fast_bias_correction.backend import ALGO_BACKENDS
 from nncf.quantization.algorithms.fast_bias_correction.backend import FastBiasCorrectionAlgoBackend
 
@@ -65,6 +66,7 @@ class ONNXFastBiasCorrectionAlgoBackend(FastBiasCorrectionAlgoBackend):
         inplace: bool,
         num_samples: Optional[int] = None,
         window_size: Optional[int] = None,
+        model_type: Optional[ModelType] = None,
     ) -> ONNXMeanStatisticCollector:
         return ONNXMeanStatisticCollector(reduction_shape, num_samples, window_size)
 
