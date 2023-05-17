@@ -67,3 +67,8 @@ class PTStatisticsAggregator(StatisticsAggregator):
     @staticmethod
     def _process_outputs(outputs: Dict[str, np.ndarray]) -> Dict[str, PTNNCFTensor]:
         return outputs
+
+    def _get_tensor_processor():
+        from nncf.torch.tensor_statistics.collectors import PTNNCFCollectorTensorProcessor
+
+        return PTNNCFCollectorTensorProcessor
