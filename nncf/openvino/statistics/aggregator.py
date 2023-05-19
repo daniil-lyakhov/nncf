@@ -78,7 +78,7 @@ class OVStatisticsAggregator(StatisticsAggregator):
     # TODO(dlyakhov) Move this to common part
     def _adapt_collectors(statistic_points: StatisticPointsContainer, stack_axis: int):
         for _, _, tensor_collector in statistic_points.get_tensor_collectors():
-            tensor_collector.set_adapter(SequentialTensorCollectorAdapter(stack_axis, OVNNCFCollectorTensorProcessor))
+            tensor_collector.set_adapter(SequentialTensorCollectorAdapter(stack_axis))
 
         return statistic_points
 
