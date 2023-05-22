@@ -193,6 +193,8 @@ class TensorStatisticsSequence(TensorStatisticBase):
 
     def __hash__(self) -> int:
         return hash(tuple(hash(statistic) for statistic in self._statistics))
+
+
 class TensorAggregatorBase:
     """
     Tensor aggregator is designed to recieve (register) calculated statistics and

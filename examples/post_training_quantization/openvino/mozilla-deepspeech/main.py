@@ -1,6 +1,6 @@
-import json
 import os
 import subprocess
+from typing import Dict
 
 import numpy as np
 import openvino.runtime as ov
@@ -33,7 +33,14 @@ model_evaluator.load_network([{"model": ov_model}])
 model_evaluator.select_dataset("")
 
 
-def get_tokens_from_sequence_func(data_item):
+def get_tokens_from_sequence_fn(data_item):
+    """
+    Quantization transform function. Extracts and preprocesses sequential inputs data from dataloader
+    for quantization, returns iterable on preprocessed elements of feeded data item.
+
+    :param data_item:  Data item produced by DataLoader during iteration
+    :return: Iterable object on preprocessed elements of feeded data item.
+    """
     _, batch_annotation, batch_input, _ = data_item
     filled_inputs, _, _ = model_evaluator._get_batch_input(batch_input, batch_annotation)
     for filled_input in filled_inputs:
@@ -44,12 +51,19 @@ def get_tokens_from_sequence_func(data_item):
 
 
 def fill_sequential_inputs_fn(model_inputs, model_outputs):
-    # Combine model inputs with state model outputs
-    # or fill state model outputs if model_outputs is None
+    """
+    Combines preprocessed model inputs from `get_tokens_from_sequence_fn` and model outputs
+    from previous iteration. None is feeded as model outputs on first iteration.
+
+    :param model_inputs: Preprocessed model input from `get_token_from_sequence_fn`.
+    :param model_outputs: Outuputs of target model from previous iteration. None on first iteration.
+    :return: Dict of acutual model inputs combined from preprocessed model input from `get_token_from_sequence_fn`
+        and previous model outputs for sequential models.
+    """
     state_inputs = model_evaluator.launcher._fill_lstm_inputs(model_outputs)
     model_inputs.update(state_inputs)
     return model_inputs
 
 
-dataset = nncf.RecurentDataset(model_evaluator.dataset, get_tokens_from_sequence_func, fill_sequential_inputs_fn)
+dataset = nncf.RecurentDataset(model_evaluator.dataset, get_tokens_from_sequence_fn, fill_sequential_inputs_fn)
 quantized_model = nncf.quantize(ov_model, dataset, subset_size=3)

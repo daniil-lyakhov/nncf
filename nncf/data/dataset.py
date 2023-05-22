@@ -119,9 +119,9 @@ class DataProvider(Generic[DataItem, ModelInput]):
 
 @api(canonical_alias="nncf.RecurentDataset")
 class RecurentDataset(Dataset):
-    def __init__(self, data_source: Iterable, get_token_from_sequence_func, fill_sequential_inputs_fn):
+    def __init__(self, data_source: Iterable, get_token_from_sequence_fn, fill_sequential_inputs_fn):
         def transform_fn_wrapper(data_item):
-            return Sequence(data_item, get_token_from_sequence_func, fill_sequential_inputs_fn)
+            return Sequence(data_item, get_token_from_sequence_fn, fill_sequential_inputs_fn)
 
         super().__init__(data_source, transform_fn_wrapper)
 
