@@ -18,7 +18,7 @@ from nncf.common.tensor import TensorElementsType
 from nncf.common.tensor_statistics.collectors import NNCFCollectorTensorProcessor
 from nncf.experimental.common.tensor_statistics.collectors import AbsMaxReducer
 from nncf.experimental.common.tensor_statistics.collectors import AbsQuantileReducer
-from nncf.experimental.common.tensor_statistics.collectors import BatchMeanReducer
+from nncf.experimental.common.tensor_statistics.collectors import BatchMeanStatistic
 from nncf.experimental.common.tensor_statistics.collectors import InplaceInsertionFNType
 from nncf.experimental.common.tensor_statistics.collectors import MaxReducer
 from nncf.experimental.common.tensor_statistics.collectors import MeanAggregator
@@ -196,7 +196,7 @@ class OVMeanReducer(MeanReducer):
         return get_reducer_output_node_names(self.name, target_node_name, port_id, self.output_port_id, self.inplace)
 
 
-class OVBatchMeanReducer(BatchMeanReducer):
+class OVBatchMeanReducer(BatchMeanStatistic):
     def _get_processor(self):
         return OVNNCFCollectorTensorProcessor
 
@@ -257,7 +257,7 @@ def get_mean_stat_collector(num_samples, channel_axis, window_size=None, inplace
         "window_size": window_size,
     }
     aggregate_mean = MeanAggregator(**kwargs)
-    aggregate_shape = ShapeAggregator()
+    aggregate_shape = ShapeAggregator(tensor_processor=OVNNCFCollectorTensorProcessor)
 
     collector = TensorCollector(OVMeanTensorStatistic)
     collector.register_statistic_branch(OVMeanTensorStatistic.MEAN_STAT, reducer, aggregate_mean)

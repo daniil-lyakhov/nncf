@@ -79,3 +79,8 @@ class ONNXStatisticsAggregator(StatisticsAggregator):
     @staticmethod
     def _process_outputs(outputs: Dict[str, np.ndarray]) -> Dict[str, ONNXNNCFTensor]:
         return {n: ONNXNNCFTensor(v) for n, v in outputs.items()}
+
+    def _get_tensor_processor():
+        from nncf.onnx.statistics.collectors import ONNXNNCFCollectorTensorProcessor
+
+        return ONNXNNCFCollectorTensorProcessor

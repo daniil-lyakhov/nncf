@@ -14,7 +14,7 @@ import torch
 from nncf.common.tensor_statistics.statistics import MedianMADTensorStatistic
 from nncf.common.tensor_statistics.statistics import MinMaxTensorStatistic
 from nncf.common.tensor_statistics.statistics import PercentileTensorStatistic
-from nncf.common.tensor_statistics.statistics import TensorStatistic
+from nncf.common.tensor_statistics.statistics import TensorStatisticBase
 
 
 class PTMinMaxTensorStatistic(MinMaxTensorStatistic):
@@ -35,7 +35,7 @@ class PTPercentileTensorStatistic(PercentileTensorStatistic):
         return bool(torch.allclose(tensor1, tensor2, rtol=rtol))
 
 
-def pt_convert_stat_to_min_max_tensor_stat(statistic: TensorStatistic) -> PTMinMaxTensorStatistic:
+def pt_convert_stat_to_min_max_tensor_stat(statistic: TensorStatisticBase) -> PTMinMaxTensorStatistic:
     if isinstance(statistic, PTMinMaxTensorStatistic):
         return statistic
     if isinstance(statistic, PTMedianMADTensorStatistic):

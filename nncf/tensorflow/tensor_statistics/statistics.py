@@ -14,7 +14,7 @@ import tensorflow as tf
 from nncf.common.tensor_statistics.statistics import MedianMADTensorStatistic
 from nncf.common.tensor_statistics.statistics import MinMaxTensorStatistic
 from nncf.common.tensor_statistics.statistics import PercentileTensorStatistic
-from nncf.common.tensor_statistics.statistics import TensorStatistic
+from nncf.common.tensor_statistics.statistics import TensorStatisticBase
 
 
 class TFMinMaxTensorStatistic(MinMaxTensorStatistic):
@@ -35,7 +35,7 @@ class TFPercentileTensorStatistic(PercentileTensorStatistic):
         return bool(tf.experimental.numpy.allclose(tensor1, tensor2, rtol=rtol))
 
 
-def tf_convert_stat_to_min_max_tensor_stat(statistic: TensorStatistic) -> TFMinMaxTensorStatistic:
+def tf_convert_stat_to_min_max_tensor_stat(statistic: TensorStatisticBase) -> TFMinMaxTensorStatistic:
     if isinstance(statistic, TFMinMaxTensorStatistic):
         return statistic
     if isinstance(statistic, TFMedianMADTensorStatistic):

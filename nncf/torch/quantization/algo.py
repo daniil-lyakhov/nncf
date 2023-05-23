@@ -141,7 +141,7 @@ from nncf.torch.structures import QuantizationPrecisionInitArgs
 from nncf.torch.tensor_statistics.algo import TensorStatisticsCollectionBuilder
 from nncf.torch.tensor_statistics.collectors import ReductionShape
 from nncf.torch.tensor_statistics.statistics import MinMaxTensorStatistic
-from nncf.torch.tensor_statistics.statistics import TensorStatistic
+from nncf.torch.tensor_statistics.statistics import TensorStatisticBase
 from nncf.torch.tensor_statistics.statistics import pt_convert_stat_to_min_max_tensor_stat
 from nncf.torch.utils import get_model_device
 from nncf.torch.utils import get_model_dtype
@@ -583,7 +583,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
     def _get_minmax_values_for_quantizer_locations(
         self,
         quantizer_setup: SingleConfigQuantizerSetup,
-        tensor_statistics: Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]],
+        tensor_statistics: Dict[PTTargetPoint, Dict[ReductionShape, TensorStatisticBase]],
         target_model_graph: PTNNCFGraph,
     ) -> Dict[QuantizationPointId, MinMaxTensorStatistic]:
         retval = {}
@@ -663,7 +663,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
     @staticmethod
     def get_statistics_for_quantizer_setup(
         target_model: NNCFNetwork, quantizer_setup: QuantizerSetupBase, range_init_params: PTRangeInitParams
-    ) -> Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]]:
+    ) -> Dict[PTTargetPoint, Dict[ReductionShape, TensorStatisticBase]]:
         if range_init_params is None:
             return {}
         observation_points_vs_collectors_dict = (
@@ -687,7 +687,7 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
 
     def _get_statistics_for_final_range_init(
         self, target_model: NNCFNetwork, quantizer_setup: QuantizerSetupBase, range_init_params: PTRangeInitParams
-    ) -> Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]]:
+    ) -> Dict[PTTargetPoint, Dict[ReductionShape, TensorStatisticBase]]:
         return self.get_statistics_for_quantizer_setup(target_model, quantizer_setup, range_init_params)
 
     def _get_single_config_quantizer_setup(self, target_model) -> SingleConfigQuantizerSetup:
@@ -1670,7 +1670,7 @@ class ExperimentalQuantizationBuilder(QuantizationBuilder):
         self,
         quantizer_setup: MultiConfigQuantizerSetup,
         initial_quantizer_setup: SingleConfigQuantizerSetup,
-        tensor_stats_for_all_setup_variations: Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]],
+        tensor_stats_for_all_setup_variations: Dict[PTTargetPoint, Dict[ReductionShape, TensorStatisticBase]],
         hw_config: HWConfig = None,
     ):
         should_init = bool(tensor_stats_for_all_setup_variations)
@@ -1689,7 +1689,7 @@ class ExperimentalQuantizationBuilder(QuantizationBuilder):
 
     def _get_statistics_for_final_range_init(
         self, target_model: NNCFNetwork, quantizer_setup: QuantizerSetupBase, range_init_params: PTRangeInitParams
-    ) -> Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]]:
+    ) -> Dict[PTTargetPoint, Dict[ReductionShape, TensorStatisticBase]]:
         return self._tensor_stats
 
     def _build_controller(self, model: NNCFNetwork) -> "ExperimentalQuantizationController":
@@ -1745,7 +1745,7 @@ class ExperimentalQuantizationController(QuantizationController):
         quantizer_setup: MultiConfigQuantizerSetup,
         initial_quantizer_setup: SingleConfigQuantizerSetup,
         setup_to_module_id_translation_dict: Dict[QuantizationPointId, QuantizerId],
-        tensor_stats: Dict[PTTargetPoint, Dict[ReductionShape, TensorStatistic]],
+        tensor_stats: Dict[PTTargetPoint, Dict[ReductionShape, TensorStatisticBase]],
         build_time_metric_info: QuantizationShareBuildTimeInfo,
         should_setup_adjust_pad_ops=False,
         hw_config: HWConfig = None,

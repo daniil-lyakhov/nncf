@@ -9,7 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Generic, Iterable, List, Optional, TypeVar
+from typing import Any, Callable, Generic, Iterable, List, Optional, TypeVar
 
 from nncf.common.utils.api_marker import api
 
@@ -115,3 +115,30 @@ class DataProvider(Generic[DataItem, ModelInput]):
             if idx == indices[pos]:
                 pos = pos + 1
                 yield transform_func(data_item)
+
+
+@api(canonical_alias="nncf.RecurentDataset")
+class RecurentDataset(Dataset):
+    def __init__(self, data_source: Iterable, get_token_from_sequence_fn, fill_sequential_inputs_fn):
+        def transform_fn_wrapper(data_item):
+            return Sequence(data_item, get_token_from_sequence_fn, fill_sequential_inputs_fn)
+
+        super().__init__(data_source, transform_fn_wrapper)
+
+
+class Sequence:
+    def __init__(
+        self,
+        raw_sequence,
+        get_tokens_from_sequence_func: Callable[[DataItem], ModelInput],
+        fill_sequential_inputs_fn: Callable[[DataItem], ModelInput],
+    ):
+        self._raw_sequence = raw_sequence
+        self._get_tokens_from_sequence_func = get_tokens_from_sequence_func
+        self._fill_sequential_inputs_fn = fill_sequential_inputs_fn
+
+    def get_tokens_iter(self):
+        return self._get_tokens_from_sequence_func(self._raw_sequence)
+
+    def fill_inputs(self, token, model_outputs):
+        return self._fill_sequential_inputs_fn(token, model_outputs)

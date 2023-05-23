@@ -19,7 +19,7 @@ from nncf.common.tensor_statistics.collectors import OfflineTensorStatisticColle
 from nncf.common.tensor_statistics.collectors import ReductionShape
 from nncf.common.tensor_statistics.collectors import StatisticsNotCollectedError
 from nncf.common.tensor_statistics.collectors import TensorStatisticCollectorBase
-from nncf.common.tensor_statistics.statistics import TensorStatistic
+from nncf.common.tensor_statistics.statistics import TensorStatisticBase
 from nncf.torch.tensor import PTNNCFTensor
 from nncf.torch.tensor_statistics.collectors import PTMeanMinMaxStatisticCollector
 from nncf.torch.tensor_statistics.collectors import PTMeanPercentileStatisticCollector
@@ -109,7 +109,7 @@ class TestCollectedStatistics:
     def test_collected_statistics_with_shape_convert(
         self,
         collector: Type[TensorStatisticCollectorBase],
-        reduction_shapes_vs_ref_statistic: Dict[Tuple[ReductionShape, ReductionShape], TensorStatistic],
+        reduction_shapes_vs_ref_statistic: Dict[Tuple[ReductionShape, ReductionShape], TensorStatisticBase],
     ):
         for shapes in reduction_shapes_vs_ref_statistic.keys():
             output_shape, reduction_shape = shapes
@@ -189,7 +189,7 @@ class TestCollectedStatistics:
     def test_collected_statistics(
         self,
         collector: Type[TensorStatisticCollectorBase],
-        reduction_shapes_vs_ref_statistic: Dict[ReductionShape, TensorStatistic],
+        reduction_shapes_vs_ref_statistic: Dict[ReductionShape, TensorStatisticBase],
     ):
         for shapes in reduction_shapes_vs_ref_statistic.keys():
             reduction_shape = shapes
