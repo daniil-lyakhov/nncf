@@ -20,6 +20,7 @@ class BackendType(Enum):
     TENSORFLOW = "Tensorflow"
     ONNX = "ONNX"
     OPENVINO = "OpenVINO"
+    OPTIMUM = "Optimum"
 
 
 def get_backend(model) -> BackendType:
@@ -52,6 +53,11 @@ def get_backend(model) -> BackendType:
         onnx = None
 
     try:
+        import optimum
+        available_frameworks.append('OPTIMUM')
+    except ImportError:
+        optimum = None
+    try:
         import openvino.runtime as ov
 
         available_frameworks.append("OpenVINO")
@@ -70,6 +76,12 @@ def get_backend(model) -> BackendType:
     if ov is not None and isinstance(model, ov.Model):
         return BackendType.OPENVINO
 
+    if optimum is not None:
+        from optimum.intel.openvino.modeling_base import OVBaseModel
+        from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
+        if isinstance(model, (OVBaseModel, NNCFOVWrappedModel)):
+            return BackendType.OPTIMUM
+
     raise RuntimeError(
         "Could not infer the backend framework from the model type because "
         "the framework is not available or the model type is unsupported. "
@@ -85,6 +97,8 @@ def copy_model(model: TModel) -> TModel:
     :return: Copy of the backend-specific model instance
     """
     model_backend = get_backend(model)
+    if model_backend == BackendType.OPTIMUM:
+        return model
     if model_backend == BackendType.OPENVINO:
         # TODO(l-bat): Remove after fixing ticket: 100919
         return model.clone()

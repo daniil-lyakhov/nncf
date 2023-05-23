@@ -26,7 +26,7 @@ from nncf.experimental.common.tensor_statistics.collectors import MeanPerChReduc
 from nncf.experimental.common.tensor_statistics.collectors import MeanReducer
 from nncf.experimental.common.tensor_statistics.collectors import MinReducer
 from nncf.experimental.common.tensor_statistics.collectors import NoopAggregator
-from nncf.experimental.common.tensor_statistics.collectors import NoopReducer
+from nncf.experimental.common.tensor_statistics.collectors import NoopStatistic
 from nncf.experimental.common.tensor_statistics.collectors import QuantileReducer
 from nncf.experimental.common.tensor_statistics.collectors import ShapeAggregator
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
@@ -147,7 +147,7 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         return [OVNNCFTensor(x) for x in result]
 
 
-class OVNoopReducer(NoopReducer):
+class OVNoopStatistic(NoopStatistic):
     def get_output_names(self, target_node_name: str, port_id: int) -> List[str]:
         return [get_result_node_name(target_node_name, port_id)]
 
@@ -248,7 +248,7 @@ def get_mean_stat_collector(num_samples, channel_axis, window_size=None, inplace
         reducer = OVBatchMeanReducer(inplace)
     else:
         reducer = OVMeanPerChanelReducer(channel_axis, inplace)
-    noop_reducer = OVNoopReducer()
+    noop_reducer = OVNoopStatistic()
 
     kwargs = {
         "tensor_processor": OVNNCFCollectorTensorProcessor,

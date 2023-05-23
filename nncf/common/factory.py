@@ -35,7 +35,7 @@ class NNCFGraphFactory:
             from nncf.onnx.graph.nncf_graph_builder import GraphConverter
 
             return GraphConverter.create_nncf_graph(model)
-        if model_backend == BackendType.OPENVINO:
+        if model_backend in [BackendType.OPENVINO, BackendType.OPTIMUM]:
             from nncf.openvino.graph.nncf_graph_builder import GraphConverter
 
             return GraphConverter.create_nncf_graph(model)

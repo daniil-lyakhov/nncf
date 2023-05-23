@@ -22,7 +22,7 @@ from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.tensor import NNCFTensor
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
 from nncf.data.dataset import Dataset
-from nncf.data.dataset import RecurentDataset
+from nncf.data.dataset import CustomInferenceDataset
 
 TensorType = TypeVar("TensorType")
 TModel = TypeVar("TModel")
@@ -39,7 +39,7 @@ class StatisticsAggregator(ABC):
         self.dataset = dataset
         self.stat_subset_size = None
         self.statistic_points = StatisticPointsContainer()
-        self._is_sequential = isinstance(dataset, RecurentDataset)
+        self._is_sequential = isinstance(dataset, CustomInferenceDataset)
 
     def collect_statistics(self, model: TModel) -> None:
         """
@@ -57,23 +57,23 @@ class StatisticsAggregator(ABC):
         transformation_layout = self._get_transformation_layout_extra_outputs(merged_statistics)
         model_with_outputs = model_transformer.transform(transformation_layout)
         engine = EngineFactory.create(model_with_outputs)
-        infer_fn = self._infer_sequential if self._is_sequential else self._infer
 
         for input_data in tqdm(
             islice(self.dataset.get_inference_data(), self.stat_subset_size),
             total=self.stat_subset_size,
             desc="Statistics collection",
         ):
-            processed_outputs = infer_fn(engine, input_data)
+            if self._is_sequential:
+                outputs = self.dataset.model_infer_fn(model, input_data)
+            else:
+                outputs = engine.infer(input_data)
+            processed_outputs = self._process_outputs(outputs)
             self._register_statistics(processed_outputs, merged_statistics)
 
-    def _infer(self, engine, input_data):
-        outputs = engine.infer(input_data)
-        return self._process_outputs(outputs)
-
-    def _infer_sequential(self, engine, sequence):
+    def _infer_sequential(self, engine, ):
         model_output = None
         model_outputs = defaultdict(list)
+
         for token in sequence.get_tokens_iter():
             filled_inputs = sequence.fill_inputs(token, model_output)
             model_output = engine.infer(filled_inputs)

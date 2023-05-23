@@ -17,7 +17,7 @@ from typing import TypeVar
 TensorType = TypeVar("TensorType")
 
 
-class TensorStatistic(ABC):
+class TensorStatisticBase(ABC):
     """Base class that stores statistic data"""
 
     @staticmethod
@@ -30,7 +30,7 @@ class TensorStatistic(ABC):
         pass
 
 
-class MinMaxTensorStatistic(TensorStatistic):
+class MinMaxTensorStatistic(TensorStatisticBase):
     MIN_STAT = "min_values"
     MAX_STAT = "max_values"
 
@@ -42,7 +42,7 @@ class MinMaxTensorStatistic(TensorStatistic):
         return self.tensor_eq(self.min_values, other.min_values) and self.tensor_eq(self.max_values, other.max_values)
 
 
-class MeanTensorStatistic(TensorStatistic):
+class MeanTensorStatistic(TensorStatisticBase):
     MEAN_STAT = "mean_values"
     SHAPE_STAT = "shape"
 
@@ -62,7 +62,7 @@ class MeanTensorStatistic(TensorStatistic):
         return self.tensor_eq(self.mean_values, other.mean_values) and self.tensor_eq(self.shape, other.shape)
 
 
-class MedianMADTensorStatistic(TensorStatistic):
+class MedianMADTensorStatistic(TensorStatisticBase):
     def __init__(self, median_values, mad_values):
         self.median_values = median_values
         self.mad_values = mad_values
@@ -73,7 +73,7 @@ class MedianMADTensorStatistic(TensorStatistic):
         )
 
 
-class PercentileTensorStatistic(TensorStatistic):
+class PercentileTensorStatistic(TensorStatisticBase):
     def __init__(self, percentile_vs_values_dict):
         self.percentile_vs_values_dict = percentile_vs_values_dict
 
@@ -86,7 +86,7 @@ class PercentileTensorStatistic(TensorStatistic):
         return True
 
 
-class BatchTensorStatistic(TensorStatistic):
+class BatchTensorStatistic(TensorStatisticBase):
     VALUES_STATS = "values"
 
     """
