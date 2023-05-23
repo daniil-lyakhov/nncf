@@ -33,7 +33,7 @@ model_evaluator.load_network([{"model": ov_model}])
 model_evaluator.select_dataset("")
 
 
-def get_tokens_from_sequence_fn(data_item):
+def sequence_transform_fn(data_item):
     """
     Quantization transform function. Extracts and preprocesses sequential inputs data from dataloader
     for quantization, returns iterable on preprocessed elements of feeded data item.
@@ -50,7 +50,7 @@ def get_tokens_from_sequence_fn(data_item):
         yield input_data
 
 
-def fill_sequential_inputs_fn(model_inputs, model_outputs):
+def create_model_input_fn(model_inputs, model_outputs):
     """
     Combines preprocessed model inputs from `get_tokens_from_sequence_fn` and model outputs
     from previous iteration. None is feeded as model outputs on first iteration.
@@ -65,5 +65,14 @@ def fill_sequential_inputs_fn(model_inputs, model_outputs):
     return model_inputs
 
 
-dataset = nncf.RecurentDataset(model_evaluator.dataset, get_tokens_from_sequence_fn, fill_sequential_inputs_fn)
+dataset = nncf.RecurentDataset(model_evaluator.dataset, sequence_transform_fn, create_model_input_fn)
+
+# Check for user
+output = None
+data_item = next(dataset.get_inference_data())
+sequence = sequence_transform_fn(data_item)
+for sequence_item in sequence:
+    input = create_model_input_fn(sequence_item, output)
+    output = ov_model(input)
+
 quantized_model = nncf.quantize(ov_model, dataset, subset_size=3)
