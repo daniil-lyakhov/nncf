@@ -73,8 +73,10 @@ def get_backend(model) -> BackendType:
     if onnx is not None and isinstance(model, onnx.ModelProto):
         return BackendType.ONNX
 
-    if ov is not None and isinstance(model, ov.Model):
-        return BackendType.OPENVINO
+    if ov is not None:
+        from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
+        if isinstance(model, (ov.Model, NNCFOVWrappedModel)):
+            return BackendType.OPENVINO
 
     if optimum is not None:
         from optimum.intel.openvino.modeling_base import OVBaseModel
@@ -101,7 +103,11 @@ def copy_model(model: TModel) -> TModel:
         return model
     if model_backend == BackendType.OPENVINO:
         # TODO(l-bat): Remove after fixing ticket: 100919
-        return model.clone()
+        from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
+        cloned_model = model.clone()
+        if isinstance(model, NNCFOVWrappedModel):
+            cloned_model = NNCFOVWrappedModel(cloned_model, model._custom_forward, model._set_ov_model, **model._kwargs)
+        return cloned_model
     if model_backend == BackendType.TENSORFLOW:
         # deepcopy and tensorflow.keras.models.clone_model does not work correctly on 2.8.4 version
         from nncf.tensorflow.graph.model_transformer import TFModelTransformer

@@ -57,6 +57,8 @@ class StatisticsAggregator(ABC):
         transformation_layout = self._get_transformation_layout_extra_outputs(merged_statistics)
         model_with_outputs = model_transformer.transform(transformation_layout)
         engine = EngineFactory.create(model_with_outputs)
+        if self._is_sequential:
+            model.set_statistics_ov_model(model_with_outputs)
 
         for input_data in tqdm(
             islice(self.dataset.get_inference_data(), self.stat_subset_size),
@@ -64,30 +66,11 @@ class StatisticsAggregator(ABC):
             desc="Statistics collection",
         ):
             if self._is_sequential:
-                outputs = self.dataset.model_infer_fn(model, input_data)
+                outputs = model(input_data)
             else:
                 outputs = engine.infer(input_data)
             processed_outputs = self._process_outputs(outputs)
             self._register_statistics(processed_outputs, merged_statistics)
-
-    def _infer_sequential(self, engine, ):
-        model_output = None
-        model_outputs = defaultdict(list)
-
-        for token in sequence.get_tokens_iter():
-            filled_inputs = sequence.fill_inputs(token, model_output)
-            model_output = engine.infer(filled_inputs)
-            processed_output = self._process_outputs(model_output)
-            for output_name, output_value in processed_output.items():
-                model_outputs[output_name].append(output_value)
-
-        # Stack model outputs and return them
-        stacked_outputs = {}
-        tensor_processor = self._get_tensor_processor()
-        for output_name, output_values in model_outputs.items():
-            stacked_outputs[output_name] = tensor_processor.stack(output_values, axis=self.STACK_AXIS)
-
-        return stacked_outputs
 
     def register_statistic_points(self, statistic_points: StatisticPointsContainer) -> None:
         """
