@@ -120,6 +120,18 @@ class OVStatisticsAggregator(StatisticsAggregator):
         return merged_statistic_points
 
     @staticmethod
+    def _get_callback(model, sequence_container):
+        original_model_outputs_names = {op.node.friendly_name for op in model.outputs}
+        def complition_callback(outputs):
+            for op, value in outputs.items():
+                if op.node.friendly_name in original_model_outputs_names:
+                    continue
+                if not isinstance(value, np.ndarray):
+                    value = value.data
+                sequence_container[op.node.friendly_name].append(OVNNCFTensor(value))
+        return complition_callback
+
+    @staticmethod
     def _process_outputs(outputs: Dict[str, np.ndarray]) -> Dict[str, OVNNCFTensor]:
         return {n: OVNNCFTensor(v) for n, v in outputs.items()}
 

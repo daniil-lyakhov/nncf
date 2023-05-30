@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import numpy as np
 from abc import ABC
 from abc import abstractmethod
 from collections import defaultdict
@@ -39,7 +40,7 @@ class StatisticsAggregator(ABC):
         self.dataset = dataset
         self.stat_subset_size = None
         self.statistic_points = StatisticPointsContainer()
-        self._is_sequential = isinstance(dataset, CustomInferenceDataset)
+        self._is_custom_inference = isinstance(dataset, CustomInferenceDataset)
 
     def collect_statistics(self, model: TModel) -> None:
         """
@@ -51,26 +52,34 @@ class StatisticsAggregator(ABC):
         model_transformer = ModelTransformerFactory.create(model)
 
         merged_statistics = self._get_merged_statistic_points(self.statistic_points, model)
-        if self._is_sequential:
+        if self._is_custom_inference:
             merged_statistics = self._adapt_collectors(merged_statistics, self.STACK_AXIS)
 
         transformation_layout = self._get_transformation_layout_extra_outputs(merged_statistics)
         model_with_outputs = model_transformer.transform(transformation_layout)
         engine = EngineFactory.create(model_with_outputs)
-        if self._is_sequential:
-            model.set_statistics_ov_model(model_with_outputs)
+        if self._is_custom_inference:
+            sequence_container = defaultdict(list)
+            custom_forward = self.dataset.get_custom_forward(engine.compiled_model, self._get_callback(model, sequence_container))
 
         for input_data in tqdm(
             islice(self.dataset.get_inference_data(), self.stat_subset_size),
             total=self.stat_subset_size,
             desc="Statistics collection",
         ):
-            if self._is_sequential:
-                outputs = model(input_data)
+            if self._is_custom_inference:
+                custom_forward(input_data)
+                processed_outputs = {}
+                for friendly_name, values in sequence_container.items():
+                    processed_outputs[friendly_name] = self._get_tensor_processor().stack(values, axis=self.STACK_AXIS)
             else:
-                outputs = engine.infer(input_data)
-            processed_outputs = self._process_outputs(outputs)
+                processed_outputs = engine.infer(input_data)
+                processed_outputs = self._process_outputs(processed_outputs)
             self._register_statistics(processed_outputs, merged_statistics)
+
+    @staticmethod
+    def _get_callback(model, sequence_container: StatisticPointsContainer):
+        pass
 
     def register_statistic_points(self, statistic_points: StatisticPointsContainer) -> None:
         """

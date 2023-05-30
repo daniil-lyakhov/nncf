@@ -5,11 +5,10 @@ from typing import Any
 
 
 class NNCFOVWrappedModel:
-    def __init__(self, ov_model, custom_forward, set_ov_model, **kwargs) -> None:
+    def __init__(self, ov_model, custom_forward, **kwargs) -> None:
         self._ov_model = ov_model
         self._original_model_outputs_names = {op.node.friendly_name for op in ov_model.outputs}
         self._custom_forward = custom_forward
-        self._set_ov_model = set_ov_model
         self._collected_statistics = defaultdict(list)
         self._stack_axis = 0
         self._ov_statistics_model = None

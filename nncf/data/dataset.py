@@ -119,6 +119,6 @@ class DataProvider(Generic[DataItem, ModelInput]):
 
 @api(canonical_alias="nncf.RecurentDataset")
 class CustomInferenceDataset(Dataset):
-    def __init__(self, data_source: Iterable, transform_fn, infer_model_fn):
+    def __init__(self, data_source: Iterable, transform_fn, get_custom_forward_fn):
         super().__init__(data_source, transform_fn)
-        self.infer_model_fn = infer_model_fn
+        self.get_custom_forward = get_custom_forward_fn
