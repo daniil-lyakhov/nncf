@@ -122,6 +122,7 @@ class OVStatisticsAggregator(StatisticsAggregator):
     @staticmethod
     def _get_callback(model, sequence_container):
         original_model_outputs_names = {op.node.friendly_name for op in model.outputs}
+
         def complition_callback(outputs):
             for op, value in outputs.items():
                 if op.node.friendly_name in original_model_outputs_names:
@@ -129,6 +130,7 @@ class OVStatisticsAggregator(StatisticsAggregator):
                 if not isinstance(value, np.ndarray):
                     value = value.data
                 sequence_container[op.node.friendly_name].append(OVNNCFTensor(value))
+
         return complition_callback
 
     @staticmethod

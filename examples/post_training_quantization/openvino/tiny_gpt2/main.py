@@ -6,29 +6,29 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import openvino
 import torch
-from openvino.runtime import Core, Tensor
-from transformers import AutoModelForCausalLM, PretrainedConfig
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from transformers.modeling_outputs import CausalLMOutputWithPast
-
+from openvino.runtime import Core
+from openvino.runtime import Tensor
+from openvino.tools import mo
 from optimum.exporters import TasksManager
 from optimum.exporters.onnx import export
-from optimum.utils import NormalizedConfigManager
-
-
-from openvino.tools import mo
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from optimum.intel.openvino import OVModelForCausalLM
-from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
-import nncf
+from optimum.utils import NormalizedConfigManager
+from transformers import AutoModelForCausalLM
+from transformers import AutoTokenizer
+from transformers import PretrainedConfig
+from transformers.file_utils import add_start_docstrings
+from transformers.file_utils import add_start_docstrings_to_model_forward
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
+import nncf
+from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
 
 GENERATION_LENGTH = 20
 
 
 model_id = "hf-internal-testing/tiny-random-gpt2"
-#model_id = "hf-internal-testing/tiny-random-GPTNeoModel"
-#model_id = "hf-internal-testing/tiny-random-GPTNeoXForCausalLM"
+# model_id = "hf-internal-testing/tiny-random-GPTNeoModel"
+# model_id = "hf-internal-testing/tiny-random-GPTNeoXForCausalLM"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 tokens = tokenizer("This is a sample input", return_tensors="pt")
@@ -48,12 +48,12 @@ def get_custom_forward(ov_model, callback_fn):
     def _callback_fn(info):
         outputs = {k: v for k, v in zip(info["infer_request"].model_outputs, info["infer_request"].outputs)}
         callback_fn(outputs)
+
     hf_model.request.set_callback(_callback_fn, {"infer_request": hf_model.request})
 
     def custom_forward(dataitem):
-        hf_model.generate(
-            **dataitem, min_length=GENERATION_LENGTH, max_length=GENERATION_LENGTH, num_beams=1
-        )
+        hf_model.generate(**dataitem, min_length=GENERATION_LENGTH, max_length=GENERATION_LENGTH, num_beams=1)
+
     return custom_forward
 
 

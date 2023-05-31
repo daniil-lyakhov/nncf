@@ -54,7 +54,8 @@ def get_backend(model) -> BackendType:
 
     try:
         import optimum
-        available_frameworks.append('OPTIMUM')
+
+        available_frameworks.append("OPTIMUM")
     except ImportError:
         optimum = None
     try:
@@ -75,12 +76,15 @@ def get_backend(model) -> BackendType:
 
     if ov is not None:
         from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
+
         if isinstance(model, (ov.Model, NNCFOVWrappedModel)):
             return BackendType.OPENVINO
 
     if optimum is not None:
         from optimum.intel.openvino.modeling_base import OVBaseModel
+
         from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
+
         if isinstance(model, (OVBaseModel, NNCFOVWrappedModel)):
             return BackendType.OPTIMUM
 
@@ -104,6 +108,7 @@ def copy_model(model: TModel) -> TModel:
     if model_backend == BackendType.OPENVINO:
         # TODO(l-bat): Remove after fixing ticket: 100919
         from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
+
         cloned_model = model.clone()
         if isinstance(model, NNCFOVWrappedModel):
             cloned_model = NNCFOVWrappedModel(cloned_model, model._custom_forward, model._set_ov_model, **model._kwargs)

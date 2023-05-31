@@ -1,7 +1,8 @@
-import numpy as np
-import openvino.runtime as ov
 from collections import defaultdict
 from typing import Any
+
+import numpy as np
+import openvino.runtime as ov
 
 
 class NNCFOVWrappedModel:

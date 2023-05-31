@@ -8,13 +8,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import numpy as np
 from abc import ABC
 from abc import abstractmethod
 from collections import defaultdict
 from itertools import islice
 from typing import Any, Dict, TypeVar
 
+import numpy as np
 from tqdm import tqdm
 
 from nncf.common.factory import EngineFactory
@@ -22,8 +22,8 @@ from nncf.common.factory import ModelTransformerFactory
 from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.tensor import NNCFTensor
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
-from nncf.data.dataset import Dataset
 from nncf.data.dataset import CustomInferenceDataset
+from nncf.data.dataset import Dataset
 
 TensorType = TypeVar("TensorType")
 TModel = TypeVar("TModel")
@@ -60,7 +60,9 @@ class StatisticsAggregator(ABC):
         engine = EngineFactory.create(model_with_outputs)
         if self._is_custom_inference:
             sequence_container = defaultdict(list)
-            custom_forward = self.dataset.get_custom_forward(engine.compiled_model, self._get_callback(model, sequence_container))
+            custom_forward = self.dataset.get_custom_forward(
+                engine.compiled_model, self._get_callback(model, sequence_container)
+            )
 
         for input_data in tqdm(
             islice(self.dataset.get_inference_data(), self.stat_subset_size),
