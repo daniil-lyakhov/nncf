@@ -1,15 +1,11 @@
 import os
 import subprocess
-from collections import defaultdict
-from typing import Dict
 
-import numpy as np
 import openvino.runtime as ov
 from openvino.tools.accuracy_checker.evaluators.quantization_model_evaluator import create_model_evaluator
 from openvino.tools.pot.configs.config import Config
 
 import nncf
-from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
 
 model_name = "mozilla-deepspeech-0.6.1"
 cache_dir = os.path.dirname(__file__)
@@ -46,42 +42,28 @@ def sequence_transform_fn(data_item):
     return data_item
 
 
-def custom_forward(self, model, data_item):
-    """
-    Combines preprocessed model inputs from `get_tokens_from_sequence_fn` and model outputs
-    from previous iteration. None is feeded as model outputs on first iteration.
+def get_custom_forward(model, callback):
+    def custom_forward(data_item):
+        def iter_through_sequence():
+            _, batch_annotation, batch_input, _ = data_item
+            filled_inputs, _, _ = model_evaluator._get_batch_input(batch_input, batch_annotation)
+            for filled_input in filled_inputs:
+                input_data = {}
+                for name, value in filled_input.items():
+                    input_data[model_evaluator.launcher.input_to_tensor_name[name]] = value
+                yield input_data
 
-    :param model_inputs: Preprocessed model input from `get_token_from_sequence_fn`.
-    :param model_outputs: Outuputs of target model from previous iteration. None on first iteration.
-    :return: Dict of acutual model inputs combined from preprocessed model input from `get_token_from_sequence_fn`
-        and previous model outputs for sequential models.
-    """
+        model_outputs = None
+        for model_inputs in iter_through_sequence():
+            state_inputs = model_evaluator.launcher._fill_lstm_inputs(model_outputs)
+            model_inputs.update(state_inputs)
+            model_outputs = model(model_inputs)
+            callback(model_outputs)
 
-    def iter_through_sequence():
-        _, batch_annotation, batch_input, _ = data_item
-        filled_inputs, _, _ = model_evaluator._get_batch_input(batch_input, batch_annotation)
-        for filled_input in filled_inputs:
-            input_data = {}
-            for name, value in filled_input.items():
-                input_data[model_evaluator.launcher.input_to_tensor_name[name]] = value
-            yield input_data
-
-    model_outputs = None
-    for model_inputs in iter_through_sequence():
-        state_inputs = model_evaluator.launcher._fill_lstm_inputs(model_outputs)
-        model_inputs.update(state_inputs)
-        model_outputs = model(model_inputs)
-        self.collect_statistics_callback(model_outputs)
-    return self.collected_statistics
+    return custom_forward
 
 
-def set_model_fn(self, ov_model):
-    self._ov_model = ov.Core().compile_model(ov_model, device_name="CPU")
+dataset = nncf.CustomInferenceDataset(model_evaluator.dataset, sequence_transform_fn, get_custom_forward)
 
 
-dataset = nncf.CustomInferenceDataset(model_evaluator.dataset, sequence_transform_fn, custom_forward)
-
-# Check for user
-wrapped_model = NNCFOVWrappedModel(ov_model, custom_forward, set_model_fn)
-
-quantized_model = nncf.quantize(wrapped_model, dataset, subset_size=3)
+quantized_model = nncf.quantize(ov_model, dataset, subset_size=3)

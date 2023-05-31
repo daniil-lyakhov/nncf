@@ -1,27 +1,7 @@
-import logging
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from typing import Dict, Optional, Tuple, Union
-
-import numpy as np
-import openvino
-import torch
-from openvino.runtime import Core
-from openvino.runtime import Tensor
-from openvino.tools import mo
-from optimum.exporters import TasksManager
-from optimum.exporters.onnx import export
 from optimum.intel.openvino import OVModelForCausalLM
-from optimum.utils import NormalizedConfigManager
-from transformers import AutoModelForCausalLM
 from transformers import AutoTokenizer
-from transformers import PretrainedConfig
-from transformers.file_utils import add_start_docstrings
-from transformers.file_utils import add_start_docstrings_to_model_forward
-from transformers.modeling_outputs import CausalLMOutputWithPast
 
 import nncf
-from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
 
 GENERATION_LENGTH = 20
 

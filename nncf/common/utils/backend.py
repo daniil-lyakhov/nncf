@@ -16,11 +16,11 @@ TModel = TypeVar("TModel")
 
 
 class BackendType(Enum):
+    OPTIMUM = "Dummy"
     TORCH = "Torch"
     TENSORFLOW = "Tensorflow"
     ONNX = "ONNX"
     OPENVINO = "OpenVINO"
-    OPTIMUM = "Optimum"
 
 
 def get_backend(model) -> BackendType:
@@ -53,12 +53,6 @@ def get_backend(model) -> BackendType:
         onnx = None
 
     try:
-        import optimum
-
-        available_frameworks.append("OPTIMUM")
-    except ImportError:
-        optimum = None
-    try:
         import openvino.runtime as ov
 
         available_frameworks.append("OpenVINO")
@@ -74,19 +68,8 @@ def get_backend(model) -> BackendType:
     if onnx is not None and isinstance(model, onnx.ModelProto):
         return BackendType.ONNX
 
-    if ov is not None:
-        from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
-
-        if isinstance(model, (ov.Model, NNCFOVWrappedModel)):
-            return BackendType.OPENVINO
-
-    if optimum is not None:
-        from optimum.intel.openvino.modeling_base import OVBaseModel
-
-        from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
-
-        if isinstance(model, (OVBaseModel, NNCFOVWrappedModel)):
-            return BackendType.OPTIMUM
+    if ov is not None and isinstance(model, ov.Model):
+        return BackendType.OPENVINO
 
     raise RuntimeError(
         "Could not infer the backend framework from the model type because "
@@ -103,16 +86,9 @@ def copy_model(model: TModel) -> TModel:
     :return: Copy of the backend-specific model instance
     """
     model_backend = get_backend(model)
-    if model_backend == BackendType.OPTIMUM:
-        return model
     if model_backend == BackendType.OPENVINO:
         # TODO(l-bat): Remove after fixing ticket: 100919
-        from examples.post_training_quantization.openvino.tiny_gpt2.wrapper import NNCFOVWrappedModel
-
-        cloned_model = model.clone()
-        if isinstance(model, NNCFOVWrappedModel):
-            cloned_model = NNCFOVWrappedModel(cloned_model, model._custom_forward, model._set_ov_model, **model._kwargs)
-        return cloned_model
+        return model.clone()
     if model_backend == BackendType.TENSORFLOW:
         # deepcopy and tensorflow.keras.models.clone_model does not work correctly on 2.8.4 version
         from nncf.tensorflow.graph.model_transformer import TFModelTransformer
