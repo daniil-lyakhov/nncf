@@ -156,7 +156,7 @@ class PostTrainingQuantization(Algorithm):
             from nncf.onnx.statistics.aggregator import ONNXStatisticsAggregator
 
             return ONNXStatisticsAggregator(dataset)
-        if backend in [BackendType.OPENVINO, BackendType.OPTIMUM]:
+        if backend in [BackendType.OPENVINO]:
             from nncf.openvino.statistics.aggregator import OVStatisticsAggregator
 
             return OVStatisticsAggregator(dataset)

@@ -72,7 +72,7 @@ def quantize(
     :rtype: TModel
     """
     backend = get_backend(model)
-    if backend in [BackendType.OPENVINO, BackendType.OPTIMUM]:
+    if backend in [BackendType.OPENVINO]:
         from nncf.openvino.quantization.quantize_model import quantize_impl
 
         return quantize_impl(

@@ -16,7 +16,6 @@ TModel = TypeVar("TModel")
 
 
 class BackendType(Enum):
-    OPTIMUM = "Dummy"
     TORCH = "Torch"
     TENSORFLOW = "Tensorflow"
     ONNX = "ONNX"

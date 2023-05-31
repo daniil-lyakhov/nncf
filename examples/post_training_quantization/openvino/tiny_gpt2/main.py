@@ -6,6 +6,18 @@ import nncf
 GENERATION_LENGTH = 20
 
 
+def fix_ov_model_names_duplicates(ov_model):
+    names = set()
+    for op in ov_model.get_ops():
+        friendly_name = op.get_friendly_name()
+        while True:
+            if friendly_name not in names:
+                break
+            friendly_name += "_"
+        names.add(friendly_name)
+        op.set_friendly_name(friendly_name)
+
+
 model_id = "hf-internal-testing/tiny-random-gpt2"
 # model_id = "hf-internal-testing/tiny-random-GPTNeoModel"
 # model_id = "hf-internal-testing/tiny-random-GPTNeoXForCausalLM"
@@ -45,16 +57,7 @@ dataset = nncf.CustomInferenceDataset([tokens] * 10, transform_fn, get_custom_fo
 
 
 # Fix ov model duplicated names:
-names = set()
-for op in model_with_pkv.model.get_ops():
-    friendly_name = op.get_friendly_name()
-    while True:
-        if friendly_name not in names:
-            break
-        friendly_name += "_"
-    names.add(friendly_name)
-    op.set_friendly_name(friendly_name)
-
+fix_ov_model_names_duplicates(model_with_pkv.model)
 quantized_model = quantized_model = nncf.quantize(model_with_pkv.model, dataset, subset_size=3)
 
 model_with_pkv.model = quantized_model
