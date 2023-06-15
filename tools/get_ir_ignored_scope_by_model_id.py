@@ -32,7 +32,7 @@ def print_ignored_scope_by_model_name(model_name: str, xml_path: str, bin_path: 
         return
 
     for name in is_names:
-        print(name)
+        print(f'"{name}"')
 
 
 def mobilenet_v3_large_tf_torch_is(ov_model: ov.Model) -> Optional[List[str]]:
@@ -78,6 +78,34 @@ def east_resnet_v1_50_tf_is(ov_model: ov.Model) -> Optional[List[str]]:
             assert next_node.type_info.name == "Convolution"
             return [next_node.get_friendly_name()]
     return None
+
+
+def sharpen_sharpen_is(ov_model: ov.Model) -> Optional[List[str]]:
+    idx_concat = 0
+    idx_prelu = 0
+    ret_val = []
+    for node in ov_model.get_ordered_ops():
+        if node.type_info.name == "Concat":
+            idx_concat += 1
+            if idx_concat != 3:
+                continue
+            next_nodes = get_next_nodes(node, 0)
+            assert len(next_nodes) == 1
+            next_node = next_nodes[0]
+            assert next_node.type_info.name == "Convolution"
+            ret_val.append(next_node.get_friendly_name())
+
+        if node.type_info.name == "PRelu":
+            for next_node in get_next_nodes(node, 0):
+                if next_node.type_info.name == "AvgPool":
+                    idx_prelu += 1
+                    if idx_prelu != 3:
+                        continue
+                    ret_val.append(next_node.get_friendly_name())
+                    break
+
+    assert len(ret_val) == 2
+    return ret_val
 
 
 def denoise_is(ov_model: ov.Model):
@@ -215,6 +243,7 @@ MODEL_ID_TO_IGNORED_SCOPE_BUILDER_MAP = {
     "east_resnet_v1_50_tf": east_resnet_v1_50_tf_is,
     "Denoise": denoise_is,
     "detr_resnet50": detr_resnet50_is,
+    "Sharpen-Sharpen": sharpen_sharpen_is,
 }
 
 
