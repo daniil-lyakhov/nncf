@@ -19,7 +19,7 @@ from dataclasses import asdict
 from dataclasses import dataclass
 from enum import Enum
 from itertools import islice
-from typing import Any, Iterable, Optional, TypeVar
+from typing import Any, Dict, Iterable, Optional, TypeVar
 
 import numpy as np
 import openvino.runtime as ov
@@ -683,6 +683,14 @@ def get_transform_fn(model_evaluator: ModelEvaluator, ov_model):
     return transform_fn
 
 
+# pylint: disable=protected-access
+def get_model_evaluator(accuracy_checker_config: Dict[str, Any], ov_model: ov.Model):
+    model_evaluator = create_model_evaluator(accuracy_checker_config)
+    model_evaluator.load_network([{"model": {"model": ov_model}}])
+    model_evaluator.select_dataset("")
+    return model_evaluator
+
+
 def get_dataset(model_evaluator, quantization_parameters):
     dataset = ACDattasetWrapper(model_evaluator)
     sequence_subset_size = quantization_parameters.get("subset_size", 300)
@@ -738,11 +746,6 @@ class ACDattasetWrapper:
 
 
 def quantize_model(xml_path, bin_path, accuracy_checker_config, quantization_impl, quantization_parameters):
-    ov_model = ov.Core().read_model(model=xml_path, weights=bin_path)
-    model_evaluator = create_model_evaluator(accuracy_checker_config)
-    model_evaluator.load_network([{"model": ov_model}])
-    model_evaluator.select_dataset("")
-
     advanced_parameters = quantization_parameters.get("advanced_parameters", AdvancedQuantizationParameters())
     if quantization_impl == "pot":
         advanced_parameters.backend_params["use_pot"] = True
@@ -751,6 +754,9 @@ def quantize_model(xml_path, bin_path, accuracy_checker_config, quantization_imp
     else:
         raise NotImplementedError()
     quantization_parameters["advanced_parameters"] = advanced_parameters
+
+    ov_model = ov.Core().read_model(model=xml_path, weights=bin_path)
+    model_evaluator = get_model_evaluator(accuracy_checker_config, ov_model)
 
     transform_fn = get_transform_fn(model_evaluator, ov_model)
     dataset = get_dataset(model_evaluator, quantization_parameters)
