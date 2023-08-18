@@ -100,7 +100,6 @@ class PostTrainingQuantization(Algorithm):
             channel_alignment = ChannelAlignment(
                 subset_size=subset_size,
                 inplace_statistics=advanced_parameters.inplace_statistics,
-                backend_params=advanced_parameters.backend_params,
             )
             self.first_stage_algorithms.append(channel_alignment)
 
