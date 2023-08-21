@@ -24,8 +24,10 @@ from nncf.experimental.common.tensor_statistics.collectors import MedianAggregat
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
 from nncf.openvino.graph.layer_attributes import OVLayerAttributes
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVAddMetatype
+from nncf.openvino.graph.metatypes.openvino_metatypes import OVConvolutionBackpropDataMetatype
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVConvolutionMetatype
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVDepthwiseConvolutionMetatype
+from nncf.openvino.graph.metatypes.openvino_metatypes import OVGroupConvolutionBackpropDataMetatype
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVGroupConvolutionMetatype
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVMatMulMetatype
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVSubtractMetatype
@@ -108,12 +110,24 @@ class OVChannelAlignmentAlgoBackend(ChannelAlignmentAlgoBackend):
                 conv_weight_in_channels_dim=1,
                 bias_channels_dim=node.metatype.output_channel_axis,
             )
+        if node.metatype == OVConvolutionBackpropDataMetatype:
+            return LayoutDescriptor(
+                conv_weight_out_channels_dim=1,
+                conv_weight_in_channels_dim=0,
+                bias_channels_dim=node.metatype.output_channel_axis,
+            )
         if node.metatype in [OVGroupConvolutionMetatype, OVDepthwiseConvolutionMetatype]:
             # Using groups dim as output channels dim for ChannelAlignment algorithm
             # TODO(dlyakhov) support group convolutions with groups number not in [1, out_channels]
             return LayoutDescriptor(
                 conv_weight_out_channels_dim=0,
                 conv_weight_in_channels_dim=2,
+                bias_channels_dim=node.metatype.output_channel_axis,
+            )
+        if node.metatype == OVGroupConvolutionBackpropDataMetatype:
+            return LayoutDescriptor(
+                conv_weight_out_channels_dim=0,
+                conv_weight_in_channels_dim=1,
                 bias_channels_dim=node.metatype.output_channel_axis,
             )
         if node.metatype == OVMatMulMetatype:

@@ -775,7 +775,7 @@ def get_transform_fn(model_evaluator: ModelEvaluator, ov_model):
 def get_dataset(model_evaluator, quantization_parameters):
     dataset = ACDattasetWrapper(model_evaluator)
     sequence_subset_size = quantization_parameters.get("subset_size", 300)
-    subset_size = dataset.calculate_per_sample_subset_size(sequence_subset_size)
+    subset_size = 1  # dataset.calculate_per_sample_subset_size(sequence_subset_size)
     if subset_size != sequence_subset_size:
         print(f"Subset size is changed from {sequence_subset_size} to {subset_size}")
         print(f"Total dataset size: {len(dataset)}")
@@ -827,6 +827,7 @@ class ACDattasetWrapper:
 
 
 def quantize_model(xml_path, bin_path, accuracy_checker_config, quantization_impl, quantization_parameters):
+    quantization_parameters["subset_size"] = 1
     ov_model = ov.Core().read_model(model=xml_path, weights=bin_path)
     model_evaluator = create_model_evaluator(accuracy_checker_config)
     model_evaluator.load_network([{"model": ov_model}])
