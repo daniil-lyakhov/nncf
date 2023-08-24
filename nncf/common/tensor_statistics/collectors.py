@@ -44,7 +44,7 @@ class TensorStatisticCollectorBase(ABC):
     def num_samples(self) -> int:
         return self._num_samples
 
-    def register_input(self, x: TensorType) -> TensorType:
+    def register_inputs(self, x: TensorType) -> TensorType:
         """Registers input tensor"""
         if not self._enabled:
             return x
@@ -253,6 +253,11 @@ class NNCFCollectorTensorProcessor(ABC):
 
     @staticmethod
     @abstractmethod
+    def squeeze(x: NNCFTensor, dim: Optional[int] = None) -> NNCFTensor:
+        """"""
+
+    @staticmethod
+    @abstractmethod
     def sum(tensor: NNCFTensor) -> TensorElementsType:
         """
         Returns a sum of each elements in a given NNCFTensor.
@@ -278,6 +283,17 @@ class NNCFCollectorTensorProcessor(ABC):
         :returns: List of the quantile-th percentile(s) of the tensor elements.
         """
 
+    @classmethod
+    @abstractmethod
+    def precentile(
+        cls,
+        tensor: NNCFTensor,
+        precentile: Union[float, List[float]],
+        axis: Union[int, tuple, list],
+        keepdims: bool = False,
+    ) -> List[TensorElementsType]:
+        """"""
+
     @staticmethod
     @abstractmethod
     def mean_per_channel(x: NNCFTensor, axis: int) -> NNCFTensor:
@@ -291,7 +307,9 @@ class NNCFCollectorTensorProcessor(ABC):
 
     @classmethod
     @abstractmethod
-    def no_outliers_map(cls, x: NNCFTensor, fn: MaskedReduceFN, axis: int = 0, alpha: float = 0.01) -> NNCFTensor:
+    def no_outliers_map(
+        cls, x: NNCFTensor, fn: MaskedReduceFN, axis: Union[int, Tuple[int, ...]] = 0, alpha: float = 0.01
+    ) -> NNCFTensor:
         """
         Computes quantiles [alpha, 1 - alpha] on given tensor, masks all elements that
         are smaller that alpha and bigger than 1 - alpha quantile and applies
@@ -304,6 +322,22 @@ class NNCFCollectorTensorProcessor(ABC):
             [quantile(alpha), quantile(1 - alpha)]. Must be between 0 and 1. inclusive.
         :returns: Result of given masked reduction function on filtered from outliers NNCFTensor.
         """
+
+    @classmethod
+    def masked_map(cls, x: NNCFTensor, fn: MaskedReduceFN, filter_fn) -> NNCFTensor:
+        """ """
+
+    @classmethod
+    def sub(cls, a: NNCFTensor, b: NNCFTensor) -> NNCFTensor:
+        """"""
+
+    @classmethod
+    def filter_by_fn(cls, x: NNCFTensor, filter_fn) -> NNCFTensor:
+        """ """
+
+    @classmethod
+    def non_zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
+        """ """
 
 
 class MinMaxStatisticCollector(OnlineTensorStatisticCollector):

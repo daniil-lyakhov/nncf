@@ -119,7 +119,9 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
             min_values.append(np.array(statistic.min_values).flatten())
         max_values = np.max(max_values, axis=0)
         min_values = np.min(min_values, axis=0)
-        return OVMinMaxTensorStatistic(min_values=min_values, max_values=max_values)
+        return OVMinMaxTensorStatistic(
+            {OVMinMaxTensorStatistic.MIN_STAT: min_values, OVMinMaxTensorStatistic.MAX_STAT: max_values}
+        )
 
     @staticmethod
     def _get_reduction_shape_and_use_abs_max(
@@ -181,7 +183,7 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
                     f"Aggregator type: {params.aggregator_type} is not supported for OpenVino PTQ backend yet."
                 )
 
-            kwargs = {"reduction_shape": reduction_shape, "inplace": inplace}
+            kwargs = {"reduction_axes": reduction_shape, "inplace": inplace}
             if params.statistics_type in [StatisticsType.QUANTILE, StatisticsType.ABS_QUANTILE]:
                 if container_key == OVMinMaxTensorStatistic.MIN_STAT:
                     quantile = params.quantile_outlier_prob

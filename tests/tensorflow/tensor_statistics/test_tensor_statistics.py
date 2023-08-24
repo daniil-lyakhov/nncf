@@ -106,7 +106,7 @@ class TestCollectedStatistics:
         for reduction_shape in reduction_shapes_vs_ref_statistic.keys():
             collector_obj = collector(use_abs_max=True, reduction_shape=reduction_shape)
             for input_ in TestCollectedStatistics.REF_INPUTS:
-                collector_obj.register_input(input_)
+                collector_obj.register_inputs(input_)
             test_stats = collector_obj.get_statistics()
             assert reduction_shapes_vs_ref_statistic[reduction_shape] == test_stats
 
@@ -184,7 +184,7 @@ class TestCollectedStatistics:
         for reduction_shape in reduction_shapes_vs_ref_statistic.keys():
             collector_obj = collector(reduction_shape=reduction_shape)
             for input_ in TestCollectedStatistics.REF_INPUTS:
-                collector_obj.register_input(input_)
+                collector_obj.register_inputs(input_)
             test_stats = collector_obj.get_statistics()
             assert reduction_shapes_vs_ref_statistic[reduction_shape] == test_stats
 
@@ -210,12 +210,12 @@ class TestCollectedStatistics:
 
     def test_collected_samples(self, collector_for_interface_test: TensorStatisticCollectorBase):
         for input_ in TestCollectedStatistics.REF_INPUTS:
-            collector_for_interface_test.register_input(input_)
+            collector_for_interface_test.register_inputs(input_)
         assert collector_for_interface_test.collected_samples() == len(TestCollectedStatistics.REF_INPUTS)
 
     def test_reset(self, collector_for_interface_test: TensorStatisticCollectorBase):
         for input_ in TestCollectedStatistics.REF_INPUTS:
-            collector_for_interface_test.register_input(input_)
+            collector_for_interface_test.register_inputs(input_)
         collector_for_interface_test.reset()
         assert collector_for_interface_test.collected_samples() == 0
         with pytest.raises(StatisticsNotCollectedError):
@@ -223,16 +223,16 @@ class TestCollectedStatistics:
 
     def test_enable_disable(self, collector_for_interface_test: TensorStatisticCollectorBase):
         for input_ in TestCollectedStatistics.REF_INPUTS:
-            collector_for_interface_test.register_input(input_)
+            collector_for_interface_test.register_inputs(input_)
 
         collector_for_interface_test.disable()
         for input_ in TestCollectedStatistics.REF_INPUTS:
-            collector_for_interface_test.register_input(input_)
+            collector_for_interface_test.register_inputs(input_)
         assert collector_for_interface_test.collected_samples() == len(TestCollectedStatistics.REF_INPUTS)
 
         collector_for_interface_test.enable()
         for input_ in TestCollectedStatistics.REF_INPUTS:
-            collector_for_interface_test.register_input(input_)
+            collector_for_interface_test.register_inputs(input_)
         assert collector_for_interface_test.collected_samples() == 2 * len(TestCollectedStatistics.REF_INPUTS)
 
     OFFLINE_COLLECTORS = [
@@ -258,7 +258,7 @@ class TestCollectedStatistics:
 
     def test_num_samples(self, collector_for_num_samples_test: OfflineTensorStatisticCollector):
         for input_ in TestCollectedStatistics.REF_INPUTS * 10:
-            collector_for_num_samples_test.register_input(input_)
+            collector_for_num_samples_test.register_inputs(input_)
         assert collector_for_num_samples_test.collected_samples() == TestCollectedStatistics.REF_NUM_SAMPLES
 
 

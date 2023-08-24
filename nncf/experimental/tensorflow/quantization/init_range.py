@@ -65,7 +65,7 @@ class RangeInitializerV2(RangeInitializer):
         collector = RangeInitializerV2.generate_stat_collector(
             reduction_shape, collector_params, init_config, num_batches
         )
-        handles.append(op.register_hook_pre_call(collector.register_input))
+        handles.append(op.register_hook_pre_call(collector.register_inputs))
         op.enabled = False
         collectors.append((op, collector, op_weights))
 

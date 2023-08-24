@@ -997,6 +997,8 @@ class AsymmetricQuantizer(BaseQuantizer):
 
 
 def get_per_channel_scale_shape(input_shape, is_weights, channel_idx: int = None):
+    # TODO: case channel_ids=0, is_weights=True and per_sample_stats=True
+    # leads to dimension error in statistic calculation
     scale_shape = [1 for _ in input_shape]
     if channel_idx is None:
         if is_weights:

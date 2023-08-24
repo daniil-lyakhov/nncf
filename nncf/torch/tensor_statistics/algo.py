@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from functools import partial
 from typing import Dict, Set
 
 from nncf.api.compression import CompressionStage
@@ -24,6 +25,7 @@ from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.graph.transformations.commands import TransformationPriority
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.nncf_network import NNCFNetwork
+from nncf.torch.tensor import PTNNCFTensor
 
 
 class TensorStatisticObservationPoint:
@@ -54,9 +56,16 @@ class TensorStatisticsCollectionBuilder(PTCompressionAlgorithmBuilder):
         layout = PTTransformationLayout()
         for op, rs_vs_collector in self._observation_points_vs_collectors.items():
             for collector in rs_vs_collector.values():
-                hook_obj = collector.register_input
+
+                def hook_obj(x, collector):
+                    collector.register_unnamed_inputs(PTNNCFTensor(x))
+                    return x
+
                 command = PTInsertionCommand(
-                    op.target_point, hook_obj, TransformationPriority.FP32_TENSOR_STATISTICS_OBSERVATION
+                    op.target_point,
+                    # collector.register_inputs,
+                    partial(hook_obj, collector=collector),
+                    TransformationPriority.FP32_TENSOR_STATISTICS_OBSERVATION,
                 )
                 layout.register(command)
         return layout

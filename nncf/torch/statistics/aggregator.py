@@ -41,6 +41,14 @@ class PTStatisticsAggregator(StatisticsAggregator):
     ) -> TransformationLayout:
         transformation_layout = TransformationLayout()
         transformation_commands = []
+
+        def register_inputs_fn(fn):
+            def register_inputs(input_: torch.Tensor):
+                fn(PTNNCFTensor(input_))
+                return input_
+
+            return register_inputs
+
         for _statistic_points in statistic_points.values():
             for _statistic_point in _statistic_points:
                 for collectors in _statistic_point.algorithm_to_tensor_collectors.values():
@@ -48,7 +56,7 @@ class PTStatisticsAggregator(StatisticsAggregator):
                         transformation_commands.append(
                             PTInsertionCommand(
                                 _statistic_point.target_point,
-                                collector.register_input,
+                                register_inputs_fn(collector.register_unnamed_inputs),
                                 TransformationPriority.FP32_TENSOR_STATISTICS_OBSERVATION,
                             )
                         )

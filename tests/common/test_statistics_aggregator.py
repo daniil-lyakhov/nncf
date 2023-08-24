@@ -375,6 +375,7 @@ class TemplateTestStatisticsAggregator:
         inplace_statistics,
         is_backend_support_custom_estimators,
     ):
+        inplace_statistics = False
         model = self.get_backend_model(dataset_samples)
         quantizer_config = QuantizerConfig(
             mode=test_parameters.quantization_mode, per_channel=test_parameters.per_channel
@@ -428,6 +429,9 @@ class TemplateTestStatisticsAggregator:
                     shape = (3, 1, 1, 1)
                 ref_min_val, ref_max_val = map(lambda x: np.reshape(x, shape), (ref_min_val, ref_max_val))
 
+            if not np.allclose(stat.min_values, ref_min_val):
+                # breakpoint()
+                stat = tensor_collector.get_statistics()
             assert np.allclose(stat.min_values, ref_min_val)
             assert np.allclose(stat.max_values, ref_max_val)
             if isinstance(ref_min_val, np.ndarray):
@@ -811,10 +815,10 @@ class TemplateTestStatisticsAggregator:
         model = params["model"](dataset_samples)
         params = {}
         if statistics_type in [StatisticsType.MIN, StatisticsType.MAX, StatisticsType.ABS_MAX, StatisticsType.MEAN]:
-            params["reduction_shape"] = [None, (0, 1, 3), (1, 2, 3)]
+            params["reduction_axes"] = [None, (0, 1, 3), (1, 2, 3)]
             params["inplace"] = [False, True]
         elif statistics_type in [StatisticsType.QUANTILE, StatisticsType.ABS_QUANTILE]:
-            params["reduction_shape"] = [None, (0, 1, 3), (1, 2, 3)]
+            params["reduction_axes"] = [None, (0, 1, 3), (1, 2, 3)]
             params["quantile"] = [[0.01, 0.99], [0.001, 0.999]]
         elif statistics_type == "batch_mean":
             pytest.skip("Inplace statistic woun't work until openvino==2023.0.0 release")

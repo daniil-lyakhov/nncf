@@ -22,6 +22,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.models import squeezenet1_1
 
+import nncf.torch.tensor_statistics.collectors as pt_collectors
 from nncf.common.graph import NNCFNodeName
 from nncf.common.quantization.initialization.range import PerLayerRangeInitConfig
 from nncf.common.quantization.initialization.range import RangeInitConfig
@@ -33,6 +34,7 @@ from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.quantization.structs import QuantizerGroup
 from nncf.config import NNCFConfig
 from nncf.config.structures import QuantizationRangeInitArgs
+from nncf.experimental.common.tensor_statistics.collectors import PostAggregateHook
 from nncf.torch import utils
 from nncf.torch.checkpoint_loading import load_state
 from nncf.torch.initialization import DefaultInitializingDataLoader
@@ -46,9 +48,7 @@ from nncf.torch.quantization.layers import AsymmetricQuantizer
 from nncf.torch.quantization.layers import BaseQuantizer
 from nncf.torch.quantization.layers import PTQuantizerSpec
 from nncf.torch.quantization.layers import SymmetricQuantizer
-from nncf.torch.tensor_statistics.collectors import PTMeanMinMaxStatisticCollector
-from nncf.torch.tensor_statistics.collectors import PTMedianMADStatisticCollector
-from nncf.torch.tensor_statistics.collectors import PTMinMaxStatisticCollector
+from nncf.torch.tensor import PTNNCFTensor
 from nncf.torch.tensor_statistics.statistics import pt_convert_stat_to_min_max_tensor_stat
 from nncf.torch.utils import get_all_modules_by_type
 from nncf.torch.utils import safe_thread_call
@@ -64,6 +64,7 @@ from tests.torch.quantization.quantization_helpers import get_squeezenet_quantiz
 from tests.torch.quantization.quantization_helpers import post_compression_test_distr_init
 
 # pylint:disable=unused-import
+# pylint:disable=protected-access
 
 
 def scale_signed_dumping_worker(gpu, ngpus_per_node, config, tmp_path):
@@ -528,6 +529,7 @@ def init_idfn(val):
             ("mean_min_max", 9999, 0, 9999),
             ("threesigma", 16119.5, -6119.5, 22239),
             ("percentile", 6789, 3210, 3578),
+            ("mean_percentile", 9989.0010, 9.9990, 9979.0020),
         ]
     ),
     ids=init_idfn,
@@ -671,53 +673,69 @@ def range_init_call_count_test_struct(request):
     return request.param
 
 
+class CustomSpy:
+    def __init__(self, fn) -> None:
+        self._fn = fn
+        self.call_count = 0
+        self.return_values_list = []
+
+    def __call__(self, *args, **kwargs):
+        self.call_count += 1
+        retval = self._fn(*args, **kwargs)
+        self.return_values_list.append(retval)
+        return retval
+
+
 # pylint:disable=redefined-outer-name
 def test_per_layer_range_init_collectors_are_called_the_required_number_of_times(
     range_init_call_count_test_struct, mocker
 ):
+    range_minmax_init_create_spy = CustomSpy(pt_collectors.get_min_max_statistic_collector)
+    mocker.patch("nncf.torch.quantization.init_range.get_min_max_statistic_collector", new=range_minmax_init_create_spy)
+    range_meanminmax_init_create_spy = CustomSpy(pt_collectors.get_mixed_min_max_statistic_collector)
+    mocker.patch(
+        "nncf.torch.quantization.init_range.get_mixed_min_max_statistic_collector", new=range_meanminmax_init_create_spy
+    )
+    range_threesigma_init_create_spy = CustomSpy(pt_collectors.get_median_mad_statistic_collector)
+    mocker.patch(
+        "nncf.torch.quantization.init_range.get_median_mad_statistic_collector", new=range_threesigma_init_create_spy
+    )
+
     config = create_config()
     config["compression"]["initializer"]["range"] = range_init_call_count_test_struct.range_init_config
     data_loader = TestRangeInit.create_dataloader(True, config, 10)
     config.register_extra_structs([QuantizationRangeInitArgs(data_loader)])
 
-    range_minmax_init_create_spy = mocker.spy(PTMinMaxStatisticCollector, "__init__")
-    range_meanminmax_init_create_spy = mocker.spy(PTMeanMinMaxStatisticCollector, "__init__")
-    range_threesigma_init_create_spy = mocker.spy(PTMedianMADStatisticCollector, "__init__")
-
-    range_minmax_init_register_input_spy = mocker.spy(PTMinMaxStatisticCollector, "_register_input")
-    range_meanminmax_init_register_input_spy = mocker.spy(PTMeanMinMaxStatisticCollector, "_register_input")
-    range_threesigma_init_register_input_spy = mocker.spy(PTMedianMADStatisticCollector, "_register_input")
-
     TestRangeInit.create_algo_and_compressed_model(config)
 
-    assert (
-        range_minmax_init_create_spy.call_count
-        == range_init_call_count_test_struct.expected_call_count_initializer_create["min_max"]
-    )
-    assert (
-        range_meanminmax_init_create_spy.call_count
-        == range_init_call_count_test_struct.expected_call_count_initializer_create["mean_min_max"]
-    )
-    assert (
-        range_threesigma_init_create_spy.call_count
-        == range_init_call_count_test_struct.expected_call_count_initializer_create["three_sigma"]
-    )
+    for stat_type, spy in [
+        ("min_max", range_minmax_init_create_spy),
+        ("mean_min_max", range_meanminmax_init_create_spy),
+        ("three_sigma", range_threesigma_init_create_spy),
+    ]:
+        assert spy.call_count == range_init_call_count_test_struct.expected_call_count_initializer_create[stat_type]
+        collected_samples = 0
+        for tensor_collector in spy.return_values_list:
+            cur_values = set()
+            for aggr in tensor_collector.aggregators.values():
+                if isinstance(aggr, PostAggregateHook):
+                    cur_values.add(aggr._aggregator._collected_samples)
+                else:
+                    cur_values.add(aggr._collected_samples)
+            assert len(cur_values) == 1
+            collected_samples += cur_values.pop()
 
-    assert (
-        range_minmax_init_register_input_spy.call_count
-        == range_init_call_count_test_struct.expected_call_count_register_input["min_max"]
-    )
-    assert (
-        range_meanminmax_init_register_input_spy.call_count
-        == range_init_call_count_test_struct.expected_call_count_register_input["mean_min_max"]
-    )
-    assert (
-        range_threesigma_init_register_input_spy.call_count
-        == range_init_call_count_test_struct.expected_call_count_register_input["three_sigma"]
-    )
+        assert collected_samples == range_init_call_count_test_struct.expected_call_count_register_input[stat_type]
 
 
-QUANTIZER_RANGE_INITIALIZERS = ["min_max", "threesigma", "mean_min_max", "percentile", "mixed_min_max"]
+QUANTIZER_RANGE_INITIALIZERS = [
+    "min_max",
+    "threesigma",
+    "mean_min_max",
+    "percentile",
+    "mixed_min_max",
+    "mean_percentile",
+]
 
 
 class QuantizeRangeInitScaleShapeTestStruct:
@@ -794,7 +812,7 @@ def test_quantize_range_init_sets_correct_scale_shapes(quantizer_range_init_test
         collector = StatCollectorGenerator.generate_stat_collector_for_range_init_config(
             range_init_config, tuple(quantizer.scale_shape), collector_params
         )
-        collector.register_input(torch.ones(test_struct.input_shape))
+        collector.register_unnamed_inputs(PTNNCFTensor(torch.ones(test_struct.input_shape)))
         stat = collector.get_statistics()
         minmax_values = pt_convert_stat_to_min_max_tensor_stat(stat)
         quantizer.apply_minmax_init(min_values=minmax_values.min_values, max_values=minmax_values.max_values)

@@ -37,13 +37,13 @@ from nncf.torch.quantization.layers import BaseQuantizer
 from nncf.torch.quantization.layers import SymmetricQuantizer
 from nncf.torch.quantization.layers import get_scale_shape
 from nncf.torch.quantization.translator import PTTargetPointTranslator
+from nncf.torch.tensor import PTNNCFTensor
 from nncf.torch.tensor_statistics.algo import TensorStatisticObservationPoint
-from nncf.torch.tensor_statistics.collectors import PTMeanMinMaxStatisticCollector
-from nncf.torch.tensor_statistics.collectors import PTMeanPercentileStatisticCollector
-from nncf.torch.tensor_statistics.collectors import PTMedianMADStatisticCollector
-from nncf.torch.tensor_statistics.collectors import PTMinMaxStatisticCollector
-from nncf.torch.tensor_statistics.collectors import PTMixedMinMaxStatisticCollector
-from nncf.torch.tensor_statistics.collectors import PTPercentileStatisticCollector
+from nncf.torch.tensor_statistics.collectors import get_mean_percentile_statistic_collector
+from nncf.torch.tensor_statistics.collectors import get_median_mad_statistic_collector
+from nncf.torch.tensor_statistics.collectors import get_min_max_statistic_collector
+from nncf.torch.tensor_statistics.collectors import get_mixed_min_max_statistic_collector
+from nncf.torch.tensor_statistics.collectors import get_precentile_tensor_collector
 from nncf.torch.tensor_statistics.statistics import pt_convert_stat_to_min_max_tensor_stat
 
 
@@ -103,7 +103,7 @@ class PTRangeInitCollectorParams(RangeInitCollectorParams):
         self._input_shape = input_shape
         self._channel_idx = channel_idx
 
-    def convert_reduction_shape(self, per_sample_stats) -> ReductionShape:
+    def convert_reduction_axes(self, per_sample_stats) -> ReductionShape:
         """
         Calculates the reduction shape of the tensor.
 
@@ -115,9 +115,29 @@ class PTRangeInitCollectorParams(RangeInitCollectorParams):
         if self._per_channel:
             val = (ndims + self._channel_idx) % ndims
             reduction_shape.remove(val)
+            if not val and self.use_per_sample_stats(per_sample_stats):
+                raise RuntimeError("Batch dimension should be equal to zero")
         if self.use_per_sample_stats(per_sample_stats):
             reduction_shape = reduction_shape[1:]  # Assumes batch is the first dimension
         return tuple(reduction_shape)
+
+    def convert_statistic_params(self, per_sample_stats):
+        reducer_axes = self.convert_reduction_axes(per_sample_stats)
+        reducer_keep_dims = self._per_channel
+        aggregator_axes = [0]
+        aggregator_keep_dims = not self._per_channel
+        squeeze_dims = None
+        if self.use_per_sample_stats(per_sample_stats):
+            aggregator_axes += [1]
+            aggregator_keep_dims = True
+            squeeze_dims = (0,)
+        return {
+            "reducers_axes": reducer_axes,
+            "reducers_keepdims": reducer_keep_dims,
+            "aggregators_axes": tuple(aggregator_axes),
+            "aggregators_keepdims": aggregator_keep_dims,
+            "squeeze_dims": squeeze_dims,
+        }
 
 
 class StatCollectorGenerator:
@@ -154,8 +174,8 @@ class StatCollectorGenerator:
     @staticmethod
     def generate_stat_collector_for_range_init_config(
         init_config: RangeInitConfig,
-        reduction_shape: ReductionShape = None,
-        collector_params=None,
+        scale_shape: ReductionShape = None,
+        collector_params: PTRangeInitCollectorParams = None,
         num_samples_to_collect_override: int = None,
     ) -> TensorStatisticCollectorBase:
         num_samples = init_config.num_init_samples
@@ -163,41 +183,54 @@ class StatCollectorGenerator:
             num_samples = num_samples_to_collect_override
         if init_config.init_type not in RANGE_INIT_TYPES_VS_DESCRIPTIONS:
             raise RuntimeError("Unknown range init type: {}".format(init_config.init_type))
+
+        use_per_sample_stats = collector_params.use_per_sample_stats(init_config.init_type == "mixed_min_max")
+        collector_kwargs = collector_params.convert_statistic_params(use_per_sample_stats)
+
         if init_config.init_type == "min_max":
-            reduction_shape_converted = collector_params.convert_reduction_shape(per_sample_stats=False)
-            return PTMinMaxStatisticCollector(
-                collector_params.use_abs_max, reduction_shape_converted, reduction_shape, num_samples
+            return get_min_max_statistic_collector(
+                use_abs_max=collector_params.use_abs_max,
+                num_samples=num_samples,
+                **collector_kwargs,
             )
         if init_config.init_type == "mixed_min_max":
-            reduction_shape_converted = collector_params.convert_reduction_shape(per_sample_stats=True)
-            return PTMixedMinMaxStatisticCollector(
-                collector_params.use_per_sample_stats(per_sample_stats=True),
-                collector_params.use_abs_max,
-                collector_params.use_means_of_mins,
-                collector_params.use_means_of_maxs,
-                reduction_shape_converted,
-                reduction_shape,
-                num_samples,
+            return get_mixed_min_max_statistic_collector(
+                use_abs_max=collector_params.use_abs_max,
+                use_means_of_mins=collector_params.use_means_of_mins,
+                use_means_of_maxs=collector_params.use_means_of_maxs,
+                num_samples=num_samples,
+                **collector_kwargs,
             )
         if init_config.init_type == "mean_min_max":
-            reduction_shape_converted = collector_params.convert_reduction_shape(per_sample_stats=False)
-            return PTMeanMinMaxStatisticCollector(
-                collector_params.use_per_sample_stats(per_sample_stats=False),
-                collector_params.use_abs_max,
-                reduction_shape_converted,
-                reduction_shape,
-                num_samples,
+            return get_mixed_min_max_statistic_collector(
+                use_abs_max=collector_params.use_abs_max,
+                use_means_of_mins=True,
+                use_means_of_maxs=True,
+                num_samples=num_samples,
+                **collector_kwargs,
             )
         if init_config.init_type == "threesigma":
-            return PTMedianMADStatisticCollector(reduction_shape, num_samples)
+            return get_median_mad_statistic_collector(
+                num_samples=num_samples,
+                **collector_kwargs,
+            )
         if init_config.init_type == "percentile":
             min_percentile = init_config.init_type_specific_params.get("min_percentile", 0.1)
             max_percentile = init_config.init_type_specific_params.get("max_percentile", 99.9)
-            return PTPercentileStatisticCollector([min_percentile, max_percentile], reduction_shape, num_samples)
+            return get_precentile_tensor_collector(
+                percentiles_to_collect=[min_percentile, max_percentile],
+                num_samples=num_samples,
+                **collector_kwargs,
+            )
+
         if init_config.init_type == "mean_percentile":
             min_percentile = init_config.init_type_specific_params.get("min_percentile", 0.1)
             max_percentile = init_config.init_type_specific_params.get("max_percentile", 99.9)
-            return PTMeanPercentileStatisticCollector([min_percentile, max_percentile], reduction_shape, num_samples)
+            return get_mean_percentile_statistic_collector(
+                percentiles_to_collect=[min_percentile, max_percentile],
+                num_samples=num_samples,
+                **collector_kwargs,
+            )
         raise ValueError("Range init type not handled!")
 
     @classmethod
@@ -251,7 +284,8 @@ class DataLoaderRangeInitializeRunner(DataLoaderBaseRunner):
 
     def _get_fwd_hook(self, collector: TensorStatisticCollectorBase) -> Callable:
         def fwd_hook(module, input_, output):
-            collector.register_input(input_[0])
+            collector.register_unnamed_inputs(PTNNCFTensor(input_[0]))
+            return input_[0]
 
         return fwd_hook
 

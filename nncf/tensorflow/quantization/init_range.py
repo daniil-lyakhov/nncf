@@ -156,7 +156,7 @@ class RangeInitializer:
         collector = RangeInitializer.generate_stat_collector(
             reduction_shape, collector_params, init_config, num_batches
         )
-        handles.append(layer.register_hook_pre_quantizer(collector.register_input))
+        handles.append(layer.register_hook_pre_quantizer(collector.register_inputs))
         layer.enabled = False
         layer_statistics.append((layer, collector))
 
@@ -180,7 +180,7 @@ class RangeInitializer:
                     collector = RangeInitializer.generate_stat_collector(
                         reduction_shape, collector_params, init_config, num_batches
                     )
-                    handles.append(op.register_hook_pre_call(collector.register_input))
+                    handles.append(op.register_hook_pre_call(collector.register_inputs))
                     op.enabled = False
                     op_statistics.append((layer, op_name, op, collector))
 

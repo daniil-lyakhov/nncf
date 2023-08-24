@@ -17,18 +17,27 @@ from nncf.common.tensor_statistics.statistics import RawTensorStatistic
 
 
 class OVMinMaxTensorStatistic(MinMaxTensorStatistic):
+    def __init__(self, tensor_collector_output):
+        super().__init__(tensor_collector_output[self.MIN_STAT], tensor_collector_output[self.MAX_STAT])
+
     @staticmethod
     def tensor_eq(tensor1: np.ndarray, tensor2: np.ndarray, rtol=1e-6) -> bool:
         return bool(np.allclose(tensor1, tensor2, rtol=rtol))
 
 
 class OVMeanTensorStatistic(MeanTensorStatistic):
+    def __init__(self, tensor_collector_output):
+        super().__init__(tensor_collector_output[self.MEAN_STAT], tensor_collector_output[self.SHAPE_STAT])
+
     @staticmethod
     def tensor_eq(tensor: np.ndarray, rtol=1e-6) -> bool:
         return bool(np.all(tensor, rtol=rtol))
 
 
 class OVRawTensorStatistic(RawTensorStatistic):
+    def __init__(self, tensor_collector_output):
+        super().__init__(tensor_collector_output[self.VALUES_STATS])
+
     @staticmethod
     def tensor_eq(tensor: np.ndarray, rtol=1e-6) -> bool:
         return bool(np.all(tensor, rtol=rtol))
