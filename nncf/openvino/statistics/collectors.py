@@ -15,6 +15,7 @@ import numpy as np
 
 from nncf.common.tensor import NNCFTensor
 from nncf.common.tensor import TensorElementsType
+from nncf.common.tensor_statistics.collectors import MaskedReduceFN
 from nncf.common.tensor_statistics.collectors import NNCFCollectorTensorProcessor
 from nncf.experimental.common.tensor_statistics.collectors import AbsMaxReducer
 from nncf.experimental.common.tensor_statistics.collectors import AbsQuantileReducer
@@ -136,6 +137,10 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         return [OVNNCFTensor(np.squeeze(e, axis)) for e in np.split(x.tensor, x.tensor.shape[axis], axis=axis)]
 
     @staticmethod
+    def squeeze(x: NNCFTensor, dim: Optional[int] = None) -> NNCFTensor:
+        raise NotImplementedError()
+
+    @staticmethod
     def sum(tensor: NNCFTensor) -> TensorElementsType:
         return np.sum(tensor.tensor)
 
@@ -145,6 +150,18 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
     ) -> List[NNCFTensor]:
         result = np.quantile(tensor.tensor, quantile, axis, keepdims=keepdims)
         return [OVNNCFTensor(x) for x in result]
+
+    @classmethod
+    def masked_map(cls, x: NNCFTensor, fn: MaskedReduceFN, filter_fn) -> NNCFTensor:
+        raise NotImplemented()
+
+    @classmethod
+    def sub(cls, a: NNCFTensor, b: NNCFTensor) -> NNCFTensor:
+        raise NotImplemented()
+
+    @classmethod
+    def non_zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
+        raise NotImplemented()
 
 
 class OVNoopReducer(NoopReducer):

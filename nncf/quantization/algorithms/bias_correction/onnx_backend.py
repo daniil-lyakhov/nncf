@@ -43,7 +43,7 @@ from nncf.quantization.algorithms.bias_correction.backend import BiasCorrectionA
 class ONNXBiasCorrectionAlgoBackend(BiasCorrectionAlgoBackend):
     @property
     def tensor_processor(self) -> ONNXNNCFCollectorTensorProcessor:
-        return ONNXNNCFCollectorTensorProcessor()
+        return ONNXNNCFCollectorTensorProcessor
 
     @property
     def types_to_insert_bias(self):

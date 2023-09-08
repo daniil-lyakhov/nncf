@@ -19,6 +19,7 @@ import pytest
 from nncf.common.quantization.structs import QuantizationMode
 from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.quantization.structs import QuantizerGroup
+from nncf.common.tensor_statistics.statistics import MinMaxTensorStatistic
 from nncf.quantization.fake_quantize import FakeQuantizeParameters
 from nncf.quantization.fake_quantize import calculate_quantizer_parameters
 from tests.post_training.conftest import FQ_CALCULATED_PARAMETERS_PATH
@@ -213,7 +214,9 @@ class TemplateTestFQParams(ABC):
         else:
             max_values = np.amax(data, axis=axes, keepdims=q_config.per_channel)
 
-        statistics = self.tensor_statistic(max_values=max_values, min_values=min_values)
+        statistics = self.tensor_statistic(
+            {MinMaxTensorStatistic.MIN_STAT: max_values, MinMaxTensorStatistic.MAX_STAT: min_values}
+        )
 
         if not case_to_test.should_fail:
             fq_params = calculate_quantizer_parameters(statistics, q_config, quant_group, narrow_range, half_range)

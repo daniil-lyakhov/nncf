@@ -324,18 +324,17 @@ class NNCFCollectorTensorProcessor(ABC):
         """
 
     @classmethod
+    @abstractmethod
     def masked_map(cls, x: NNCFTensor, fn: MaskedReduceFN, filter_fn) -> NNCFTensor:
         """ """
 
     @classmethod
+    @abstractmethod
     def sub(cls, a: NNCFTensor, b: NNCFTensor) -> NNCFTensor:
         """"""
 
     @classmethod
-    def filter_by_fn(cls, x: NNCFTensor, filter_fn) -> NNCFTensor:
-        """ """
-
-    @classmethod
+    @abstractmethod
     def non_zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
         """ """
 

@@ -496,4 +496,5 @@ class TemplateTestChannelAlignment:
         for aggr in statistic_collector.aggregators.values():
             assert isinstance(aggr, MedianAggregator)
             assert aggr.num_samples == num_samples_ref
-            assert not aggr._use_per_sample_stats
+            assert not aggr._keepdims
+            assert aggr._aggregation_axes == (0,)

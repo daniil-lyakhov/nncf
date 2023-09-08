@@ -86,6 +86,10 @@ class TFNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         return [TFNNCFTensor(t) for t in tensor_list]
 
     @staticmethod
+    def squeeze(x: NNCFTensor, dim: Optional[int] = None) -> NNCFTensor:
+        raise NotImplementedError()
+
+    @staticmethod
     def sum(tensor: NNCFTensor) -> TensorElementsType:
         return tf.reduce_sum(tensor.tensor).numpy()
 
@@ -103,6 +107,18 @@ class TFNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
     def no_outliers_map(
         cls, x: NNCFTensor, fn: Callable[[NNCFTensor, Optional[int]], Any], axis: int = 0, alpha: float = 0.01
     ):
+        raise NotImplementedError()
+
+    @classmethod
+    def masked_map(cls, x: NNCFTensor, fn: MaskedReduceFN, filter_fn) -> NNCFTensor:
+        raise NotImplementedError()
+
+    @classmethod
+    def sub(cls, a: NNCFTensor, b: NNCFTensor) -> NNCFTensor:
+        raise NotImplementedError()
+
+    @classmethod
+    def non_zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
         raise NotImplementedError()
 
 

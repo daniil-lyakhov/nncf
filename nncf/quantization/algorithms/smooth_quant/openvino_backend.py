@@ -69,8 +69,8 @@ class OVSmoothQuantAlgoBackend(SmoothQuantAlgoBackend):
         num_samples: int, stats_reduction_shape: Tuple[int], inplace: bool, branch_key: str
     ) -> TensorCollector:
         collector = TensorCollector()
-        reducer = OVAbsMaxReducer(stats_reduction_shape, inplace)
-        aggregator = MaxAggregator(OVNNCFCollectorTensorProcessor, num_samples)
+        reducer = OVAbsMaxReducer(reduction_axes=stats_reduction_shape, inplace=inplace)
+        aggregator = MaxAggregator(tensor_processor=OVNNCFCollectorTensorProcessor, num_samples=num_samples)
         collector.register_statistic_branch(branch_key, reducer, aggregator)
         return collector
 
