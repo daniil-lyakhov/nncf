@@ -12,7 +12,7 @@
 from abc import abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 
 import pytest
 
@@ -51,6 +51,10 @@ class TemplateTestQuantizerConfig:
 
     @abstractmethod
     def check_is_mean_min_max_statistic_collector(self, tensor_collector):
+        pass
+
+    @abstractmethod
+    def get_reduction_axes(self, reducer) -> Tuple[int, ...]:
         pass
 
     @abstractmethod
@@ -278,8 +282,8 @@ class TemplateTestQuantizerConfig:
 
         for reducer in reducers:
             if q_config_per_channel:
-                assert reducer._reduction_axes == params.ref_per_ch_reduction_shape
+                assert self.get_reduction_axes(reducer) == params.ref_per_ch_reduction_shape
             else:
-                assert reducer._reduction_axes == params.ref_per_tensor_reduction_shape
+                assert self.get_reduction_axes(reducer) == params.ref_per_tensor_reduction_shape
 
         assert tensor_collector.num_samples == num_samples

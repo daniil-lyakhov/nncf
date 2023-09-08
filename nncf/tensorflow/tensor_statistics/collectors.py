@@ -16,6 +16,7 @@ import tensorflow as tf
 
 from nncf.common.tensor import NNCFTensor
 from nncf.common.tensor import TensorElementsType
+from nncf.common.tensor_statistics.collectors import MaskedReduceFN
 from nncf.common.tensor_statistics.collectors import MeanMinMaxStatisticCollector
 from nncf.common.tensor_statistics.collectors import MeanPercentileStatisticCollector
 from nncf.common.tensor_statistics.collectors import MedianMADStatisticCollector

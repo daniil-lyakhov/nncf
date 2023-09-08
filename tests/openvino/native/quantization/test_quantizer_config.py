@@ -9,6 +9,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Tuple
+
 import pytest
 
 from nncf.common.graph.transformations.commands import TargetType
@@ -16,6 +18,7 @@ from nncf.experimental.common.tensor_statistics.collectors import MaxAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MeanAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MinAggregator
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
+from nncf.experimental.common.tensor_statistics.collectors import TensorReducerBase
 from nncf.openvino.graph.layer_attributes import OVLayerAttributes
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVConvolutionMetatype
 from nncf.openvino.graph.metatypes.openvino_metatypes import OVDepthwiseConvolutionMetatype
@@ -44,6 +47,9 @@ class TestQuantizerConfig(TemplateTestQuantizerConfig):
         assert len(aggrs) == 2
         assert MeanAggregator in aggrs
         assert aggrs[0].__class__ == aggrs[1].__class__
+
+    def get_reduction_axes(self, reducer: TensorReducerBase) -> Tuple[int, ...]:
+        return reducer._reduction_axes
 
     @pytest.fixture(
         params=[

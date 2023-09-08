@@ -9,6 +9,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Tuple
+
 import pytest
 
 from nncf.common.graph.transformations.commands import TargetType
@@ -16,6 +18,7 @@ from nncf.experimental.common.tensor_statistics.collectors import MaxAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MeanAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MinAggregator
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
+from nncf.experimental.common.tensor_statistics.collectors import TensorReducerBase
 from nncf.quantization.algorithms.min_max.torch_backend import PTMinMaxAlgoBackend
 from tests.post_training.test_templates.models import NNCFGraphToTest
 from tests.post_training.test_templates.models import NNCFGraphToTestDepthwiseConv
@@ -43,6 +46,9 @@ class TestQuantizerConfig(TemplateTestQuantizerConfig):
         assert len(aggrs) == 2
         assert MeanAggregator in aggrs
         assert aggrs[0].__class__ == aggrs[1].__class__
+
+    def get_reduction_axes(self, reducer: TensorReducerBase) -> Tuple[int, ...]:
+        return reducer._reduction_axes
 
     @pytest.fixture(
         params=[

@@ -156,7 +156,12 @@ class ONNXMinMaxStatisticCollector(MinMaxStatisticCollector):
         self._register_input_common(x)
 
     def _get_statistics(self) -> ONNXMinMaxTensorStatistic:
-        return ONNXMinMaxTensorStatistic(self._min_values.tensor, self._max_values.tensor)
+        return ONNXMinMaxTensorStatistic(
+            {
+                ONNXMinMaxTensorStatistic.MIN_STAT: self._min_values.tensor,
+                ONNXMinMaxTensorStatistic.MAX_STAT: self._max_values.tensor,
+            }
+        )
 
 
 class ONNXMeanMinMaxStatisticCollector(MeanMinMaxStatisticCollector):
@@ -168,7 +173,12 @@ class ONNXMeanMinMaxStatisticCollector(MeanMinMaxStatisticCollector):
         self._register_input_common(x)
 
     def _get_statistics(self) -> ONNXMinMaxTensorStatistic:
-        return ONNXMinMaxTensorStatistic(self._min_aggregate().tensor, self._max_aggregate().tensor)
+        return ONNXMinMaxTensorStatistic(
+            {
+                ONNXMinMaxTensorStatistic.MIN_STAT: self._min_aggregate().tensor,
+                ONNXMinMaxTensorStatistic.MAX_STAT: self._max_aggregate().tensor,
+            }
+        )
 
 
 class ONNXMeanStatisticCollector(MeanStatisticCollector):
@@ -180,7 +190,12 @@ class ONNXMeanStatisticCollector(MeanStatisticCollector):
         self._register_input_common(x)
 
     def _get_statistics(self) -> ONNXMeanTensorStatistic:
-        return ONNXMeanTensorStatistic(self._mean_aggregate().tensor, self._shape())
+        return ONNXMeanTensorStatistic(
+            {
+                ONNXMeanTensorStatistic.MEAN_STAT: self._mean_aggregate().tensor,
+                ONNXMeanTensorStatistic.SHAPE_STAT: self._shape(),
+            }
+        )
 
 
 class ONNXRawStatisticCollector(RawStatisticCollector):
@@ -192,4 +207,4 @@ class ONNXRawStatisticCollector(RawStatisticCollector):
         self._register_input_common(x)
 
     def _get_statistics(self) -> ONNXRawTensorStatistic:
-        return ONNXRawTensorStatistic(self._all_values)
+        return ONNXRawTensorStatistic({ONNXRawTensorStatistic.VALUES_STATS: self._all_values})

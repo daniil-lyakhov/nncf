@@ -9,9 +9,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Tuple
+
 import pytest
 
 from nncf.common.graph.transformations.commands import TargetType
+from nncf.common.tensor_statistics.collectors import TensorStatisticCollectorBase
 from nncf.onnx.graph.metatypes.onnx_metatypes import ONNXAddLayerMetatype
 from nncf.onnx.graph.metatypes.onnx_metatypes import ONNXConvolutionMetatype
 from nncf.onnx.graph.metatypes.onnx_metatypes import ONNXDepthwiseConvolutionMetatype
@@ -27,6 +30,9 @@ from tests.post_training.test_templates.test_quantizer_config import TemplateTes
 ParamsCls = TemplateTestQuantizerConfig.TestGetStatisticsCollectorParameters
 
 
+# pylint: disable=protected-access
+
+
 class TestQuantizerConfig(TemplateTestQuantizerConfig):
     def get_algo_backend(self):
         return ONNXMinMaxAlgoBackend()
@@ -36,6 +42,9 @@ class TestQuantizerConfig(TemplateTestQuantizerConfig):
 
     def check_is_mean_min_max_statistic_collector(self, tensor_collector):
         assert isinstance(tensor_collector, ONNXMeanMinMaxStatisticCollector)
+
+    def get_reduction_axes(self, reducer: TensorStatisticCollectorBase) -> Tuple[int, ...]:
+        return reducer._reduction_shape
 
     @pytest.fixture(
         params=[

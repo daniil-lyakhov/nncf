@@ -38,7 +38,7 @@ class StatisticPoint:
     def register_tensor(self, x: TensorType):
         for tensor_collectors in self.algorithm_to_tensor_collectors.values():
             for tensor_collector in tensor_collectors:
-                tensor_collector.register_unnamed_inputs(x)
+                tensor_collector.register_inputs(x)
 
 
 class StatisticPointsContainer(UserDict):

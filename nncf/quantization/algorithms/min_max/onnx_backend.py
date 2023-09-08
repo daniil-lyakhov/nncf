@@ -120,7 +120,9 @@ class ONNXMinMaxAlgoBackend(MinMaxAlgoBackend):
             min_values.append(np.array(statistic.min_values).flatten())
         max_values = np.max(max_values, axis=0)
         min_values = np.min(min_values, axis=0)
-        return ONNXMinMaxTensorStatistic(min_values=min_values, max_values=max_values)
+        return ONNXMinMaxTensorStatistic(
+            {ONNXMinMaxTensorStatistic.MIN_STAT: min_values, ONNXMinMaxTensorStatistic.MAX_STAT: max_values}
+        )
 
     @staticmethod
     def _get_input_edges_mapping(nncf_graph: NNCFGraph):
