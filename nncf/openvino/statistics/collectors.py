@@ -112,12 +112,6 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         alpha: float = 0.01,
         keepdims: bool = False,
     ) -> NNCFTensor:
-        if isinstance(axis, int):
-            axis = (axis,)
-
-        if len(axis) == len(x.shape):
-            return fn(x, axis=axis, mask=None, keepdims=keepdims)
-
         x = x.tensor
         low_values, high_values = np.quantile(x, [alpha, 1 - alpha], axis=axis)
         outliers_mask = np.logical_or(x < low_values, high_values < x)

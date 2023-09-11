@@ -89,9 +89,9 @@ class PTNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
             return cls.mean(x, axis=axis, keepdims=keepdims)
         masked_x = np.ma.array(x.tensor.detach().cpu().numpy(), mask=mask.tensor)
         result = np.ma.mean(masked_x, axis=axis, keepdims=keepdims).astype(masked_x.dtype)
-        if result.size <= 1:
-            return PTNNCFTensor(torch.tensor(result))
-        return PTNNCFTensor(torch.tensor(result.data))
+        if isinstance(result, np.ma.MaskedArray):
+            return PTNNCFTensor(torch.tensor(result.data))
+        return PTNNCFTensor(torch.tensor(result))
 
     @classmethod
     def masked_median(
@@ -102,9 +102,9 @@ class PTNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
             return cls.median(x, axis=axis, keepdims=keepdims)
         masked_x = np.ma.array(x.tensor.detach().cpu().numpy(), mask=mask.tensor.detach().cpu().numpy())
         result = np.ma.median(masked_x, axis=axis, keepdims=keepdims).astype(masked_x.dtype)
-        if len(result) == 1:
-            return PTNNCFTensor(torch.tensor(result))
-        return PTNNCFTensor(torch.tensor(result.data))
+        if isinstance(result, np.ma.MaskedArray):
+            return PTNNCFTensor(torch.tensor(result.data))
+        return PTNNCFTensor(torch.tensor(result))
 
     @staticmethod
     def mean_per_channel(x: NNCFTensor, axis: int) -> NNCFTensor:
@@ -173,12 +173,6 @@ class PTNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         alpha: float = 0.01,
         keepdims: bool = False,
     ):
-        if isinstance(axis, int):
-            axis = (axis,)
-
-        if len(x.shape) == len(axis):
-            return fn(x, axis=axis, mask=None, keepdims=keepdims)
-
         low_values, high_values = cls.quantile(x, [alpha, 1 - alpha], axis=axis)
         outliers_mask = torch.logical_or(x.tensor < low_values.tensor, high_values.tensor < x.tensor)
         return fn(x, axis=axis, mask=PTNNCFTensor(outliers_mask), keepdims=keepdims)

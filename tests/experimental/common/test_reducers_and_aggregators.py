@@ -295,7 +295,7 @@ class TemplateTestReducersAggreagtors:
 
     NO_OUTLIERS_TEST_PARAMS = [
         (MeanAggregator, True, 1, 1404.5138888888905),
-        (MedianAggregator, True, 1, 15.5),
+        (MedianAggregator, True, 1, 24.0),
         (
             MeanAggregator,
             False,
@@ -311,8 +311,8 @@ class TemplateTestReducersAggreagtors:
         (MedianAggregator, True, 3, DEFALUT_3D_MEDIAN_VALUE),
         (MeanAggregator, False, 3, [DEFALUT_3D_MEAN_VALUE]),
         (MedianAggregator, False, 3, [DEFALUT_3D_MEDIAN_VALUE]),
-        (default_test_mean_no_outlier, True, 1, 1404.5138888888905),
-        (default_test_median_no_outlier, True, 1, 15.5),
+        (default_test_mean_no_outlier, True, 1, 20.0893),
+        (default_test_median_no_outlier, True, 1, 30.0),
         (
             default_test_mean_no_outlier,
             False,
@@ -360,6 +360,11 @@ class TemplateTestReducersAggreagtors:
             # mult is needed to make outlier and no outlier aggreagators differs
             mult = 2.2 * i - 1 if not is_median else 1
             aggregator.register_reduced_input(self.get_nncf_tensor(input_with_outliers * mult, Dtype.FLOAT))
+            if is_median and dims == 1 and use_per_sample_stats:
+                # To make no outliers and outliers versions return different output
+                aggregator.register_reduced_input(
+                    self.get_nncf_tensor(np.full(input_with_outliers.shape, input_with_outliers[-1]), Dtype.FLOAT)
+                )
         ret_val = aggregator.aggregate()
 
         if keepdims:
