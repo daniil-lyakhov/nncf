@@ -153,15 +153,15 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
 
     @classmethod
     def masked_map(cls, x: NNCFTensor, fn: MaskedReduceFN, filter_fn) -> NNCFTensor:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @classmethod
     def sub(cls, a: NNCFTensor, b: NNCFTensor) -> NNCFTensor:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @classmethod
-    def non_zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
-        raise NotImplemented()
+    def zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
+        raise NotImplementedError()
 
 
 class OVNoopReducer(NoopReducer):

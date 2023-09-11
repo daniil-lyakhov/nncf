@@ -192,10 +192,10 @@ class PTNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         return NNCFTensor(a.tensor - b.tensor)
 
     @classmethod
-    def non_zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
+    def zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
         pt_tensor = x.tensor
         eps = torch.finfo(pt_tensor.dtype).eps
-        return NNCFTensor(pt_tensor.abs() > eps)
+        return NNCFTensor(pt_tensor.abs() < eps)
 
 
 class PTReducerMixIn:

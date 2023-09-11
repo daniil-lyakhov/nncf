@@ -242,7 +242,7 @@ class TestCollectedStatistics:
         collector: Type[TensorStatisticCollectorBase],
         reduction_shapes_vs_ref_statistic: Dict[ReductionShape, TensorStatistic],
     ):
-        for reduction_shape in reduction_shapes_vs_ref_statistic.keys():
+        for reduction_shape in reduction_shapes_vs_ref_statistic:
             if len(reduction_shape) > 1:
                 reducer_axes = ([dim for dim, val in enumerate(reduction_shape) if val == 1][0],)
                 aggregator_keep_dims = False

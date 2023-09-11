@@ -143,7 +143,7 @@ class ONNXNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         raise NotImplementedError()
 
     @classmethod
-    def non_zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
+    def zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
         raise NotImplementedError()
 
 

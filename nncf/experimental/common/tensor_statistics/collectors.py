@@ -664,7 +664,7 @@ class MedianAbsoluteDeviationAggregator(OnlineOfflineAggregatorBase):
     def _aggregate_impl(self) -> Any:
         stacked_val = self._tensor_processor.stack(self._container)
         median_fn = partial(self._tensor_processor.masked_median, axis=self._aggregation_axes, keepdims=True)
-        filter_fn = self._tensor_processor.non_zero_elements
+        filter_fn = self._tensor_processor.zero_elements
         median_per_ch = self._tensor_processor.masked_map(stacked_val, median_fn, filter_fn)
 
         mad_values = self._tensor_processor.median(

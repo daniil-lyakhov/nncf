@@ -100,6 +100,16 @@ class TFNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
     ) -> List[NNCFTensor]:
         raise NotImplementedError()
 
+    @classmethod
+    def precentile(
+        cls,
+        tensor: NNCFTensor,
+        precentile: Union[float, List[float]],
+        axis: Union[int, tuple, list],
+        keepdims: bool = False,
+    ) -> List[TensorElementsType]:
+        raise NotImplementedError()
+
     @staticmethod
     def mean_per_channel(x: NNCFTensor, axis: int) -> NNCFTensor:
         raise NotImplementedError()
@@ -119,7 +129,7 @@ class TFNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         raise NotImplementedError()
 
     @classmethod
-    def non_zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
+    def zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
         raise NotImplementedError()
 
 

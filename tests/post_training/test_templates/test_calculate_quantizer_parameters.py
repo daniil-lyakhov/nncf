@@ -215,7 +215,7 @@ class TemplateTestFQParams(ABC):
             max_values = np.amax(data, axis=axes, keepdims=q_config.per_channel)
 
         statistics = self.tensor_statistic(
-            {MinMaxTensorStatistic.MIN_STAT: max_values, MinMaxTensorStatistic.MAX_STAT: min_values}
+            {MinMaxTensorStatistic.MIN_STAT: min_values, MinMaxTensorStatistic.MAX_STAT: max_values}
         )
 
         if not case_to_test.should_fail:

@@ -263,7 +263,7 @@ class TestCollectedStatistics:
 
 
 class TestCollectorTensorProcessor:
-    tensor_processor = TFNNCFCollectorTensorProcessor()
+    tensor_processor = TFNNCFCollectorTensorProcessor
 
     def test_unstack(self):
         # Unstack tensor with dimensions
