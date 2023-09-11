@@ -10,6 +10,7 @@
 # limitations under the License.
 
 from abc import abstractmethod
+from functools import partial
 from itertools import product
 from typing import Any, List, Optional, Tuple
 
@@ -20,10 +21,13 @@ from nncf.common.graph.layer_attributes import Dtype
 from nncf.experimental.common.tensor_statistics.collectors import MaxAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MeanAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MeanNoOutliersAggregator
+from nncf.experimental.common.tensor_statistics.collectors import MedianAbsoluteDeviationAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MedianAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MedianNoOutliersAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MinAggregator
 from nncf.experimental.common.tensor_statistics.collectors import NoopAggregator
+from nncf.experimental.common.tensor_statistics.collectors import PostAggregateHook
+from nncf.experimental.common.tensor_statistics.collectors import PrecentileAggregator
 from nncf.experimental.common.tensor_statistics.collectors import ShapeAggregator
 
 DEFALUT_3D_MEAN_VALUE = [[2503.125, -2493.75, 5009.375], [-4987.5, 7515.625, -7481.25], [10021.875, -9975.0, 12528.125]]
@@ -371,6 +375,85 @@ class TemplateTestReducersAggreagtors:
             refs = self.expand_dims(refs, (0, 1) if use_per_sample_stats else (0,))
 
         assert self.all_close(ret_val, self.cast_tensor(refs, Dtype.FLOAT))
+
+    REF_MAD_PERCENTILE_REF_VALUES = {
+        MedianAbsoluteDeviationAggregator: {
+            1: {
+                "median_values": np.array([4.5, 9.0, 13.5, 18.0, 22.5, 27.0, 31.5, 36.0, 40.5]),
+                "mad_values": np.array([2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 22.5]),
+            },
+            2: {
+                "median_values": np.array(18.0),
+                "mad_values": np.array(12.0),
+            },
+        },
+        PrecentileAggregator: {
+            1: {
+                5: np.array([0.4, 0.8, 1.2, 1.6, 2.0, 2.4, 2.8, 3.2, 3.6]),
+                10: np.array([0.8, 1.6, 2.4, 3.2, 4.0, 4.8, 5.6, 6.4, 7.2]),
+                90: np.array([7.2, 14.4, 21.6, 28.8, 36.0, 43.2, 50.4, 57.6, 64.8]),
+                95: np.array([7.6, 15.2, 22.8, 30.4, 38.0, 45.6, 53.2, 60.8, 68.4]),
+            },
+            2: {
+                5: np.array(0.0),
+                10: np.array(0.0),
+                90: np.array(48.0),
+                95: np.array(56.0),
+            },
+        },
+    }
+
+    @pytest.mark.parametrize(
+        "aggregator_cls",
+        [
+            MedianAbsoluteDeviationAggregator,
+            partial(
+                PrecentileAggregator,
+                percentiles_to_collect=[5, 10, 90, 95],
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("aggregation_axes,ref_expand_axes", [(None, (0,)), ((0,), (0,)), ((0, 1), (0, 1))])
+    @pytest.mark.parametrize("keepdims", [False, True])
+    def test_mad_precentile_aggregators(
+        self, aggregator_cls, tensor_processor, aggregation_axes, ref_expand_axes, keepdims
+    ):
+        aggregator = aggregator_cls(
+            tensor_processor=tensor_processor, aggregation_axes=aggregation_axes, keepdims=keepdims
+        )
+        input_ = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=np.float32)
+        for i in range(9):
+            aggregator.register_reduced_input(self.get_nncf_tensor(input_ * i, Dtype.FLOAT))
+
+        ret_val = aggregator.aggregate()
+        ref_values = self.REF_MAD_PERCENTILE_REF_VALUES[aggregator.__class__][len(aggregation_axes or (0,))]
+        assert len(ret_val) == len(ref_values)
+        for k, v in ref_values.items():
+            _v = np.expand_dims(v, ref_expand_axes) if keepdims else v
+            assert self.all_close(ret_val[k], self.cast_tensor(_v, Dtype.FLOAT))
+
+    def test_post_aggregate_hook(self, mocker):
+        ref_aggregated_value = "test_return_value"
+        ref_input = "ref_input"
+        ref_updated_val = "ref_updated_val"
+
+        class DummyAggregator:
+            def aggregate(*args, **kwargs):
+                return ref_aggregated_value
+
+            register_reduced_input = mocker.MagicMock()
+
+        aggregator = DummyAggregator()
+        post_hook_fn = mocker.MagicMock(return_value=ref_updated_val)
+        target_aggregator = PostAggregateHook(aggregator=aggregator, post_aggregation_hook=post_hook_fn)
+        target_aggregator.register_reduced_input(ref_input)
+        assert aggregator.register_reduced_input.call_count == 1
+        assert aggregator.register_reduced_input.call_args[0] == (ref_input,)
+
+        aggregated_value = target_aggregator.aggregate()
+        assert aggregated_value == ref_updated_val
+        assert post_hook_fn.call_count == 1
+        assert post_hook_fn.call_args[0] == (ref_aggregated_value,)
 
     @pytest.mark.parametrize(
         "reducer_name",

@@ -293,6 +293,8 @@ class NNCFCollectorTensorProcessor(ABC):
         keepdims: bool = False,
     ) -> List[TensorElementsType]:
         """"""
+        quantile = np.true_divide(precentile, 100)
+        return cls.quantile(tensor, quantile=quantile, axis=axis, keepdims=keepdims)
 
     @staticmethod
     @abstractmethod

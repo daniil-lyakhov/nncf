@@ -50,7 +50,7 @@ class DummyTensorReducerA(DummyTensorReducer):
 
 class DummyTensorAggregator(TensorAggregatorBase):
     def __init__(self, num_samples: Optional[int]):
-        super().__init__(None, num_samples)
+        super().__init__(None, num_samples=num_samples)
 
     def _register_reduced_input_impl(self, x: TensorType):
         return self._container.append(x)
@@ -271,6 +271,27 @@ def test_multiple_branch_reducer():
     assert len(ref_stats) == len(stats)
     for key, value in ref_stats.items():
         assert value == stats[key]
+
+
+def test_register_unnamed_statistics(mocker):
+    tensor_collector = TensorCollector()
+    reducer_hashes = []
+    for reducer_cls, key in zip([DummyTensorReducer, DummyTensorReducerA], "AB"):
+        reducer = reducer_cls(f"Dummy{key}")
+        tensor_collector.register_statistic_branch(key, reducer, DummyTensorAggregator(None))
+        reducer_hashes.append(hash(reducer))
+
+    tensor_collector.register_inputs = mocker.MagicMock()
+    inputs_ = NNCFTensor(np.ones(5))
+    tensor_collector.register_unnamed_inputs(inputs_)
+
+    tensor_collector.register_inputs.assert_called_once()
+    args = tensor_collector.register_inputs.call_args[0][0]
+    assert len(args) == 2
+    for k, v in args.items():
+        assert k in reducer_hashes
+        assert len(v) == 1
+        assert all(v[0] == inputs_)
 
 
 class TemplateTestStatisticCollector:

@@ -84,7 +84,10 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         if mask is None:
             return cls.mean(x, axis=axis, keepdims=keepdims)
         masked_x = np.ma.array(x.tensor, mask=mask.tensor)
-        return OVNNCFTensor(np.ma.mean(masked_x, axis=axis, keepdims=keepdims).data)
+        result = np.ma.mean(masked_x, axis=axis, keepdims=keepdims)
+        if isinstance(result, np.ma.MaskedArray):
+            return OVNNCFTensor(result.data)
+        return OVNNCFTensor(result)
 
     @classmethod
     def masked_median(
@@ -93,7 +96,10 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
         if mask is None:
             return cls.median(x, axis=axis, keepdims=keepdims)
         masked_x = np.ma.array(x.tensor, mask=mask.tensor)
-        return OVNNCFTensor(np.ma.median(masked_x, axis=axis, keepdims=keepdims).data)
+        result = np.ma.median(masked_x, axis=axis, keepdims=keepdims)
+        if isinstance(result, np.ma.MaskedArray):
+            return OVNNCFTensor(result.data)
+        return OVNNCFTensor(result)
 
     @staticmethod
     def mean_per_channel(x: NNCFTensor, axis: int) -> NNCFTensor:
@@ -132,7 +138,7 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
 
     @staticmethod
     def squeeze(x: NNCFTensor, dim: Optional[int] = None) -> NNCFTensor:
-        raise NotImplementedError()
+        return OVNNCFTensor(np.squeeze(x.tensor, axis=dim))
 
     @staticmethod
     def sum(tensor: NNCFTensor) -> TensorElementsType:
@@ -147,15 +153,17 @@ class OVNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
 
     @classmethod
     def masked_map(cls, x: NNCFTensor, fn: MaskedReduceFN, filter_fn) -> NNCFTensor:
-        raise NotImplementedError()
+        return fn(x, mask=filter_fn(x))
 
     @classmethod
     def sub(cls, a: NNCFTensor, b: NNCFTensor) -> NNCFTensor:
-        raise NotImplementedError()
+        return NNCFTensor(a.tensor - b.tensor)
 
     @classmethod
     def zero_elements(cls, x: NNCFTensor) -> NNCFTensor:
-        raise NotImplementedError()
+        np_tensor = x.tensor
+        eps = np.finfo(np_tensor.dtype).eps
+        return NNCFTensor(np.abs(np_tensor) < eps)
 
 
 class OVNoopReducer(NoopReducer):
