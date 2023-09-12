@@ -405,7 +405,7 @@ class MergedTensorCollector(TensorCollector):
         :param tensor_collectors: Tensor collectors to merge.
         """
         super().__init__()
-        aggregators: Dict[Tuple[int, int], List[Tuple[TensorCollector, TensorAggregatorBase]]] = defaultdict(list)
+        aggregators: Dict[Tuple[int, int, int], List[Tuple[TensorCollector, TensorAggregatorBase]]] = defaultdict(list)
         for tensor_collector in tensor_collectors:
             if not tensor_collector.enabled:
                 continue

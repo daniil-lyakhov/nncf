@@ -20,6 +20,7 @@ from nncf.config import NNCFConfig
 from nncf.torch.algo_selector import ZeroCompressionLoss
 from nncf.torch.compression_method_api import PTCompressionAlgorithmBuilder
 from nncf.torch.compression_method_api import PTCompressionAlgorithmController
+from nncf.torch.dynamic_graph.context import no_nncf_trace
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.graph.transformations.commands import TransformationPriority
@@ -58,7 +59,8 @@ class TensorStatisticsCollectionBuilder(PTCompressionAlgorithmBuilder):
             for collector in rs_vs_collector.values():
 
                 def hook_obj(x, collector):
-                    collector.register_unnamed_inputs(PTNNCFTensor(x))
+                    with no_nncf_trace():
+                        collector.register_unnamed_inputs(PTNNCFTensor(x))
                     return x
 
                 command = PTInsertionCommand(

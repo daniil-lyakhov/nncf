@@ -430,7 +430,6 @@ class TemplateTestStatisticsAggregator:
                 ref_min_val, ref_max_val = map(lambda x: np.reshape(x, shape), (ref_min_val, ref_max_val))
 
             if not np.allclose(stat.min_values, ref_min_val):
-                # breakpoint()
                 stat = tensor_collector.get_statistics()
             assert np.allclose(stat.min_values, ref_min_val)
             assert np.allclose(stat.max_values, ref_max_val)

@@ -20,6 +20,7 @@ from nncf.common.graph.transformations.commands import TransformationPriority
 from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.tensor_statistics.aggregator import StatisticPointsContainer
 from nncf.common.tensor_statistics.aggregator import StatisticsAggregator
+from nncf.torch.dynamic_graph.context import no_nncf_trace
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.tensor import PTNNCFTensor
@@ -44,7 +45,8 @@ class PTStatisticsAggregator(StatisticsAggregator):
 
         def register_inputs_fn(fn):
             def register_inputs(input_: torch.Tensor):
-                fn(PTNNCFTensor(input_))
+                with no_nncf_trace():
+                    fn(PTNNCFTensor(input_))
                 return input_
 
             return register_inputs

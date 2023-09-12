@@ -30,6 +30,7 @@ from nncf.common.scopes import should_consider_scope
 from nncf.common.tensor_statistics.collectors import ReductionShape
 from nncf.common.tensor_statistics.collectors import TensorStatisticCollectorBase
 from nncf.config.schemata.algo.quantization import RANGE_INIT_TYPES_VS_DESCRIPTIONS
+from nncf.torch.dynamic_graph.context import no_nncf_trace
 from nncf.torch.graph.graph import PTNNCFGraph
 from nncf.torch.initialization import DataLoaderBaseRunner
 from nncf.torch.nncf_network import NNCFNetwork
@@ -284,7 +285,8 @@ class DataLoaderRangeInitializeRunner(DataLoaderBaseRunner):
 
     def _get_fwd_hook(self, collector: TensorStatisticCollectorBase) -> Callable:
         def fwd_hook(module, input_, output):
-            collector.register_unnamed_inputs(PTNNCFTensor(input_[0]))
+            with no_nncf_trace():
+                collector.register_unnamed_inputs(PTNNCFTensor(input_[0]))
             return input_[0]
 
         return fwd_hook
