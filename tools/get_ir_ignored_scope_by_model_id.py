@@ -31,8 +31,9 @@ def print_ignored_scope_by_model_name(model_name: str, xml_path: str, bin_path: 
         print("Error occured during ignored scope colletion")
         return
 
-    for name in is_names:
-        print(f'"{name}"')
+    for name in is_names[:-1]:
+        print(f'"{name}",')
+    print(f'"{is_names[-1]}"')
 
 
 def mobilenet_v3_large_tf_torch_is(ov_model: ov.Model) -> Optional[List[str]]:
