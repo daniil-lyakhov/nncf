@@ -308,7 +308,7 @@ def get_mixed_min_max_statistic_collector(
 
     max_reducer_cls = PTAbsMaxReducer if use_abs_max else PTMaxReducer
     max_reducer = max_reducer_cls(reducers_axes, keepdims=reducers_keepdims)
-    max_aggregator_cls = MeanAggregator if use_means_of_maxs else MinAggregator
+    max_aggregator_cls = MeanAggregator if use_means_of_maxs else MaxAggregator
     max_aggregator = max_aggregator_cls(**kwargs)
     max_aggregator = maybe_add_squeeze(max_aggregator, squeeze_dims)
     tensor_collector.register_statistic_branch(PTMinMaxTensorStatistic.MAX_STAT, max_reducer, max_aggregator)
