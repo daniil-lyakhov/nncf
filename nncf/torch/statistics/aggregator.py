@@ -9,6 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
 from typing import Dict
 
 import numpy as np
@@ -26,10 +27,22 @@ from nncf.torch.tensor import PTNNCFTensor
 from nncf.torch.tensor_statistics.algo import create_register_input_hook
 
 
+class ModelView:
+    def __init__(self, model: NNCFNetwork):
+        self.model = model
+
+    def __enter__(self):
+        self.nncf_interface = deepcopy(self.model.nncf)
+        return self.model
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.model._nncf = self.nncf_interface
+
+
 class PTStatisticsAggregator(StatisticsAggregator):
     def collect_statistics(self, model: NNCFNetwork, graph: NNCFGraph) -> None:
         with torch.no_grad():
-            with model.nncf.temporary_clean_view() as intermediate_model:
+            with ModelView(model) as intermediate_model:
                 super().collect_statistics(intermediate_model, graph)
 
     def _register_statistics(

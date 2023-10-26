@@ -11,13 +11,12 @@
 
 from abc import ABC
 from abc import abstractmethod
-from typing import Dict, List, Optional, Tuple, TypeVar
+from typing import List, Optional, Tuple, TypeVar
 
 from nncf.common.graph import NNCFGraph
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import OperatorMetatype
 from nncf.common.graph.transformations.commands import TargetPoint
-from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.commands import TransformationCommand
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
 
@@ -55,11 +54,10 @@ class SmoothQuantAlgoBackend(ABC):
 
     @staticmethod
     @abstractmethod
-    def target_point(target_type: TargetType, target_node_name: str, port_id: int) -> TargetPoint:
+    def target_point(TargetType, target_node_name: str, port_id: int) -> TargetPoint:
         """
         Returns backend-specific target point.
 
-        :param target_type: Type of the location that should be modified.
         :param target_node_name: Name of the located node.
         :param port_id: Port ID of the tensor for the statistics distribution.
         :return: Backend-specific TargetPoint.
@@ -77,7 +75,7 @@ class SmoothQuantAlgoBackend(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_input_ports_map(node: NNCFNode, nncf_graph: NNCFGraph) -> Dict[str, int]:
+    def get_activations_port_id(node: NNCFNode, nncf_graph: NNCFGraph) -> int:
         """
         Returns map with activation & weighted ports.
 
@@ -224,7 +222,7 @@ class SmoothQuantAlgoBackend(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_activation_channel_axis(node: NNCFNode, port_id: int) -> int:
+    def get_activation_channel_axis(node: NNCFNode, port_id: int, activations_shape: Tuple[int, ...]) -> int:
         """
         Returns axis number of the activation tensor which correspond to it channel.
 
@@ -235,7 +233,7 @@ class SmoothQuantAlgoBackend(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_weight_channel_axis(node: NNCFNode, port_id: int) -> int:
+    def get_weight_channel_axis(node: NNCFNode, nncf_graph: NNCFGraph) -> int:
         """
         Returns axis number of the weight tensor which correspond to it channel.
 
@@ -254,3 +252,13 @@ class SmoothQuantAlgoBackend(ABC):
         :param transpose: Transpose position.
         :return: Channel axis.
         """
+
+    @staticmethod
+    @abstractmethod
+    def is_node_with_shared_weight(node: NNCFNode, nncf_graph: NNCFGraph):
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def get_filter_fn_for_statistics(activation_port_id: int):
+        pass

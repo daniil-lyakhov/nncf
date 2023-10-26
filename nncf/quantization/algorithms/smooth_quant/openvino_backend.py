@@ -18,6 +18,7 @@ from nncf.common.graph import NNCFGraph
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import OperatorMetatype
 from nncf.common.graph.transformations.commands import TargetType
+from nncf.common.tensor_statistics.statistic_point import StatisticPoint
 from nncf.experimental.common.tensor_statistics.collectors import MaxAggregator
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
 from nncf.openvino.graph.metatypes.groups import QUANTIZE_AGNOSTIC_OPERATIONS
@@ -48,15 +49,15 @@ class OVSmoothQuantAlgoBackend(SmoothQuantAlgoBackend):
         return QUANTIZE_AGNOSTIC_OPERATIONS
 
     @staticmethod
-    def target_point(target_type: TargetType, target_node_name: str, port_id: int) -> OVTargetPoint:
-        return OVTargetPoint(target_type, target_node_name, port_id)
+    def target_point(target_node_name: str, port_id: int) -> OVTargetPoint:
+        return OVTargetPoint(TargetType.PRE_LAYER_OPERATION, target_node_name, port_id)
 
     @staticmethod
     def is_node_with_weights(node: NNCFNode) -> bool:
         return node.layer_attributes and node.layer_attributes.constant_attributes
 
     @staticmethod
-    def get_input_ports_map(node: NNCFNode, nncf_graph: NNCFGraph) -> Dict[str, int]:
+    def _get_input_ports_map(node: NNCFNode, nncf_graph: NNCFGraph) -> Dict[str, int]:
         weight_ports = node.layer_attributes.get_const_port_ids()
         activation_ports = [
             e.input_port_id for e in nncf_graph.get_input_edges(node) if e.input_port_id not in weight_ports
@@ -66,6 +67,10 @@ class OVSmoothQuantAlgoBackend(SmoothQuantAlgoBackend):
             raise RuntimeError(f"Too many weight or activation ports for {node.node_name} node")
 
         return {"activation": activation_ports[0], "weight": weight_ports[0]}
+
+    @staticmethod
+    def get_activations_port_id(node: NNCFNode, nncf_graph: NNCFGraph) -> int:
+        return OVSmoothQuantAlgoBackend._get_input_ports_map(node, nncf_graph)["activation"]
 
     @staticmethod
     def get_channel_agnostic_reduction_axes(channel_axis: int, shape: Tuple[int]) -> Tuple[int]:
@@ -86,11 +91,16 @@ class OVSmoothQuantAlgoBackend(SmoothQuantAlgoBackend):
         return np.max(np.abs(weights), axis=reduction_shape)
 
     @staticmethod
-    def get_weight_value(node_with_weight: NNCFNode, model: ov.Model, port_id: int) -> np.ndarray:
+    def get_weight_value(node_with_weight: NNCFNode, model: ov.Model) -> np.ndarray:
+        port_id = OVSmoothQuantAlgoBackend._get_weight_tensor_port_id(node_with_weight)
         return get_weight_value(node_with_weight, model, port_id)
 
     @staticmethod
     def get_weight_tensor_port_id(node: NNCFNode) -> int:
+        return OVSmoothQuantAlgoBackend._get_weight_tensor_port_id(node)
+
+    @staticmethod
+    def _get_weight_tensor_port_id(node: NNCFNode) -> int:
         const_ids = node.layer_attributes.get_const_port_ids()
         if len(const_ids) != 1:
             raise RuntimeError(f"Found more than 1 port for {node.node_name} node")
@@ -134,9 +144,8 @@ class OVSmoothQuantAlgoBackend(SmoothQuantAlgoBackend):
         return weight_scale
 
     @staticmethod
-    def weight_update_command(
-        node_with_weight: NNCFNode, weight_value: np.ndarray, weight_port_id: int
-    ) -> OVWeightUpdateCommand:
+    def weight_update_command(node_with_weight: NNCFNode, weight_value: np.ndarray) -> OVWeightUpdateCommand:
+        weight_port_id = OVSmoothQuantAlgoBackend._get_weight_tensor_port_id(node_with_weight)
         return OVCommandCreator.create_command_to_update_weight(node_with_weight, weight_value, weight_port_id)
 
     @staticmethod
@@ -146,7 +155,7 @@ class OVSmoothQuantAlgoBackend(SmoothQuantAlgoBackend):
         return OVCommandCreator.multiply_insertion_command(source_node, nodes, port_id, scale_value, scale_node_name)
 
     @staticmethod
-    def get_activation_channel_axis(node: NNCFNode, port_id: int) -> int:
+    def get_activation_channel_axis(node: NNCFNode, port_id: int, activations_shape: Tuple[int, ...]) -> int:
         channel_axis = 1
 
         if port_id > 1:
@@ -164,11 +173,9 @@ class OVSmoothQuantAlgoBackend(SmoothQuantAlgoBackend):
         return channel_axis
 
     @staticmethod
-    def get_weight_channel_axis(node: NNCFNode, port_id: int) -> int:
-        channel_axis = 1
-
-        if port_id > 1:
-            raise RuntimeError(f"{node.metatype.name} can not take more than 2 input tensors.")
+    def get_weight_channel_axis(node: NNCFNode, nncf_graph: NNCFGraph) -> int:
+        port_id = OVSmoothQuantAlgoBackend._get_input_ports_map(node, nncf_graph)
+        channel_axis = 1 if node.metatype.const_channel_axis is None else node.metatype.const_channel_axis[0]
 
         if port_id not in node.layer_attributes.constant_attributes:
             raise RuntimeError(f"{node.node_name} should contain {port_id} in the attributes map.")
@@ -183,3 +190,17 @@ class OVSmoothQuantAlgoBackend(SmoothQuantAlgoBackend):
     @staticmethod
     def calculate_port_based_channel_axis(port_id: int, transpose: bool) -> int:
         return -2 + port_id if transpose else -1 - port_id
+
+    @staticmethod
+    def is_node_with_shared_weight(node: NNCFNode, nncf_graph: NNCFGraph):
+        ports_map = OVSmoothQuantAlgoBackend._get_input_ports_map(node, nncf_graph)
+        weight_node = nncf_graph.get_input_edges(node)[ports_map["weight"]].from_node
+        # Skipping shared weights
+        return len(nncf_graph.get_next_nodes(weight_node)) > 1
+
+    @staticmethod
+    def get_filter_fn_for_statistics(activation_port_id: int):
+        def filter_func(point: StatisticPoint) -> bool:
+            return point.target_point.port_id == activation_port_id
+
+        return filter_func

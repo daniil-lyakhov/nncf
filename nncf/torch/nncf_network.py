@@ -63,6 +63,7 @@ from nncf.torch.knowledge_distillation.knowledge_distillation_handler import Kno
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.nested_objects_traversal import objwalk
 from nncf.torch.nncf_module_replacement import replace_modules_by_nncf_modules
+from nncf.torch.quantization.external_quantizer import EXTERNAL_OP_STORAGE_NAME
 from nncf.torch.quantization.external_quantizer import EXTERNAL_QUANTIZERS_STORAGE_NAME
 from nncf.torch.utils import compute_FLOPs_hook
 from nncf.torch.utils import get_all_modules_by_type
@@ -119,6 +120,7 @@ class PTInsertionPoint:
 
 class ExtraCompressionModuleType(Enum):
     EXTERNAL_QUANTIZER = 0
+    EXTERNAL_OP = 1
 
 
 class NNCFNetworkInterface(torch.nn.Module):
@@ -272,6 +274,7 @@ class NNCFNetworkInterface(torch.nn.Module):
             )
             self._original_graph = GraphConverter.convert(self._original_dynamic_graph)
         self._compressed_graph: PTNNCFGraph = None
+        self._compressed_traced_graph: DynamicGraph = None
 
         self._compressed_context = TracingContext()
 
@@ -357,6 +360,25 @@ class NNCFNetworkInterface(torch.nn.Module):
             some_scope = scope_list[0]
             module = self.get_module_by_scope(some_scope)
             module.reset()
+
+    def get_shallow_copy(self) -> "NNCFNetwork":
+        from nncf.torch.utils import load_module_state
+        from nncf.torch.utils import save_module_state
+
+        saved_state = save_module_state(self._model_ref)
+        new_interface = NNCFNetworkInterface(
+            self._model_ref,
+            self._input_infos,
+            self._user_dummy_forward_fn,
+            self._wrap_inputs_fn,
+            self._scopes_without_shape_matching,
+            self._ignored_scopes,
+            self._target_scopes,
+            wrap_outputs_fn=self._wrap_outputs_fn,
+        )
+        self._model_ref._nncf = new_interface
+        load_module_state(self._model_ref, saved_state)
+        return self._model_ref
 
     def get_clean_shallow_copy(self) -> "NNCFNetwork":
         # WARNING: Will reset pre- and post-ops of the underlying model. Use save_nncf_module_additions
@@ -500,7 +522,8 @@ class NNCFNetworkInterface(torch.nn.Module):
         builder = GraphBuilder(dummy_forward_fn)
 
         with training_mode_switcher(self._model_ref, is_training=False):
-            self._compressed_graph = builder.build_graph(self._model_ref, self._compressed_context)
+            self._compressed_traced_graph = builder.build_dynamic_graph(self._model_ref, self._compressed_context)
+            self._compressed_graph = GraphConverter.convert(self._compressed_traced_graph)
 
     def is_scope_in_nncf_module_scope(self, scope: Scope) -> bool:
         norm_nncf_scopes = []
@@ -554,6 +577,8 @@ class NNCFNetworkInterface(torch.nn.Module):
         """
         if compression_module_type == ExtraCompressionModuleType.EXTERNAL_QUANTIZER:
             return EXTERNAL_QUANTIZERS_STORAGE_NAME
+        if compression_module_type == ExtraCompressionModuleType.EXTERNAL_OP:
+            return EXTERNAL_OP_STORAGE_NAME
         raise RuntimeError("Unknown extra module type")
 
     def sort_compression_modules(self, compression_module_type: ExtraCompressionModuleType):
@@ -732,13 +757,15 @@ class NNCFNetworkInterface(torch.nn.Module):
         return result
 
     def get_node_to_op_address_mapping(self) -> Dict[NNCFNodeName, OperationAddress]:
-        # The IDs of corresponding nodes of the original dynamic graph and original NNCF graph
-        # must be equal for this to work.
         retval = {}
-        for node in self._original_dynamic_graph.get_all_nodes():
+        dynamic_graph = (
+            self._original_dynamic_graph if self._compressed_traced_graph is None else self._compressed_traced_graph
+        )
+        nncf_graph = self._original_graph if self._compressed_graph is None else self._compressed_graph
+        for node in dynamic_graph.get_all_nodes():
             node_id = node.node_id
             op_address = node.op_exec_context.op_address
-            nncf_node = self._original_graph.get_node_by_id(node_id)
+            nncf_node = nncf_graph.get_node_by_id(node_id)
             retval[nncf_node.node_name] = op_address
         return retval
 
