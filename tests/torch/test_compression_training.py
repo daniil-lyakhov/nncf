@@ -57,6 +57,7 @@ class CompressionTrainingValidator(BaseSampleValidator):
             "config": str(self._desc.config_path),
             "log-dir": str(tmp_path),
             "workers": 0,  # Workaround for PyTorch MultiprocessingDataLoader issues
+            "gpu-id": 0,
         }
         if self._desc.seed is not None:
             args["seed"] = self._desc.seed
