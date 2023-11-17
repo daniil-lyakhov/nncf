@@ -32,7 +32,11 @@ class ModelView:
         self.model = model
 
     def __enter__(self):
+        # TODO do not copy original model reference
+        self.model.nncf.update_model_ref(None)
         self.nncf_interface = deepcopy(self.model.nncf)
+        self.model.nncf.update_model_ref(self.model)
+        self.nncf_interface.update_model_ref(self.model)
         return self.model
 
     def __exit__(self, exc_type, exc_val, exc_tb):

@@ -411,6 +411,9 @@ class NNCFNetworkInterface(torch.nn.Module):
                 retval[nncf_module_scope + relative_scope] = target_module
         return retval
 
+    def update_model_ref(self, model: torch.nn.Module) -> None:
+        object.__setattr__(self, "__model_ref", model)
+
     def insert_at_point(self, point: PTInsertionPoint, fn_list: List[Callable]):
         if point.insertion_type == PTInsertionType.OPERATOR_PRE_HOOK:
             self._compressed_context.register_pre_hooks(fn_list, point.op_address, point.input_port_id)
