@@ -49,4 +49,4 @@ class ExternalQuantizerCallHook(ExternalOpCallHook):
     def __call__(self, *args, **kwargs):
         if self.debug_interface is not None:
             self.debug_interface.register_activation_quantize_call(str(self.quantizer_storage_key))
-        super().__call__(*args, **kwargs)
+        return super().__call__(*args, **kwargs)

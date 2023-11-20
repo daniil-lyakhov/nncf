@@ -30,6 +30,7 @@ from nncf.torch.tensor_statistics.algo import create_register_input_hook
 class ModelView:
     def __init__(self, model: NNCFNetwork):
         self.model = model
+        self.nncf_module_additions = self.model.nncf.save_nncf_module_additions()
 
     def __enter__(self):
         # TODO do not copy original model reference
@@ -41,6 +42,8 @@ class ModelView:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.model._nncf = self.nncf_interface
+        self.model.nncf.reset_nncf_modules()
+        self.model.nncf.load_nncf_module_additions(self.nncf_module_additions)
 
 
 class PTStatisticsAggregator(StatisticsAggregator):
