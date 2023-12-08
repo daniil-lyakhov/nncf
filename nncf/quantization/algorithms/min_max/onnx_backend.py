@@ -81,6 +81,10 @@ class ONNXMinMaxAlgoBackend(MinMaxAlgoBackend):
         return []
 
     @property
+    def scaled_dot_product_attention_metatypes(self) -> List[OperatorMetatype]:
+        return []
+
+    @property
     def scales_unification_map(self) -> Dict[OperatorMetatype, OperatorMetatype]:
         return {om.ONNXConcatMetatype: self.overflow_fix_metatypes}
 
@@ -91,6 +95,10 @@ class ONNXMinMaxAlgoBackend(MinMaxAlgoBackend):
     @property
     def quant_trait_op_dict(self) -> Dict[int, OperatorMetatype]:
         return DEFAULT_ONNX_QUANT_TRAIT_TO_OP_DICT
+
+    @staticmethod
+    def get_start_nodes_for_activation_path_tracing(nncf_graph: NNCFGraph) -> List[NNCFNode]:
+        return nncf_graph.get_input_nodes()
 
     @staticmethod
     def target_point(target_type: TargetType, target_node_name: str, port_id: int) -> ONNXTargetPoint:
