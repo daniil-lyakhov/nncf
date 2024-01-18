@@ -92,6 +92,9 @@ class TensorReducerBase(ABC):
         :return: Inplace operation builder if possible else None.
         """
 
+    def is_reduction_possible(self, x: List[NNCFTensor]) -> bool:
+        return all(not tensor.is_empty() for tensor in x)
+
     def __call__(self, x: List[NNCFTensor]):
         if self.inplace:
             return x
@@ -299,9 +302,8 @@ class TensorCollector:
         for reducer in self._reducers:
             reducer_hash = hash(reducer)
             input_ = inputs[reducer_hash]
-            if any(tensor.is_empty() for tensor in input_):
-                continue
-            reduced_inputs[reducer_hash] = reducer(input_)
+            if reducer.is_reduction_possible(input_):
+                reduced_inputs[reducer_hash] = reducer(input_)
 
         for (
             (reducer_hash, reducer_port_id, _),
@@ -480,6 +482,11 @@ class NoopReducer(TensorReducerBase):
 
     def _reduce_out_of_place(self, x: List[TensorType]) -> List[TensorType]:
         return x
+
+
+class RawStatisticReducer(NoopReducer):
+    def is_reduction_possible(self, x: List[NNCFTensor]) -> bool:
+        return True
 
 
 class MinReducer(TensorReducerBase):
