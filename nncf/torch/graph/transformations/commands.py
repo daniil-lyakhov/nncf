@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -9,7 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 import torch
 
@@ -20,6 +20,8 @@ from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.commands import TransformationCommand
 from nncf.common.graph.transformations.commands import TransformationPriority
 from nncf.common.graph.transformations.commands import TransformationType
+
+DEFAULT_HOOKS_GROUP_NAME = "default_hooks_group"
 
 
 class PTTargetPointStateNames:
@@ -125,9 +127,6 @@ class PTTransformationCommand(TransformationCommand):
         """
         return False
 
-    def union(self, other: "PTTransformationCommand") -> "PTTransformationCommand":
-        raise NotImplementedError()
-
 
 class PTInsertionCommand(PTTransformationCommand):
     """
@@ -139,23 +138,36 @@ class PTInsertionCommand(PTTransformationCommand):
         point: PTTargetPoint,
         fn: Callable,
         priority: TransformationPriority = TransformationPriority.DEFAULT_PRIORITY,
+        hooks_group_name: str = DEFAULT_HOOKS_GROUP_NAME,
     ):
         super().__init__(TransformationType.INSERT, point)
         self.fn: Callable = fn
         self.priority: TransformationPriority = priority
-
-    def union(self, other: "PTTransformationCommand") -> "PTTransformationCommand":
-        # TODO: keep all TransformationCommands atomic, refactor TransformationLayout instead
-        raise NotImplementedError()
+        self.hooks_group_name = hooks_group_name
 
     def requires_graph_rebuild(self):
-        """
-        Return boolean flag to rebuild graph of model.
-
-        :return: Boolean flag.
-        """
         # Rebuild graph when adding quantization nodes.
         return self.priority == TransformationPriority.QUANTIZATION_PRIORITY
+
+
+class PTSharedFnInsertionCommand(PTTransformationCommand):
+    def __init__(
+        self,
+        target_points: List[PTTargetPoint],
+        fn: Callable,
+        op_unique_name: str,
+        priority: TransformationPriority = TransformationPriority.DEFAULT_PRIORITY,
+        hooks_group_name: str = DEFAULT_HOOKS_GROUP_NAME,
+    ):
+        super().__init__(TransformationType.INSERT, None)
+        self.target_points = target_points
+        self.fn = fn
+        self.op_name = op_unique_name
+        self.priority = priority
+        self.hooks_group_name = hooks_group_name
+
+    def requires_graph_rebuild(self):
+        return True
 
 
 class PTQuantizerInsertionCommand(PTTransformationCommand):
@@ -167,12 +179,11 @@ class PTQuantizerInsertionCommand(PTTransformationCommand):
         self,
         point: PTTargetPoint,
         quantizer: "BaseQuantizer",  # noqa: F821
+        hooks_group_name: str = DEFAULT_HOOKS_GROUP_NAME,
     ):
         super().__init__(TransformationType.INSERT, point)
         self.quantizer = quantizer
-
-    def union(self, other: "PTTransformationCommand") -> "PTTransformationCommand":
-        raise NotImplementedError()
+        self.hooks_group_name = hooks_group_name
 
     def requires_graph_rebuild(self):
         return True
@@ -190,9 +201,6 @@ class PTModelExtractionWithFusedBiasCommand(PTCommand):
         super().__init__(TransformationType.EXTRACT)
         self.node_name = node_name
 
-    def union(self, other: "Command") -> "Command":
-        raise NotImplementedError()
-
 
 class PTBiasCorrectionCommand(PTTransformationCommand):
     """
@@ -207,5 +215,16 @@ class PTBiasCorrectionCommand(PTTransformationCommand):
         super().__init__(TransformationType.CHANGE, target_point)
         self.bias_value = bias_value
 
-    def union(self, other: "PTTransformationCommand") -> "PTTransformationCommand":
-        raise NotImplementedError()
+
+class PTWeightUpdateCommand(PTTransformationCommand):
+    """
+    Corrects weight value in the model based on the input value.
+    """
+
+    def __init__(self, target_point: PTTargetPoint, weight_value: torch.Tensor):
+        """
+        :param target_point: The TargetPoint instance for the correction that contains layer's information.
+        :param weight_value: The new weight value that will be used instead of the original weight value.
+        """
+        super().__init__(TransformationType.CHANGE, target_point)
+        self.weight_value = weight_value

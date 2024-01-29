@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -10,7 +10,9 @@
 # limitations under the License.
 
 import copy
+from typing import Dict
 
+import nncf
 from nncf import ModelType
 from nncf import QuantizationPreset
 from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
@@ -56,7 +58,7 @@ TEST_MODELS = [
             "model_type": ModelType.TRANSFORMER,
             "advanced_parameters": AdvancedQuantizationParameters(smooth_quant_alpha=-1.0),
         },
-        "backends": [BackendType.TORCH, BackendType.ONNX, BackendType.OV, BackendType.POT],
+        "backends": ALL_PTQ_BACKENDS,
     },
     {
         "reported_name": "timm/darknet53",
@@ -115,7 +117,7 @@ TEST_MODELS = [
             "preset": QuantizationPreset.MIXED,
             "fast_bias_correction": False,
         },
-        "backends": [BackendType.ONNX, BackendType.OV, BackendType.POT],
+        "backends": [BackendType.ONNX, BackendType.OV],
     },
     {
         "reported_name": "timm/efficientnet_lite0",
@@ -153,7 +155,7 @@ TEST_MODELS = [
                 smooth_quant_alphas=AdvancedSmoothQuantParameters(matmul=0.05)
             ),
         },
-        "backends": [BackendType.TORCH, BackendType.ONNX, BackendType.OV],
+        "backends": NNCF_PTQ_BACKENDS,
     },
     {
         "reported_name": "timm/mobilenetv2_050",
@@ -172,7 +174,7 @@ TEST_MODELS = [
             "preset": QuantizationPreset.MIXED,
             "fast_bias_correction": False,
         },
-        "backends": [BackendType.ONNX, BackendType.OV, BackendType.POT],
+        "backends": [BackendType.ONNX, BackendType.OV],
     },
     {
         "reported_name": "timm/mobilenetv3_small_050",
@@ -216,7 +218,20 @@ TEST_MODELS = [
             "preset": QuantizationPreset.MIXED,
             "model_type": ModelType.TRANSFORMER,
         },
-        "backends": ALL_PTQ_BACKENDS,
+        "backends": [BackendType.OV],
+    },
+    {
+        "reported_name": "timm/swin_base_patch4_window7_224_no_sq",
+        "model_id": "swin_base_patch4_window7_224",
+        "pipeline_cls": ImageClassificationTimm,
+        "ptq_params": {
+            "preset": QuantizationPreset.MIXED,
+            "model_type": ModelType.TRANSFORMER,
+            "advanced_parameters": AdvancedQuantizationParameters(
+                smooth_quant_alpha=AdvancedSmoothQuantParameters(matmul=-1)
+            ),
+        },
+        "backends": [BackendType.TORCH, BackendType.CUDA_TORCH, BackendType.ONNX],
     },
     {
         "reported_name": "timm/tf_inception_v3",
@@ -242,7 +257,7 @@ TEST_MODELS = [
             "preset": QuantizationPreset.MIXED,
             "model_type": ModelType.TRANSFORMER,
         },
-        "backends": [BackendType.TORCH, BackendType.ONNX, BackendType.OV, BackendType.POT],
+        "backends": ALL_PTQ_BACKENDS,
     },
     {
         "reported_name": "timm/wide_resnet50_2",
@@ -256,20 +271,20 @@ TEST_MODELS = [
 ]
 
 
-def generate_tests_scope():
+def generate_tests_scope() -> Dict[str, dict]:
     """
     Generate tests by names "{reported_name}_backend_{backend}"
     """
     tests_scope = {}
     for test_model_param in TEST_MODELS:
-        for backend in test_model_param["backends"]:
+        for backend in test_model_param["backends"] + [BackendType.FP32]:
             model_param = copy.deepcopy(test_model_param)
             reported_name = model_param["reported_name"]
             test_case_name = f"{reported_name}_backend_{backend.value}"
             model_param["backend"] = backend
             model_param.pop("backends")
             if test_case_name in tests_scope:
-                raise RuntimeError(f"{test_case_name} already in tests_scope")
+                raise nncf.ValidationError(f"{test_case_name} already in tests_scope")
             tests_scope[test_case_name] = model_param
     return tests_scope
 

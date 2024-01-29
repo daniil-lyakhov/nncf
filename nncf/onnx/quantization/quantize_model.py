@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -9,17 +9,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+from typing import Optional
 
 import onnx
 
+import nncf
 from nncf.common.logging.logger import nncf_logger
 from nncf.common.quantization.structs import QuantizationPreset
 from nncf.data import Dataset
 from nncf.onnx.graph.nncf_graph_builder import GraphConverter
 from nncf.parameters import ModelType
+from nncf.parameters import QuantizationMode
 from nncf.parameters import TargetDevice
 from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
+from nncf.quantization.advanced_parameters import QuantizationParameters
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
 from nncf.quantization.telemetry_extractors import CompressionStartedWithQuantizeApi
 from nncf.scopes import IgnoredScope
@@ -31,10 +34,11 @@ from nncf.telemetry.events import NNCF_ONNX_CATEGORY
 def quantize_impl(
     model: onnx.ModelProto,
     calibration_dataset: Dataset,
-    preset: Union[QuantizationPreset, None],
-    target_device: TargetDevice,
-    subset_size: int,
-    fast_bias_correction: bool,
+    mode: Optional[QuantizationMode] = None,
+    preset: Optional[QuantizationPreset] = None,
+    target_device: TargetDevice = TargetDevice.ANY,
+    subset_size: int = 300,
+    fast_bias_correction: bool = True,
     model_type: Optional[ModelType] = None,
     ignored_scope: Optional[IgnoredScope] = None,
     advanced_parameters: Optional[AdvancedQuantizationParameters] = None,
@@ -43,9 +47,11 @@ def quantize_impl(
     Implementation of the `quantize()` method for the ONNX backend.
     """
     if target_device == TargetDevice.CPU_SPR:
-        raise RuntimeError("target_device == CPU_SPR is not supported.")
+        raise nncf.ValidationError("target_device == CPU_SPR is not supported.")
+    if mode is not None:
+        raise ValueError(f"mode={mode} is not supported")
     if model.opset_import[0].version < 10:
-        raise RuntimeError("ONNX models with opset version < 10 do not support quantization.")
+        raise nncf.ValidationError("ONNX models with opset version < 10 do not support quantization.")
     if model.opset_import[0].version < 13:
         nncf_logger.warning(
             "ONNX models with 10 < opset version < 13 do not support per-channel quantization."
@@ -53,8 +59,8 @@ def quantize_impl(
         )
         if advanced_parameters is None:
             advanced_parameters = AdvancedQuantizationParameters()
-        advanced_parameters.weights_quantization_params.per_channel = False
-        advanced_parameters.activations_quantization_params.per_channel = False
+        advanced_parameters.weights_quantization_params = QuantizationParameters(per_channel=False)
+        advanced_parameters.activations_quantization_params = QuantizationParameters(per_channel=False)
 
     quantization_algorithm = PostTrainingQuantization(
         preset=preset,

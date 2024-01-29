@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -8,11 +8,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import abc
 import functools
 import inspect
 from abc import ABCMeta
 from abc import abstractmethod
 from copy import deepcopy
+from typing import Callable, List, Tuple, Type
 
 import pytest
 import torch
@@ -20,29 +22,35 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.utils import weight_norm
 
+import nncf
 from nncf import nncf_logger
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import UnknownMetatype
 from nncf.common.graph.transformations.commands import TargetType
+from nncf.common.hook_handle import HookHandle
 from nncf.torch import register_module
+from nncf.torch.dynamic_graph.io_handling import ExampleInputInfo
 from nncf.torch.dynamic_graph.io_handling import FillerInputElement
 from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
 from nncf.torch.dynamic_graph.operation_address import OperationAddress
 from nncf.torch.dynamic_graph.scope import Scope
+from nncf.torch.dynamic_graph.trace_tensor import TracedTensor
 from nncf.torch.graph.graph import PTNNCFGraph
 from nncf.torch.graph.graph_builder import GraphBuilder
 from nncf.torch.graph.operator_metatypes import PTConv2dMetatype
 from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.layers import NNCFConv2d
+from nncf.torch.model_creation import wrap_model
 from nncf.torch.nncf_module_replacement import replace_modules_by_nncf_modules
-from nncf.torch.nncf_network import EXTERNAL_QUANTIZERS_STORAGE_NAME
 from nncf.torch.nncf_network import ExtraCompressionModuleType
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.nncf_network import PTInsertionPoint
 from nncf.torch.nncf_network import PTInsertionType
+from nncf.torch.quantization.external_quantizer import EXTERNAL_QUANTIZERS_STORAGE_NAME
 from tests.torch.composite.test_sparsity_quantization import get_basic_sparsity_plus_quantization_config
 from tests.torch.helpers import BasicConvTestModel
+from tests.torch.helpers import HookChecker
 from tests.torch.helpers import TwoConvTestModel
 from tests.torch.helpers import check_correct_nncf_modules_replacement
 from tests.torch.helpers import create_compressed_model_and_algo_for_test
@@ -405,28 +413,73 @@ def test_replacing_forward_with_another_own_method(_nncf_caplog):
     assert "set_original_unbound_forward" in _nncf_caplog.text
 
 
-def test_replacing_forward_of_original_model():
-    def decorator(func):
-        def wrap(*args):
-            return func(*args)
+class ReplacementForwardProvider(abc.ABC):
+    @abstractmethod
+    def get_replacement_forward(self, model: torch.nn.Module) -> Callable:
+        pass
 
-        return wrap
 
+class ArgDecoratorForward(ReplacementForwardProvider):
+    def get_replacement_forward(self, model: torch.nn.Module) -> Callable:
+        def decorator(func):
+            def wrap(*args):
+                return func(*args)
+
+            return wrap
+
+        return decorator(model.forward)
+
+
+class ArgAndKwargWrapsForward(ReplacementForwardProvider):
+    def get_replacement_forward(self, model: torch.nn.Module) -> Callable:
+        old_forward = model.forward
+
+        @functools.wraps(old_forward)
+        def new_forward(*args, **kwargs):
+            return old_forward(*args, **kwargs)
+
+        return new_forward
+
+
+class EvilSelfForwardProvider(ReplacementForwardProvider):
+    def get_replacement_forward(self, model: torch.nn.Module) -> Callable:
+        old_forward = model.forward
+
+        def evil_forward(self):
+            # since `self` is just a name, and not a reserved word,
+            # in this function `self` will refer just to the 0-th actual (tensor) arg of the forward function
+            return old_forward(self)
+
+        return evil_forward
+
+
+@pytest.mark.parametrize(
+    "replacement_forward_provider_cls", [ArgDecoratorForward, ArgAndKwargWrapsForward, EvilSelfForwardProvider]
+)
+def test_replacing_forward_of_original_model(replacement_forward_provider_cls: Type[ReplacementForwardProvider]):
     model = BasicConvTestModel()
-    model.forward = decorator(model.forward)
+    provider = replacement_forward_provider_cls()
+    replacement_forward = provider.get_replacement_forward(model)
+    model.forward = replacement_forward
+    input_info = FillerInputInfo([FillerInputElement(model.INPUT_SIZE)])
+    input_args, input_kwargs = input_info.get_forward_inputs()
+    original_output = model.forward(*input_args, **input_kwargs)
 
     fn_id = id(model.__dict__["forward"])
     fn_sign = inspect.signature(model.forward)
     # type of current
-    assert isinstance(model.__dict__["forward"], type(decorator))
+    assert isinstance(model.__dict__["forward"], type(replacement_forward))
 
-    nncf_net = NNCFNetwork(model, FillerInputInfo([FillerInputElement(model.INPUT_SIZE)]))
-    nncf_net.forward(torch.ones(model.INPUT_SIZE))
+    nncf_net = NNCFNetwork(model, input_info)
 
     # Check that forward was updated
     assert fn_id != id(nncf_net.__dict__["forward"])
     assert fn_sign == inspect.signature(nncf_net.forward)
     assert isinstance(nncf_net.forward, functools.partial)
+
+    # Check that the functional outputs are the same
+    new_output = nncf_net.forward(torch.ones(model.INPUT_SIZE))
+    assert torch.equal(new_output, original_output)
 
 
 def test_temporary_clean_view():
@@ -447,7 +500,7 @@ def test_temporary_clean_view():
             == intermediate_model.nncf.get_original_graph().get_nodes_count()
         )
     sd_after_tmp_clean_view = sparse_quantized_model.state_dict()
-    for key in old_sd.keys():
+    for key in old_sd:
         assert key in sd_after_tmp_clean_view
         assert torch.all(torch.eq(sd_after_tmp_clean_view[key], old_sd[key]))
     sparse_quantized_model.nncf.rebuild_graph()
@@ -491,7 +544,7 @@ def test_deepcopy_nncf_network():
 def test_insertion_point_target_point_translation():
     op_address = OperationAddress("dummy", Scope(), 0)
     for target_type in [PTInsertionType.NNCF_MODULE_POST_OP, TargetType.AFTER_LAYER]:
-        with pytest.raises(RuntimeError):
+        with pytest.raises(nncf.InternalError):
             PTInsertionPoint(target_type, op_address)
     target_type = TargetType.POST_LAYER_OPERATION
     assert PTInsertionPoint(target_type, op_address).insertion_type == PTInsertionType.NNCF_MODULE_POST_OP
@@ -598,7 +651,7 @@ def test_class_compares_as_original(simple_net):
     assert simple_net.__class__ == SimplestModel
     assert SimplestModel == simple_net.__class__
     assert simple_net.__class__ == simple_net.__class__
-    assert not simple_net.__class__ != simple_net.__class__
+    assert simple_net.__class__ == simple_net.__class__
     assert simple_net.__class__ != ModelWithAttr
     assert ModelWithAttr != simple_net.__class__
 
@@ -767,3 +820,207 @@ def test_is_compression_module_registered(compression_module_type, is_registered
         assert nncf_model.nncf.is_compression_module_registered(compression_module_type)
     else:
         assert not nncf_model.nncf.is_compression_module_registered(compression_module_type)
+
+
+class MultideviceModel(torch.nn.Module):
+    def __init__(self, linear_0, linear_1):
+        super().__init__()
+        self.linear_cpu = torch.nn.Linear(linear_0[0], linear_0[1], device="cpu")
+        self.linear_gpu = torch.nn.Linear(linear_1[0], linear_1[1], device="cuda")
+
+    def forward(self, x, y):
+        x1 = self.linear_cpu(x)
+        y1 = self.linear_gpu(y)
+        res = x1.to(y1.device) + y1
+        return res
+
+
+def test_multidevice_model():
+    if not torch.cuda.is_available():
+        pytest.skip("GPU required")
+
+    model = MultideviceModel((3, 3), (2, 3))
+    example_input = (torch.ones(3, 3, device="cpu"), torch.ones(3, 2, device="cuda"))
+    input_info = ExampleInputInfo.from_example_input(example_input)
+    nncf_model = NNCFNetwork(model, input_info)
+    nncf_model(*example_input)
+
+
+def test_access_to_input_info():
+    model = SimplestModel()
+    example_input = torch.ones(SimplestModel.INPUT_SIZE)
+    input_info = ExampleInputInfo.from_example_input(example_input)
+    nncf_model = NNCFNetwork(model, input_info)
+    nncf_model.nncf.input_infos
+
+
+class ModelWithMax(torch.nn.Module):
+    INPUT_SIZE = [1, 1, 32, 32]
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        x = torch.max(x, dim=-1, keepdim=True)
+        assert isinstance(x, torch.return_types.max)
+        v = x.values + 1
+        i = x.indices + 1
+        return v, i
+
+
+def test_torch_return_type_traced():
+    model = ModelWithMax()
+    nncf_model = NNCFNetwork(model, FillerInputInfo([FillerInputElement(SimplestModel.INPUT_SIZE)]))
+
+    node_to_op_address_mapping = nncf_model.nncf.get_node_to_op_address_mapping()
+    insertion_point = PTInsertionPoint(
+        TargetType.OPERATOR_POST_HOOK, node_to_op_address_mapping["ModelWithMax/max_0"], 0
+    )
+
+    visited_times = 0
+
+    def fn_to_check_input_type(input_):
+        assert isinstance(input_, torch.return_types.max)
+        for val in input_:
+            assert isinstance(val, TracedTensor)
+        nonlocal visited_times
+        visited_times += 1
+        return input_
+
+    nncf_model.nncf.insert_at_point(insertion_point, fn_to_check_input_type)
+    nncf_model.nncf.rebuild_graph()
+    assert visited_times == 1
+
+
+class TestWhisperDecoderModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.embedding = torch.nn.Embedding(10, 3)
+
+    def forward(self, idx):
+        x = self.embedding(idx)
+        x = x @ torch.transpose(self.embedding.weight, 0, 1)
+        return x
+
+
+class ZeroHook(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.forward_calls_counter = 0
+
+    def forward(self, x):
+        self.forward_calls_counter += 1
+        return x * 0
+
+
+def test_insert_hook_after_parameter():
+    model = TestWhisperDecoderModel()
+    example_input = torch.randint(0, 9, (2,))
+    nncf_model = wrap_model(model, example_input, trace_parameters=True)
+    result = nncf_model(example_input)
+
+    hook = ZeroHook()
+    node_to_op_address_mapping = nncf_model.nncf.get_node_to_op_address_mapping()
+    insertion_point = PTInsertionPoint(TargetType.OPERATOR_POST_HOOK, node_to_op_address_mapping["embedding.weight"], 0)
+    nncf_model.nncf.insert_at_point(insertion_point, hook)
+    result_with_hook = nncf_model(example_input)
+
+    assert hook.forward_calls_counter == 1
+    assert torch.sum(result.nonzero()) > 0
+    assert torch.sum(result_with_hook.nonzero()) == 0
+
+
+@pytest.mark.parametrize(
+    "target_type, target_node_name, input_port_id",
+    [
+        (TargetType.OPERATOR_PRE_HOOK, "/nncf_model_output_0", 0),
+        (TargetType.OPERATOR_POST_HOOK, "/nncf_model_input_0", 0),
+        (TargetType.PRE_LAYER_OPERATION, "SimplestModel/NNCFConv2d[conv]/conv2d_0", 0),
+        (TargetType.POST_LAYER_OPERATION, "SimplestModel/NNCFConv2d[conv]/conv2d_0", 0),
+    ],
+)
+class TestHookHandles:
+    class TestHook(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self._p = torch.nn.Parameter(torch.zeros((1,)))
+
+        def forward(self, x):
+            return x + self._p
+
+    @staticmethod
+    def _prepare_hook_handles_test(
+        target_type: TargetType, target_node_name: str, input_port_id: int
+    ) -> Tuple[NNCFNetwork, PTInsertionPoint, Callable[[List[HookHandle]], None]]:
+        model = SimplestModel()
+        example_input = torch.ones(SimplestModel.INPUT_SIZE)
+        input_info = ExampleInputInfo.from_example_input(example_input)
+        nncf_model = NNCFNetwork(model, input_info)
+
+        node_name_vs_address = nncf_model.nncf.get_node_to_op_address_mapping()
+        ip = PTInsertionPoint(target_type, node_name_vs_address[target_node_name], input_port_id=input_port_id)
+
+        checker = HookChecker(nncf_model, "conv")
+
+        def _check(ref_hooks_):
+            checker.clear()
+            checker.add_ref(ref_hooks_, target_type, target_node_name, input_port_id)
+            checker.check_with_reference()
+
+        return nncf_model, ip, _check
+
+    def test_temporary_insert_at_point_by_hook_group_name(
+        self, target_type: TargetType, target_node_name: str, input_port_id: int
+    ):
+        nncf_model, ip, _check = self._prepare_hook_handles_test(target_type, target_node_name, input_port_id)
+        permanent_hook = self.TestHook()
+        TEMPORARY_HOOK_GROUP_NAME = "tmp"
+        # Make temporary hook a ref to the permanent hook
+        # to check tmp hooks are not removed by their id()
+        temporary_hook = permanent_hook
+        nncf_model.nncf.insert_at_point(ip, permanent_hook)
+        ref_hooks = [permanent_hook]
+        _check(ref_hooks)
+
+        for _ in range(2):
+            temporary_hook = self.TestHook()
+            nncf_model.nncf.insert_at_point(ip, temporary_hook, TEMPORARY_HOOK_GROUP_NAME)
+            ref_hooks.append(temporary_hook)
+            _check(ref_hooks)
+
+            nncf_model.nncf.insert_at_point(ip, permanent_hook)
+            ref_hooks.append(permanent_hook)
+            _check(ref_hooks)
+
+            nncf_model.nncf.remove_hooks_group(TEMPORARY_HOOK_GROUP_NAME)
+            del ref_hooks[-2]
+            _check(ref_hooks)
+            assert not nncf_model.nncf._groups_vs_hooks_handlers[TEMPORARY_HOOK_GROUP_NAME]
+
+    def test_insert_at_point_hook_handles(self, target_type: TargetType, target_node_name: str, input_port_id: int):
+        nncf_model, ip, _check = self._prepare_hook_handles_test(target_type, target_node_name, input_port_id)
+        permanent_hook = self.TestHook()
+        # Make temporary hook a ref to the permanent hook
+        # to check tmp hooks are not removed by their id()
+        temporary_hook = permanent_hook
+        tmp_hh = []
+        nncf_model.nncf.insert_at_point(ip, permanent_hook)
+
+        ref_hooks = [permanent_hook]
+        _check(ref_hooks)
+
+        for _ in range(2):
+            temporary_hook = self.TestHook()
+            tmp_hh.append(nncf_model.nncf.insert_at_point(ip, temporary_hook))
+            ref_hooks.append(temporary_hook)
+            _check(ref_hooks)
+
+            nncf_model.nncf.insert_at_point(ip, permanent_hook)
+            ref_hooks.append(permanent_hook)
+            _check(ref_hooks)
+
+            for hh in tmp_hh:
+                hh.remove()
+
+            del ref_hooks[-2]
+            _check(ref_hooks)

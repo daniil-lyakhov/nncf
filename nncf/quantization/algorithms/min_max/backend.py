@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -20,11 +20,13 @@ from nncf.common.graph.transformations.commands import TargetPoint
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.commands import TransformationCommand
 from nncf.common.hardware.config import HWConfig
+from nncf.common.quantization.initialization.range import RangeInitCollectorParams
 from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.tensor_statistics.collectors import TensorStatisticCollectorBase
 from nncf.common.tensor_statistics.statistics import MinMaxTensorStatistic
 from nncf.parameters import ModelType
 from nncf.parameters import TargetDevice
+from nncf.quantization.fake_quantize import FakeConvertParameters
 from nncf.quantization.fake_quantize import FakeQuantizeParameters
 from nncf.quantization.range_estimator import RangeEstimatorParameters
 
@@ -69,13 +71,6 @@ class MinMaxAlgoBackend(ABC):
 
     @property
     @abstractmethod
-    def read_variable_metatypes(self) -> List[OperatorMetatype]:
-        """
-        Property for the backend-specific metatypes that also can be interpreted as inputs (ReadValue).
-        """
-
-    @property
-    @abstractmethod
     def overflow_fix_metatypes(self) -> List[OperatorMetatype]:
         """
         Property for the backend-specific metatypes for which overflow_fix is applicable.
@@ -93,6 +88,13 @@ class MinMaxAlgoBackend(ABC):
     def group_conv_metatypes(self) -> List[OperatorMetatype]:
         """
         Property for the backend-specific Grouped Convolution metatypes.
+        """
+
+    @property
+    @abstractmethod
+    def scaled_dot_product_attention_metatypes(self) -> List[OperatorMetatype]:
+        """
+        Property for the backend-specific Scaled Dot Product Attention metatypes.
         """
 
     @property
@@ -148,6 +150,31 @@ class MinMaxAlgoBackend(ABC):
 
     @staticmethod
     @abstractmethod
+    def create_convert_insertion_command(
+        target_point: TargetPoint,
+        parameters: FakeConvertParameters,
+    ) -> TransformationCommand:
+        """
+        Returns backend-specific convert insertion command.
+
+        :param target_point: Target location for the correction.
+        :param parameters: FakeConvertParameters to calculate activation quantization parameters.
+        :return: Backend-specific TransformationCommand for the quantizer insertion operation.
+        """
+
+    @staticmethod
+    @abstractmethod
+    def get_start_nodes_for_activation_path_tracing(nncf_graph: NNCFGraph) -> List[NNCFNode]:
+        """
+        Returns a list of NNCFNodes to use as start nodes for activation path tracing.
+
+        :param nncf_graph: NNCFGraph to get the start nodes.
+        :return: List of NNCFNodes to use as start nodes for activation path tracing.
+
+        """
+
+    @staticmethod
+    @abstractmethod
     def unify_statistics(statistics: List[MinMaxTensorStatistic]) -> MinMaxTensorStatistic:
         """
         Returns backend-specific unified statistics.
@@ -162,7 +189,7 @@ class MinMaxAlgoBackend(ABC):
         range_estimator_params: RangeEstimatorParameters,
         nncf_graph: NNCFGraph,
         target_point: TargetPoint,
-        quantizer_config: QuantizerConfig,
+        collector_params: RangeInitCollectorParams,
         inplace: bool,
         num_samples: int = None,
     ) -> TensorStatisticCollectorBase:
@@ -172,7 +199,7 @@ class MinMaxAlgoBackend(ABC):
         :param range_estimator_params: Parameters that specify estimators types.
         :param nncf_graph: NNCFGraph to get input/output shapes for the target point.
         :param target_point: Target location for the correction.
-        :param quantizer_config: QuantizerConfig instance for the current layer.
+        :param collector_params: RangeInitCollectorParams instance for the current layer.
         :param inplace: Whether to calculate statistic inplace or not.
         :param num_samples: Maximum number of samples to collect.
         :return: Backend-specific TensorStatisticCollectorBase for the statistics calculation.

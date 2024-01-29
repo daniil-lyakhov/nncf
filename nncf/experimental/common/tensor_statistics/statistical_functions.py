@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -10,7 +10,7 @@
 # limitations under the License.
 
 from nncf.experimental.tensor import Tensor
-from nncf.experimental.tensor import functions as fns
+from nncf.experimental.tensor.functions import numeric as fns
 
 
 def mean_per_channel(x: Tensor, axis: int) -> Tensor:

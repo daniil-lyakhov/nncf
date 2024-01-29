@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -445,5 +445,7 @@ class TestCompressionState:
         resumed_trainer.train(str(resume_folder))
 
         PTTensorListComparator.check_equal(
-            list(compressed_model.state_dict().values()), list(resumed_compressed_model.state_dict().values())
+            list(compressed_model.state_dict().values()),
+            list(resumed_compressed_model.state_dict().values()),
+            atol=0.001,
         )

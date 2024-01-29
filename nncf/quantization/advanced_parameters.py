@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,9 +17,10 @@ from dataclasses import field
 from dataclasses import fields
 from dataclasses import is_dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
-from nncf.common.quantization.structs import QuantizationMode
+import nncf
+from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
 from nncf.common.utils.api_marker import api
 from nncf.quantization.range_estimator import AggregatorType
 from nncf.quantization.range_estimator import RangeEstimatorParameters
@@ -54,6 +55,20 @@ class OverflowFix(Enum):
     ENABLE = "enable"
     FIRST_LAYER = "first_layer_only"
     DISABLE = "disable"
+
+
+@api()
+class FP8Type(Enum):
+    """
+    Defines FP8 special types (https://arxiv.org/pdf/2209.05433.pdf).
+
+    :param E4M3: Mode with 4-bit exponent and 3-bit mantissa.
+    :param E5M2: Mode with 5-bit exponent and 2-bit mantissa.
+
+    """
+
+    E4M3 = "f8e4m3"
+    E5M2 = "f8e5m2"
 
 
 @api()
@@ -95,6 +110,19 @@ class QuantizationParameters:
 
 @api()
 @dataclass
+class FP8QuantizationParameters:
+    """
+    Contains convert parameters for weights or activations.
+
+    :param destination_type: Currently contains E4M3 or E5M2 for FP8 precision.
+    :type destination_type: FP8Type
+    """
+
+    destination_type: Optional[FP8Type] = None
+
+
+@api()
+@dataclass
 class AdvancedBiasCorrectionParameters:
     """
     Contains advanced parameters for fine-tuning bias correction algorithm.
@@ -128,6 +156,19 @@ class AdvancedSmoothQuantParameters:
 
     convolution: float = -1
     matmul: float = 0.95
+
+
+class RestoreMode(Enum):
+    """
+    Specifies how to revert operations to their original precision.
+
+    :param ACTIVATIONS_AND_WEIGHTS: Operations will be reverted to floating-point precision.
+    :param ONLY_ACTIVATIONS: Operations with weights will be reverted to representation with int8 weights,
+        while all other operations will revert to floating-point precision.
+    """
+
+    ACTIVATIONS_AND_WEIGHTS = "activations_and_weights"
+    ONLY_ACTIVATIONS = "only_activations"
 
 
 @api()
@@ -178,8 +219,8 @@ class AdvancedQuantizationParameters:
     disable_bias_correction: bool = False
 
     # Advanced Quantization parameters
-    activations_quantization_params: QuantizationParameters = field(default_factory=QuantizationParameters)
-    weights_quantization_params: QuantizationParameters = field(default_factory=QuantizationParameters)
+    activations_quantization_params: Union[QuantizationParameters, FP8QuantizationParameters] = None
+    weights_quantization_params: Union[QuantizationParameters, FP8QuantizationParameters] = None
 
     # Range estimator parameters
     activations_range_estimator_params: RangeEstimatorParameters = field(default_factory=RangeEstimatorParameters)
@@ -222,6 +263,8 @@ class AdvancedAccuracyRestorerParameters:
     :param intermediate_model_dir: Path to the folder where the model, which was fully
         quantized with initial parameters, should be saved.
     :type intermediate_model_dir: Optional[str]
+    :param restore_mode: Specifies how to revert operations to their original precision.
+    :type restore_mode: RestoreMode
     """
 
     max_num_iterations: int = sys.maxsize
@@ -229,6 +272,7 @@ class AdvancedAccuracyRestorerParameters:
     ranking_subset_size: Optional[int] = None
     num_ranking_workers: Optional[int] = None
     intermediate_model_dir: Optional[str] = None
+    restore_mode: RestoreMode = RestoreMode.ACTIVATIONS_AND_WEIGHTS
 
 
 def changes_asdict(params: Any) -> Dict[str, Any]:
@@ -277,16 +321,17 @@ def convert_quantization_parameters_to_dict(params: QuantizationParameters) -> D
     :return: Quantization parameters as dict in the legacy format
     """
     result = {}
-    if params.num_bits is not None:
-        result["bits"] = params.num_bits
-    if params.mode is not None:
-        result["mode"] = params.mode
-    if params.signedness_to_force is not None:
-        result["signed"] = params.signedness_to_force
-    if params.per_channel is not None:
-        result["per_channel"] = params.per_channel
-    if params.narrow_range is not None:
-        raise RuntimeError("narrow_range parameter is not supported in the legacy format")
+    if params is not None:
+        if params.num_bits is not None:
+            result["bits"] = params.num_bits
+        if params.mode is not None:
+            result["mode"] = params.mode
+        if params.signedness_to_force is not None:
+            result["signed"] = params.signedness_to_force
+        if params.per_channel is not None:
+            result["per_channel"] = params.per_channel
+        if params.narrow_range is not None:
+            raise nncf.ParameterNotSupportedError("narrow_range parameter is not supported in the legacy format")
     return result
 
 
@@ -298,7 +343,7 @@ def convert_range_estimator_parameters_to_dict(params: RangeEstimatorParameters)
     :return: range estimator parameters as dict in the legacy format
     """
     if params.min.clipping_value is not None or params.max.clipping_value is not None:
-        raise RuntimeError("clipping_value parameter is not supported in the legacy format")
+        raise nncf.ParameterNotSupportedError("clipping_value parameter is not supported in the legacy format")
 
     result = {}
     if (
@@ -334,7 +379,9 @@ def convert_range_estimator_parameters_to_dict(params: RangeEstimatorParameters)
     ):
         return {}
     else:
-        raise RuntimeError(f"The following range estimator parameters are not supported: {str(params)}")
+        raise nncf.ParameterNotSupportedError(
+            f"The following range estimator parameters are not supported: {str(params)}"
+        )
 
     return result
 
@@ -394,11 +441,13 @@ def apply_advanced_parameters_to_config(
         config["initializer"] = initializer
 
     if params.bias_correction_params.apply_for_all_nodes:
-        raise RuntimeError(
+        raise nncf.ParameterNotSupportedError(
             "apply_for_all_nodes parameter of the BiasCorrection algorithm is not supported in the legacy format"
         )
 
     if params.bias_correction_params.threshold is not None:
-        raise RuntimeError("threshold parameter of the BiasCorrection algorithm is not supported in the legacy format")
+        raise nncf.ParameterNotSupportedError(
+            "threshold parameter of the BiasCorrection algorithm is not supported in the legacy format"
+        )
 
     return config

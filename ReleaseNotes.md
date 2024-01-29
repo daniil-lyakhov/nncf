@@ -1,5 +1,89 @@
 # Release Notes
 
+## New in Release 2.8.0
+
+Post-training Quantization:
+
+- Breaking changes:
+  - `nncf.quantize` signature has been changed to add `mode: Optional[nncf.QuantizationMode] = None` as its 3-rd argument, between the original `calibration_dataset` and `preset` arguments.
+  - (Common) `nncf.common.quantization.structs.QuantizationMode` has been renamed to `nncf.common.quantization.structs.QuantizationScheme`
+- General:
+  - (OpenVINO) Changed default OpenVINO opset from 9 to 13.
+- Features:
+  - (OpenVINO) Added 4-bit data-aware weights compression. For that `dataset` optional parameter has been added to `nncf.compress_weights()` and can be used to minimize accuracy degradation of compressed models (note that this option increases the compression time).
+  - (PyTorch) Added support for PyTorch models with shared weights and custom PyTorch modules in nncf.compress_weights(). The weights compression algorithm for PyTorch models is now based on tracing the model graph. The dataset parameter is now required in nncf.compress_weights() for the compression of PyTorch models.
+  - (Common) Renamed the `nncf.CompressWeightsMode.INT8` to `nncf.CompressWeightsMode.INT8_ASYM` and introduce `nncf.CompressWeightsMode.INT8_SYM` that can be efficiently used with dynamic 8-bit quantization of activations.
+  The original `nncf.CompressWeightsMode.INT8` enum value is now deprecated.
+  - (OpenVINO) Added support for quantizing the ScaledDotProductAttention operation from OpenVINO opset 13.
+  - (OpenVINO) Added FP8 quantization support via `nncf.QuantizationMode.FP8_E4M3` and `nncf.QuantizationMode.FP8_E5M2` enum values, invoked via passing one of these values as an optional `mode` argument to `nncf.quantize`. Currently, OpenVINO supports inference of FP8-quantized models in reference mode with no performance benefits and can be used for accuracy projections.
+  - (Common) Post-training Quantization with Accuracy Control - `nncf.quantize_with_accuracy_control()` has been extended by `restore_mode` optional parameter to revert weights to int8 instead of the original precision.
+  This parameter helps to reduce the size of the quantized model and improves its performance.
+  By default, it's disabled and model weights are reverted to the original precision in `nncf.quantize_with_accuracy_control()`.
+  - (Common) Added an `all_layers: Optional[bool] = None` argument to `nncf.compress_weights` to indicate whether embeddings and last layers of the model should be compressed to a primary precision. This is relevant to 4-bit quantization only.
+  - (Common) Added a `sensitivity_metric: Optional[nncf.parameters.SensitivityMetric] = None` argument to `nncf.compress_weights` for finer control over the sensitivity metric for assigning quantization precision to layers.
+  Defaults to weight quantization error if a dataset is not provided for weight compression and to maximum variance of the layers' inputs multiplied by inverted 8-bit quantization noise if a dataset is provided.
+  By default, the backup precision is assigned for the embeddings and last layers.
+- Fixes:
+  - (OpenVINO) Models with embeddings (e.g. `gpt-2`, `stable-diffusion-v1-5`, `stable-diffusion-v2-1`, `opt-6.7b`, `falcon-7b`, `bloomz-7b1`) are now more accurately quantized.
+  - (PyTorch) `nncf.strip(..., do_copy=True)` now actually returns a deepcopy (stripped) of the model object.
+  - (PyTorch) Post-hooks can now be set up on operations that return `torch.return_type` (such as `torch.max`).
+  - (PyTorch) Improved dynamic graph tracing for various tensor operations from `torch` namespace.
+  - (PyTorch) More robust handling of models with disjoint traced graphs when applying PTQ.
+- Improvements:
+  - Reformatted the tutorials section in the top-level `README.md` for better readability.
+- Deprecations/Removals:
+  - (Common) The original `nncf.CompressWeightsMode.INT8` enum value is now deprecated.
+  - (PyTorch) The Git patch for integration with HuggingFace `transformers` repository is marked as deprecated and will be removed in a future release.
+  Developers are advised to use [optimum-intel](https://github.com/huggingface/optimum-intel) instead.
+  - Dockerfiles in the NNCF Git repository are deprecated and will be removed in a future release.
+
+## New in Release 2.7.0
+
+Post-training Quantization:
+
+- Features:
+  - (OpenVINO) Added support for data-free 4-bit weights compression through NF4 and INT4 data types (`compress_weights(…)` pipeline).
+  - (OpenVINO) Added support for [IF operation](https://docs.openvino.ai/latest/openvino_docs_ops_infrastructure_If_8.html) quantization.
+  - (OpenVINO) Added `dump_intermediate_model` parameter support for AccuracyAwareAlgorithm (`quantize_with_accuracy_control(…)` pipeline).
+  - (OpenVINO) Added support for SmoothQuant and ChannelAlignment algorithms for HyperparameterTuner algorithm (`quantize_with_tune_hyperparams(…)` pipeline).
+  - (PyTorch) Post-training Quantization is now supported with `quantize(…)` pipeline and the common implementation of quantization algorithms. Deprecated `create_compressed_model()` method for Post-training Quantization.
+  - Added new types (AvgPool, GroupNorm, LayerNorm) to the ignored scope for `ModelType.Transformer` scheme.
+  - `QuantizationPreset.Mixed` was set as the default for `ModelType.Transformer` scheme.
+- Fixes:
+  - (OpenVINO, ONNX, PyTorch) Aligned/added patterns between backends (SE block, MVN layer, multiple activations, etc.) to restore performance/metrics.
+  - Fixed patterns for `ModelType.Transformer` to align with the [quantization scheme](https://docs.openvino.ai/latest/openvino_docs_OV_UG_lpt.html).
+- Improvements:
+  - Improved UX with the new progress bar for pipeline, new exceptions, and .dot graph visualization updates.
+  - (OpenVINO) Optimized WeightsCompression algorithm (`compress_weights(…)` pipeline) execution time for LLM's quantization, added ignored scope support.
+  - (OpenVINO) Optimized AccuracyAwareQuantization algorithm execution time with multi-threaded approach while calculating ranking score (`quantize_with_accuracy_control(…)` pipeline).
+  - (OpenVINO) Added [extract_ov_subgraph tool](tools/extract_ov_subgraph.py) for large IR subgraph extraction.
+  - (ONNX) Optimized quantization pipeline (up to 1.15x speed up).
+- Tutorials:
+  - [Post-Training Optimization of BLIP Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/233-blip-visual-language-processing)
+  - [Post-Training Optimization of DeepFloyd IF Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/238-deepfloyd-if)
+  - [Post-Training Optimization of Grammatical Error Correction Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/214-grammar-correction)
+  - [Post-Training Optimization of Dolly 2.0 Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/240-dolly-2-instruction-following)
+  - [Post-Training Optimization of Massively Multilingual Speech Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/255-mms-massively-multilingual-speech)
+  - [Post-Training Optimization of OneFormer Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/249-oneformer-segmentation)
+  - [Post-Training Optimization of InstructPix2Pix Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/231-instruct-pix2pix-image-editing)
+  - [Post-Training Optimization of LLaVA Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/257-llava-multimodal-chatbot)
+  - [Post-Training Optimization of Latent Consistency Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/263-latent-consistency-models-image-generation)
+  - [Post-Training Optimization of Distil-Whisper Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/267-distil-whisper-asr)
+  - [Post-Training Optimization of FastSAM Model](https://github.com/openvinotoolkit/openvino_notebooks/tree/main/notebooks/261-fast-segment-anything)
+- Known issues:
+  - (ONNX) `quantize(...)` method can generate inaccurate int8 results for models with the BatchNormalization layer that contains biases. To get the best accuracy, use the `do_constant_folding=True` option during export from PyTorch to ONNX.
+
+Compression-aware training:
+
+- Fixes:
+  - (PyTorch) Fixed Hessian trace calculation to solve [#2155](https://github.com/openvinotoolkit/nncf/issues/2155) issue.
+- Requirements:
+  - Updated PyTorch version (2.1.0).
+  - Updated numpy version (<1.27).
+- Deprecations/Removals:
+  - (PyTorch) Removed legacy external quantizer storage names.
+  - (PyTorch) Removed torch < 2.0 version support.
+
 ## New in Release 2.6.0
 
 Post-training Quantization:

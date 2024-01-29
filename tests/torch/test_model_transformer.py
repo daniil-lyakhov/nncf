@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,6 +11,7 @@
 import itertools
 import os
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
@@ -30,7 +31,7 @@ from nncf.common.insertion_point_graph import InsertionPointGraph
 from nncf.common.insertion_point_graph import InsertionPointGraphNodeType
 from nncf.common.insertion_point_graph import PostHookInsertionPoint
 from nncf.common.insertion_point_graph import PreHookInsertionPoint
-from nncf.common.quantization.structs import QuantizationMode
+from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
 from nncf.common.utils.backend import BackendType
 from nncf.common.utils.dot_file_rw import get_graph_without_data
 from nncf.common.utils.dot_file_rw import read_dot_graph
@@ -39,6 +40,9 @@ from nncf.torch.dynamic_graph.context import PreHookId
 from nncf.torch.dynamic_graph.io_handling import FillerInputElement
 from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
 from nncf.torch.dynamic_graph.operation_address import OperationAddress
+from nncf.torch.dynamic_graph.patch_pytorch import register_operator
+from nncf.torch.external_hook import EXTERNAL_OP_STORAGE_NAME
+from nncf.torch.external_hook import ExternalOpCallHook
 from nncf.torch.graph.operator_metatypes import PTConv2dMetatype
 from nncf.torch.graph.operator_metatypes import PTInputNoopMetatype
 from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
@@ -48,9 +52,12 @@ from nncf.torch.graph.transformations.commands import PTBiasCorrectionCommand
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
 from nncf.torch.graph.transformations.commands import PTModelExtractionWithFusedBiasCommand
 from nncf.torch.graph.transformations.commands import PTQuantizerInsertionCommand
+from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import PTWeightUpdateCommand
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.layers import NNCFConv2d
+from nncf.torch.layers import register_module
 from nncf.torch.model_transformer import PTModelTransformer
 from nncf.torch.module_operations import BaseOp
 from nncf.torch.module_operations import UpdateWeight
@@ -67,6 +74,7 @@ from tests.common.quantization.mock_graphs import get_mock_model_graph_with_no_m
 from tests.common.quantization.mock_graphs import get_nncf_graph_from_mock_nx_graph
 from tests.common.quantization.mock_graphs import get_two_branch_mock_model_graph
 from tests.shared.paths import TEST_ROOT
+from tests.torch.helpers import HookChecker
 
 
 class InsertionPointTestModel(nn.Module):
@@ -153,15 +161,16 @@ class TestInsertionCommands:
         else:
             hook = BaseOp(lambda x: x)
 
-        self.compressed_model.nncf.insert_at_point(insertion_point, [hook])
+        test_hook_group = "test_hook_group"
+        self.compressed_model.nncf.insert_at_point(insertion_point, hook, hooks_group_name=test_hook_group)
 
         if insertion_point.insertion_type == PTInsertionType.OPERATOR_PRE_HOOK:
             ctx = self.compressed_model.nncf.get_tracing_context()
             pre_hook_id = PreHookId(insertion_point.op_address, input_port_id=insertion_point.input_port_id)
-            assert ctx._pre_hooks[pre_hook_id][0] is hook
+            assert ctx._pre_hooks[pre_hook_id]["0"] is hook
         if insertion_point.insertion_type == PTInsertionType.OPERATOR_POST_HOOK:
             ctx = self.compressed_model.nncf.get_tracing_context()
-            assert ctx._post_hooks[insertion_point.op_address][0] is hook
+            assert ctx._post_hooks[insertion_point.op_address]["0"] is hook
         if insertion_point.insertion_type == PTInsertionType.NNCF_MODULE_PRE_OP:
             module = self.compressed_model.nncf.get_module_by_scope(insertion_point.module_scope)
             assert module.pre_ops["0"] is hook
@@ -169,6 +178,8 @@ class TestInsertionCommands:
         if insertion_point.insertion_type == PTInsertionType.NNCF_MODULE_POST_OP:
             module = self.compressed_model.nncf.get_module_by_scope(insertion_point.module_scope)
             assert module.post_ops["0"] is hook
+
+        assert len(self.compressed_model.nncf._groups_vs_hooks_handlers[test_hook_group]) == 1
 
     priority_types = ["same", "different"]
     insertion_types = TargetType
@@ -179,8 +190,9 @@ class TestInsertionCommands:
         for idx, order in enumerate(ordering):
             assert iterable1[idx] is iterable2[order]
 
+    @pytest.mark.parametrize("command_cls", [PTInsertionCommand])
     @pytest.mark.parametrize("case", priority_test_cases, ids=[x[1].name + "-" + x[0] for x in priority_test_cases])
-    def test_priority(self, case, setup):
+    def test_priority(self, case, command_cls, setup):
         priority_type = case[0]
         insertion_type = case[1]
 
@@ -210,14 +222,14 @@ class TestInsertionCommands:
 
         if priority_type == "same":
             # Same-priority commands will be executed in registration order
-            command1 = PTInsertionCommand(point, hook1, TransformationPriority.DEFAULT_PRIORITY)
-            command2 = PTInsertionCommand(point, hook2, TransformationPriority.DEFAULT_PRIORITY)
-            command3 = PTInsertionCommand(point, hook3, TransformationPriority.DEFAULT_PRIORITY)
+            command1 = command_cls(point, hook1, TransformationPriority.DEFAULT_PRIORITY)
+            command2 = command_cls(point, hook2, TransformationPriority.DEFAULT_PRIORITY)
+            command3 = command_cls(point, hook3, TransformationPriority.DEFAULT_PRIORITY)
         else:
             # Prioritized commands will be executed in ascending priority order
-            command1 = PTInsertionCommand(point, hook1, TransformationPriority.SPARSIFICATION_PRIORITY)
-            command2 = PTInsertionCommand(point, hook2, TransformationPriority.QUANTIZATION_PRIORITY)
-            command3 = PTInsertionCommand(point, hook3, TransformationPriority.DEFAULT_PRIORITY)
+            command1 = command_cls(point, hook1, TransformationPriority.SPARSIFICATION_PRIORITY)
+            command2 = command_cls(point, hook2, TransformationPriority.QUANTIZATION_PRIORITY)
+            command3 = command_cls(point, hook3, TransformationPriority.DEFAULT_PRIORITY)
 
         layout = PTTransformationLayout()
         layout.register(command1)
@@ -237,10 +249,12 @@ class TestInsertionCommands:
             pre_hook_id = PreHookId(
                 OperationAddress.from_str(point.target_node_name), input_port_id=point.input_port_id
             )
-            self.check_order(ctx._pre_hooks[pre_hook_id], hook_list, order)
+            actual_pre_hooks = list(ctx._pre_hooks[pre_hook_id].values())
+            self.check_order(actual_pre_hooks, hook_list, order)
         if insertion_type == TargetType.OPERATOR_POST_HOOK:
             ctx = self.compressed_model.nncf.get_tracing_context()
-            self.check_order(ctx._post_hooks[OperationAddress.from_str(point.target_node_name)], hook_list, order)
+            actual_post_hooks = list(ctx._post_hooks[OperationAddress.from_str(point.target_node_name)].values())
+            self.check_order(actual_post_hooks, hook_list, order)
 
         if insertion_type == TargetType.OPERATION_WITH_WEIGHTS:
             module = self.compressed_model.nncf.get_containing_module(point.target_node_name)
@@ -317,7 +331,7 @@ class TestInsertionPointGraph:
             succs = list(ip_graph.successors(node_key))
             assert len(preds) != 0 or len(succs) != 0
 
-        for from_node_key, to_node_key in ip_graph.edges.keys():
+        for from_node_key, to_node_key in ip_graph.edges:
             assert from_node_key in ip_graph.nodes
             assert to_node_key in ip_graph.nodes
 
@@ -445,15 +459,15 @@ class TestInsertionPointGraph:
 
         load_graph = read_dot_graph(str(path_to_dot_file))
 
-        for key in load_graph.nodes.keys():
+        for key in load_graph.nodes:
             key.replace(r"\\n", r"\n")  # Somehow pydot mangles the \n characters while writing a .dot file
 
-        sanitized_loaded_keys = [key.replace("\\n", "\n") for key in load_graph.nodes.keys()]
+        sanitized_loaded_keys = [key.replace("\\n", "\n") for key in load_graph.nodes]
         sanitized_loaded_edges = [
             (u.replace("\\n", "\n"), v.replace("\\n", "\n")) for u, v in nx.DiGraph(load_graph).edges
         ]
 
-        assert Counter(sanitized_loaded_keys) == Counter(list(merged_ip_graph.nodes.keys()))
+        assert Counter(sanitized_loaded_keys) == Counter(list(merged_ip_graph.nodes))
         assert Counter(sanitized_loaded_edges) == Counter(list(merged_ip_graph.edges))
 
 
@@ -471,19 +485,22 @@ def test_extraction_with_fused_bias_transformations():
     assert isinstance(extracted_model[0], NNCFConv2d)
 
 
-def test_bias_correction_transformations():
+@pytest.mark.parametrize(
+    "command_cls,attr_name,new_value",
+    [(PTBiasCorrectionCommand, "bias", torch.tensor([42.0])), (PTWeightUpdateCommand, "weight", torch.tensor([42.0]))],
+)
+def test_correction_transformations(command_cls, attr_name, new_value):
     model = NNCFNetwork(InsertionPointTestModel(), FillerInputInfo([FillerInputElement([1, 1, 10, 10])]))
     model_transformer = PTModelTransformer(model)
 
-    new_bias = torch.Tensor([42])
-
     target_point = PTTargetPoint(TargetType.LAYER, "InsertionPointTestModel/NNCFConv2d[conv1]/conv2d_0")
-    command = PTBiasCorrectionCommand(target_point, new_bias)
+    command = command_cls(target_point, new_value)
 
     transformation_layout = PTTransformationLayout()
     transformation_layout.register(command)
     updated_model = model_transformer.transform(transformation_layout)
-    assert updated_model.conv1.bias.data == new_bias
+    param = getattr(updated_model.conv1, attr_name)
+    assert param.data == new_value
 
 
 def test_rebuild_graph_after_insert_transformation():
@@ -507,6 +524,15 @@ def test_rebuild_graph_after_insert_transformation():
     assert len(new_graph.get_all_nodes()) == len(graph.get_all_nodes()) + 1
 
 
+class Hook(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self._param = torch.nn.Parameter(torch.zeros((1,)))
+
+    def forward(self, x):
+        return x + self._param
+
+
 @pytest.mark.parametrize(
     "target_type, node_name, input_port_id, ref_name",
     (
@@ -521,25 +547,352 @@ def test_rebuild_graph_after_insert_transformation():
     ),
 )
 def test_quantizer_insertion_transformations(target_type, node_name, input_port_id, ref_name):
-    model = NNCFNetwork(InsertionPointTestModel(), FillerInputInfo([FillerInputElement([1, 1, 10, 10])]))
-    model_transformer = PTModelTransformer(model)
+    hook = Hook()
 
-    target_point = PTTargetPoint(target_type, node_name, input_port_id=input_port_id)
-    command = PTQuantizerInsertionCommand(target_point, BaseOp(lambda x: x))
+    def _insert_quantizer_to_model():
+        model = NNCFNetwork(InsertionPointTestModel(), FillerInputInfo([FillerInputElement([1, 1, 10, 10])]))
+        model_transformer = PTModelTransformer(model)
 
-    transformation_layout = PTTransformationLayout()
-    transformation_layout.register(command)
-    transformed_model = model_transformer.transform(transformation_layout)
+        target_point = PTTargetPoint(target_type, node_name, input_port_id=input_port_id)
+        command = PTQuantizerInsertionCommand(target_point, hook)
+
+        transformation_layout = PTTransformationLayout()
+        transformation_layout.register(command)
+        return model_transformer.transform(transformation_layout)
+
+    transformed_model = _insert_quantizer_to_model()
 
     compression_module_type = ExtraCompressionModuleType.EXTERNAL_QUANTIZER
     assert transformed_model.nncf.is_compression_module_registered(compression_module_type)
+    assert hook in transformed_model.modules()
 
     if target_type == TargetType.OPERATION_WITH_WEIGHTS:
         op = transformed_model.conv1.pre_ops._modules["0"]
         assert isinstance(op, UpdateWeight)
-        assert isinstance(op.op, BaseOp)
+        assert isinstance(op.op, Hook)
     else:
         external_quantizers = transformed_model.nncf.get_compression_modules_by_type(compression_module_type)
         assert hasattr(external_quantizers, ref_name)
         op = getattr(external_quantizers, ref_name)
-        assert isinstance(op, BaseOp)
+        assert isinstance(op, Hook)
+
+    # Check torch can correctly save and load model state dict with an external quantizer
+    state_dict = transformed_model.state_dict()
+    if target_type == TargetType.OPERATION_WITH_WEIGHTS:
+        state_dict_hook_key = "conv1.pre_ops.0.op._param"
+    else:
+        state_dict_hook_key = f"_nncf.external_quantizers.{ref_name}._param"
+    assert state_dict_hook_key in state_dict
+    del transformed_model
+    transformed_model = _insert_quantizer_to_model()
+    transformed_model.load_state_dict(state_dict)
+
+
+@pytest.mark.parametrize(
+    "priority", [TransformationPriority.FP32_TENSOR_STATISTICS_OBSERVATION, TransformationPriority.DEFAULT_PRIORITY]
+)
+@pytest.mark.parametrize("compression_module_registered", [False, True])
+def test_shared_fn_insertion_point(priority, compression_module_registered, mocker):
+    tps = [
+        PTTargetPoint(
+            TargetType.OPERATOR_POST_HOOK,
+            "/nncf_model_input_0",
+        ),
+        PTTargetPoint(
+            TargetType.OPERATOR_PRE_HOOK,
+            "InsertionPointTestModel/linear_0",
+            input_port_id=0,
+        ),
+        PTTargetPoint(
+            TargetType.OPERATION_WITH_WEIGHTS,
+            "InsertionPointTestModel/NNCFConv2d[conv1]/conv2d_0",
+        ),
+    ]
+    OP_UNIQUE_NAME = "UNIQUE_NAME"
+    HOOK_GROUP_NAME = "shared_comands_hooks_group"
+    hook_instance = Hook()
+
+    def _insert_external_op_mocked():
+        model = NNCFNetwork(InsertionPointTestModel(), FillerInputInfo([FillerInputElement([1, 1, 10, 10])]))
+        if compression_module_registered:
+            model.nncf.register_compression_module_type(ExtraCompressionModuleType.EXTERNAL_OP)
+        unique_name = f"{OP_UNIQUE_NAME}[{';'.join([tp.target_node_name for tp in tps])}]"
+        command = PTSharedFnInsertionCommand(tps, hook_instance, unique_name, priority, HOOK_GROUP_NAME)
+        transformation_layout = PTTransformationLayout()
+        transformation_layout.register(command)
+
+        mocker.MagicMock()
+        mocker.patch(
+            "nncf.torch.model_transformer.PTModelTransformer._apply_insertion_transformations",
+            return_value=mocker.MagicMock(),
+        )
+        model_transformer = PTModelTransformer(model)
+        model_transformer.transform(transformation_layout=transformation_layout)
+        return model
+
+    transformed_model = _insert_external_op_mocked()
+
+    assert transformed_model.nncf.is_compression_module_registered(ExtraCompressionModuleType.EXTERNAL_OP)
+
+    REF_STORAGE_KEY = (
+        "UNIQUE_NAME[/nncf_model_input_0;InsertionPointTestModel/linear_0;"
+        "InsertionPointTestModel/NNCFConv2d[conv1]/conv2d_0]"
+    )
+
+    storage = getattr(transformed_model.nncf, EXTERNAL_OP_STORAGE_NAME)
+    assert storage[REF_STORAGE_KEY] is hook_instance
+    assert hook_instance in transformed_model.modules()
+
+    mock = PTModelTransformer._apply_insertion_transformations
+    mock.assert_called_once()
+
+    _, commands = mock.call_args.args
+    assert len(commands) == len(tps)
+    for command in commands:
+        assert command.target_point in tps
+        assert command.hooks_group_name == HOOK_GROUP_NAME
+        fn = command.fn
+        assert isinstance(fn, ExternalOpCallHook)
+        assert fn._storage_name == EXTERNAL_OP_STORAGE_NAME
+        assert fn._storage_key == REF_STORAGE_KEY
+
+    # Check torch can correctly save and load model state dict with an external quantizer
+    state_dict = transformed_model.state_dict()
+    assert f"_nncf.{EXTERNAL_OP_STORAGE_NAME}.{REF_STORAGE_KEY}._param" in state_dict
+    del transformed_model
+    transformed_model = _insert_external_op_mocked()
+    transformed_model.load_state_dict(state_dict)
+
+
+INSERTION_POINT_TEST_MODEL_TARGET_POINTS = (
+    (
+        TargetType.OPERATOR_POST_HOOK,
+        "/nncf_model_input_0",
+        None,
+    ),
+    (
+        TargetType.OPERATOR_PRE_HOOK,
+        "InsertionPointTestModel/linear_0",
+        0,
+    ),
+    (
+        TargetType.OPERATION_WITH_WEIGHTS,
+        "InsertionPointTestModel/NNCFConv2d[conv1]/conv2d_0",
+        None,
+    ),
+)
+
+
+@pytest.mark.parametrize("target_type, node_name, input_port_id", INSERTION_POINT_TEST_MODEL_TARGET_POINTS)
+def test_successive_insertion_transformation(target_type, node_name, input_port_id):
+    model = NNCFNetwork(InsertionPointTestModel(), FillerInputInfo([FillerInputElement([1, 1, 10, 10])]))
+
+    target_point = PTTargetPoint(target_type, node_name, input_port_id=input_port_id)
+    transformed_model = model
+    ops = [BaseOp(lambda x: x), BaseOp(lambda x: x)]
+    for op in ops:
+        command = PTInsertionCommand(target_point, op)
+
+        model_transformer = PTModelTransformer(transformed_model)
+        transformation_layout = PTTransformationLayout()
+        transformation_layout.register(command)
+        transformed_model = model_transformer.transform(transformation_layout)
+        transformed_model.nncf.rebuild_graph()
+
+    checker = HookChecker(transformed_model, "conv1")
+    checker.add_ref(
+        ref_hooks=ops,
+        target_type=target_type,
+        target_node_name=node_name,
+        input_port_id=input_port_id,
+    )
+    checker.check_with_reference()
+
+
+GLOBAL_LIST = []
+
+
+def get_dummy_op(op_id):
+    @register_operator()
+    def dummy_op(x):
+        GLOBAL_LIST.append(op_id)
+        return x
+
+    return dummy_op
+
+
+@register_module()
+class DummyModule(torch.nn.Module):
+    def __init__(self, module_id):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.zeros((1,)))
+        self._op = get_dummy_op(module_id)
+
+    def forward(self, x):
+        return self._op(x)
+
+
+def get_model_to_test_nested_modules():
+    class TestModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.op1 = get_dummy_op("op1")
+            self.m = DummyModule("DummyModule")
+            self.op2 = get_dummy_op("op2")
+
+        def forward(self, x):
+            x = self.op1(x)
+            x = self.m(x)
+            x = self.op2(x)
+
+    return TestModel()
+
+
+@dataclass
+class NestedHooksTestCase:
+    target_type: TargetType
+    target_node_name: str
+    input_port_id: int
+
+
+NESTED_HOOKS_TEST_CASES = [
+    NestedHooksTestCase(
+        TargetType.OPERATOR_POST_HOOK,
+        "/nncf_model_input_0",
+        None,
+    ),
+    NestedHooksTestCase(
+        TargetType.OPERATOR_PRE_HOOK,
+        "TestModel/dummy_op_1",
+        0,
+    ),
+    NestedHooksTestCase(
+        TargetType.OPERATION_WITH_WEIGHTS,
+        "TestModel/NNCFUserDummyModule[m]/dummy_op_0",
+        None,
+    ),
+]
+
+REFS_DEPTH_0 = ["op1", "DummyModule", "op2"]
+
+
+REFS_DEPTH_1 = [
+    ["pre_hook_1", "op1", "DummyModule", "op2"],
+    ["op1", "DummyModule", "pre_hook_1", "op2"],
+    ["op1", "pre_hook_1", "DummyModule", "op2"],
+]
+
+
+REFS_DEPTH_2 = [
+    ["pre_hook_0", "pre_hook_1", "pre_hook_2", "op1", "DummyModule", "op2"],
+    ["op1", "DummyModule", "pre_hook_0", "pre_hook_1", "pre_hook_2", "op2"],
+    ["op1", "pre_hook_0", "pre_hook_1", "pre_hook_2", "DummyModule", "op2"],
+]
+
+
+def _add_and_test_hook_depth_one(test_params: NestedHooksTestCase, pre_hook_op, ref):
+    model = NNCFNetwork(get_model_to_test_nested_modules(), FillerInputInfo([FillerInputElement([10])]))
+
+    # Check test model is working as expected
+    GLOBAL_LIST.clear()
+    model.nncf.rebuild_graph()
+    assert GLOBAL_LIST == REFS_DEPTH_0
+
+    target_point = PTTargetPoint(
+        test_params.target_type, test_params.target_node_name, input_port_id=test_params.input_port_id
+    )
+    transformed_model = model
+
+    pre_hook_1 = pre_hook_op("pre_hook_1")
+    command = PTInsertionCommand(target_point, pre_hook_1)
+
+    model_transformer = PTModelTransformer(transformed_model)
+    transformation_layout = PTTransformationLayout()
+    transformation_layout.register(command)
+    transformed_model = model_transformer.transform(transformation_layout)
+
+    # Check order of calls
+    GLOBAL_LIST.clear()
+    transformed_model.nncf.rebuild_graph()
+    assert ref == GLOBAL_LIST
+
+    # Check hooks are kept correctly
+    checker = HookChecker(transformed_model, "m")
+    checker.add_ref(
+        ref_hooks=[pre_hook_1],
+        target_type=test_params.target_type,
+        target_node_name=test_params.target_node_name,
+        input_port_id=test_params.input_port_id,
+    )
+    checker.check_with_reference()
+
+    graph = transformed_model.nncf.get_graph()
+    target_node = graph.get_node_by_name(test_params.target_node_name)
+    if test_params.target_type == TargetType.OPERATOR_POST_HOOK:
+        target_node = graph.get_next_nodes(target_node)[0]
+    elif test_params.target_type == TargetType.OPERATOR_PRE_HOOK:
+        target_node = graph.get_previous_nodes(target_node)[0]
+    else:
+        target_node = graph.get_node_by_id(2)
+
+    return transformed_model, target_node, pre_hook_1
+
+
+@pytest.mark.parametrize(
+    "test_params, ref_depth_one, ref_depth_two", zip(NESTED_HOOKS_TEST_CASES, REFS_DEPTH_1, REFS_DEPTH_2)
+)
+@pytest.mark.parametrize("pre_hook_op", [get_dummy_op, DummyModule], ids=["op_hook", "module_hook"])
+def test_nested_pre_post_hooks(test_params: NestedHooksTestCase, ref_depth_one, ref_depth_two, pre_hook_op):
+    transformed_model, target_node, pre_hook_1 = _add_and_test_hook_depth_one(test_params, pre_hook_op, ref_depth_one)
+
+    transformation_layout = PTTransformationLayout()
+    nested_pre_hooks = []
+    for i, target_type_ in enumerate([TargetType.OPERATOR_PRE_HOOK, TargetType.OPERATOR_POST_HOOK]):
+        target_point_on_hook = PTTargetPoint(target_type_, target_node.node_name, input_port_id=0)
+        nested_pre_hooks.append(pre_hook_op(f"pre_hook_{i * 2}"))
+        transformation_layout.register(PTInsertionCommand(target_point_on_hook, nested_pre_hooks[-1]))
+    model_transformer = PTModelTransformer(transformed_model)
+    model_with_nested_hooks = model_transformer.transform(transformation_layout)
+
+    # Check order of calls
+    GLOBAL_LIST.clear()
+    model_with_nested_hooks.nncf.rebuild_graph()
+    assert ref_depth_two == GLOBAL_LIST
+
+    # Check hooks are kept correctly
+    checker = HookChecker(model_with_nested_hooks, "m")
+    checker.add_ref(
+        ref_hooks=[pre_hook_1],
+        target_type=test_params.target_type,
+        target_node_name=test_params.target_node_name,
+        input_port_id=test_params.input_port_id,
+    )
+    checker.add_ref(
+        ref_hooks=[nested_pre_hooks[0]],
+        target_type=TargetType.OPERATOR_PRE_HOOK,
+        target_node_name=target_node.node_name,
+        input_port_id=0,
+    )
+    checker.add_ref(
+        ref_hooks=[nested_pre_hooks[1]],
+        target_type=TargetType.OPERATOR_POST_HOOK,
+        target_node_name=target_node.node_name,
+        input_port_id=0,
+    )
+    checker.check_with_reference()
+
+
+@pytest.mark.skip("Nested weight hooks are not supported yet.")
+@pytest.mark.parametrize("test_params, ref_depth_one", zip(NESTED_HOOKS_TEST_CASES, REFS_DEPTH_1))
+def test_nested_weight_hooks(test_params: NestedHooksTestCase, ref_depth_one):
+    transformed_model, target_node, _ = _add_and_test_hook_depth_one(test_params, DummyModule, ref_depth_one)
+
+    transformation_layout = PTTransformationLayout()
+    target_point_on_hook = PTTargetPoint(TargetType.OPERATION_WITH_WEIGHTS, target_node.node_name, input_port_id=0)
+    transformation_layout.register(PTInsertionCommand(target_point_on_hook, DummyModule("pre_hook_3")))
+    model_transformer = PTModelTransformer(transformed_model)
+    model_with_nested_hooks = model_transformer.transform(transformation_layout)
+    GLOBAL_LIST.clear()
+    model_with_nested_hooks.nncf.rebuild_graph()
+    # TODO: Add refeference check when nested weight hooks will be supported
+    # assert GLOBAL_LIST == ref_depth_two

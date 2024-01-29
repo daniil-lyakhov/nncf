@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -332,7 +332,7 @@ class TestMovementTraining:
 
     @staticmethod
     def _validate_model_is_saved(desc: MovementTrainingTestDescriptor):
-        assert Path(desc.output_dir, "pytorch_model.bin").is_file()
+        assert Path(desc.output_dir, "model.safetensors").is_file()
 
     @staticmethod
     def _validate_train_metric(desc: MovementTrainingTestDescriptor):

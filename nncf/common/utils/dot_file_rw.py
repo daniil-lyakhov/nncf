@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -101,6 +101,8 @@ def relabel_graph_for_dot_visualization(nx_graph: nx.Graph, from_reference: bool
     hits = defaultdict(lambda: 0)
     mapping = {}
     for original_name in nx_graph.nodes():
+        if not isinstance(original_name, str):
+            continue
         dot_name = original_name.replace(__CHARACTER_REPLACE_FROM, __CHARACTER_REPLACE_TO)
         hits[dot_name] += 1
         if hits[dot_name] > 1:

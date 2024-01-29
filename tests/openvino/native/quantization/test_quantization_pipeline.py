@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -21,7 +21,7 @@ from tests.openvino.native.common import get_dataset_for_test
 from tests.openvino.native.models import ConvModel
 from tests.openvino.native.models import LinearModel
 from tests.openvino.native.models import MatMul2DModel
-from tests.openvino.native.test_model_transformer import get_fq_nodes
+from tests.openvino.native.test_model_transformer import get_nodes_by_type
 
 REF_FQ_NODES = [
     (("MatMul", 1), ["Input/fq_output_0"]),
@@ -44,7 +44,7 @@ def test_compress_weights(model_creator_func, ref_nodes):
         fast_bias_correction=True,
     )
 
-    fq_nodes = get_fq_nodes(quantized_model)
+    fq_nodes = get_nodes_by_type(quantized_model, type_name="FakeQuantize")
     assert len(fq_nodes) == len(ref_fqs_names)
     for fq_name in fq_nodes:
         assert fq_name in ref_fqs_names
@@ -72,7 +72,7 @@ def test_overflow_fix_applied(model_creator_func, ref_nodes):
         fast_bias_correction=True,
     )
 
-    fq_nodes = get_fq_nodes(quantized_model)
+    fq_nodes = get_nodes_by_type(quantized_model, type_name="FakeQuantize")
     assert len(fq_nodes) == len(ref_fqs_names)
     for fq_name in fq_nodes:
         assert fq_name in ref_fqs_names

@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -30,9 +30,11 @@ from nncf.experimental.common.tensor_statistics.collectors import MeanReducer
 from nncf.experimental.common.tensor_statistics.collectors import MedianAbsoluteDeviationAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MinAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MinReducer
+from nncf.experimental.common.tensor_statistics.collectors import NoopAggregator
 from nncf.experimental.common.tensor_statistics.collectors import NoopReducer
 from nncf.experimental.common.tensor_statistics.collectors import PercentileAggregator
 from nncf.experimental.common.tensor_statistics.collectors import QuantileReducer
+from nncf.experimental.common.tensor_statistics.collectors import RawReducer
 from nncf.experimental.common.tensor_statistics.collectors import ShapeAggregator
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
 from nncf.quantization.advanced_parameters import StatisticsType
@@ -41,6 +43,7 @@ from nncf.torch.tensor_statistics.statistics import PTMeanTensorStatistic
 from nncf.torch.tensor_statistics.statistics import PTMedianMADTensorStatistic
 from nncf.torch.tensor_statistics.statistics import PTMinMaxTensorStatistic
 from nncf.torch.tensor_statistics.statistics import PTPercentileTensorStatistic
+from nncf.torch.tensor_statistics.statistics import PTRawTensorStatistic
 
 
 class PTNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
@@ -85,7 +88,7 @@ class PTNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
 
     @classmethod
     def masked_mean(
-        cls, x: NNCFTensor, axis: Union[int, Tuple[int, ...], List[int]], mask: NNCFTensor, keepdims=False
+        cls, x: NNCFTensor, axis: Union[int, Tuple[int, ...]], mask: NNCFTensor, keepdims: bool = False
     ) -> NNCFTensor:
         if mask is None:
             return cls.mean(x, axis=axis, keepdims=keepdims)
@@ -98,7 +101,7 @@ class PTNNCFCollectorTensorProcessor(NNCFCollectorTensorProcessor):
 
     @classmethod
     def masked_median(
-        cls, x: NNCFTensor, axis: Union[int, Tuple[int, ...], List[int]], mask: NNCFTensor, keepdims=False
+        cls, x: NNCFTensor, axis: Union[int, Tuple[int, ...]], mask: NNCFTensor, keepdims: bool = False
     ) -> NNCFTensor:
         # Implemented in numy as torch.masked.median is not implemented yet
         if mask is None:
@@ -219,10 +222,6 @@ class PTReducerMixIn:
 
     def get_output_names(self, target_node_name: str, port_id: int) -> List[str]:
         return []
-
-
-class PTNoopReducer(PTReducerMixIn, NoopReducer):
-    pass
 
 
 class PTMinReducer(PTReducerMixIn, MinReducer):
@@ -463,7 +462,7 @@ def _get_collection_without_reduction(
     :return: Target statistic collector.
     """
     tensor_collector = TensorCollector(statistic_cls)
-    reducer = PTNoopReducer()
+    reducer = NoopReducer()
     aggregation_axes = list(set(list(aggregation_axes) + [dim + 1 for dim in reduction_axes]))
     aggregator = aggregator_cls(
         PTNNCFCollectorTensorProcessor,
@@ -530,7 +529,7 @@ def get_mean_statistic_collector(
         reducer = PTBatchMeanReducer()
     else:
         reducer = PTMeanPerChanelReducer(channel_axis=channel_axis)
-    noop_reducer = PTNoopReducer()
+    noop_reducer = NoopReducer()
 
     kwargs = {
         "tensor_processor": PTNNCFCollectorTensorProcessor,
@@ -543,6 +542,21 @@ def get_mean_statistic_collector(
     collector = TensorCollector(PTMeanTensorStatistic)
     collector.register_statistic_branch(PTMeanTensorStatistic.MEAN_STAT, reducer, aggregate_mean)
     collector.register_statistic_branch(PTMeanTensorStatistic.SHAPE_STAT, noop_reducer, aggregate_shape)
+    return collector
+
+
+def get_raw_stat_collector(num_samples: Optional[int] = None) -> TensorCollector:
+    """
+    Raw statistic collector builder.
+
+    :param num_samples: Maximum number of samples to collect.
+    :return: Raw statistic collector.
+    """
+    reducer = RawReducer()
+    aggregator = NoopAggregator(num_samples)
+
+    collector = TensorCollector(PTRawTensorStatistic)
+    collector.register_statistic_branch(PTRawTensorStatistic.VALUES_STATS, reducer, aggregator)
     return collector
 
 

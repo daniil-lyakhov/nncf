@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -77,7 +77,7 @@ class PatternsManager:
         patterns_to_filter: Dict[PatternNames, Callable[[], GraphPattern]], device: TargetDevice, model_type: ModelType
     ) -> Dict[PatternNames, Callable[[], GraphPattern]]:
         """
-        Returns all patterns from patterns_to_filter that are satisfited device and model_type parameters.
+        Returns all patterns from patterns_to_filter that are satisfied device and model_type parameters.
 
         :param patterns_to_filter: Dictionary with the PatternNames instance as keys and creator function as a value.
         :param device: TargetDevice instance.

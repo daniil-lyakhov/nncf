@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,12 +13,13 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+import nncf
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.graph.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import OperatorMetatype
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.hardware.config import HWConfig
-from nncf.common.quantization.structs import QuantizationMode
+from nncf.common.quantization.initialization.range import RangeInitCollectorParams
 from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.tensor_statistics.collectors import ReductionAxes
 from nncf.experimental.common.tensor_statistics.collectors import AGGREGATORS_MAP
@@ -26,8 +27,10 @@ from nncf.experimental.common.tensor_statistics.collectors import TensorCollecto
 from nncf.openvino.graph.layer_attributes import OVLayerAttributes
 from nncf.openvino.graph.metatypes import openvino_metatypes as om
 from nncf.openvino.graph.metatypes.groups import OPERATIONS_WITH_WEIGHTS
+from nncf.openvino.graph.model_utils import get_start_nodes_for_activation_path_tracing
 from nncf.openvino.graph.node_utils import get_channel_agnostic_reduction_axes
 from nncf.openvino.graph.node_utils import get_weight_channel_axes
+from nncf.openvino.graph.transformations.commands import OVConvertInsertionCommand
 from nncf.openvino.graph.transformations.commands import OVQuantizerInsertionCommand
 from nncf.openvino.graph.transformations.commands import OVTargetPoint
 from nncf.openvino.hardware.config import OVHWConfig
@@ -40,6 +43,7 @@ from nncf.parameters import TargetDevice
 from nncf.quantization.advanced_parameters import RangeEstimatorParameters
 from nncf.quantization.advanced_parameters import StatisticsType
 from nncf.quantization.algorithms.min_max.backend import MinMaxAlgoBackend
+from nncf.quantization.fake_quantize import FakeConvertParameters
 from nncf.quantization.fake_quantize import FakeQuantizeParameters
 
 
@@ -87,6 +91,10 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
         return [om.OVReadValueMetatype]
 
     @property
+    def scaled_dot_product_attention_metatypes(self) -> List[OperatorMetatype]:
+        return [om.OVScaledDotProductAttentionMetatype]
+
+    @property
     def scales_unification_map(self) -> Dict[OperatorMetatype, OperatorMetatype]:
         return {om.OVConcatMetatype: self.overflow_fix_metatypes}
 
@@ -97,6 +105,10 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
     @property
     def quant_trait_op_dict(self) -> Dict[int, OperatorMetatype]:
         return DEFAULT_OV_QUANT_TRAIT_TO_OP_DICT
+
+    @staticmethod
+    def get_start_nodes_for_activation_path_tracing(nncf_graph: NNCFGraph) -> List[NNCFNode]:
+        return get_start_nodes_for_activation_path_tracing(nncf_graph)
 
     @staticmethod
     def target_point(target_type: TargetType, target_node_name: str, port_id: int) -> OVTargetPoint:
@@ -112,6 +124,13 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
         return OVQuantizerInsertionCommand(target_point, parameters)
 
     @staticmethod
+    def create_convert_insertion_command(
+        target_point: OVTargetPoint,
+        parameters: FakeConvertParameters,
+    ) -> OVQuantizerInsertionCommand:
+        return OVConvertInsertionCommand(target_point, parameters)
+
+    @staticmethod
     def unify_statistics(statistics: List[OVMinMaxTensorStatistic]) -> OVMinMaxTensorStatistic:
         max_values, min_values = [], []
         for statistic in statistics:
@@ -122,12 +141,11 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
         return OVMinMaxTensorStatistic(min_values=min_values, max_values=max_values)
 
     @staticmethod
-    def _get_reduction_axes_and_use_abs_max(
-        nncf_graph: NNCFGraph, target_point: OVTargetPoint, quantizer_config: QuantizerConfig
+    def _get_reduction_axes(
+        nncf_graph: NNCFGraph, target_point: OVTargetPoint, collector_params: RangeInitCollectorParams
     ) -> Tuple[ReductionAxes, bool]:
-        use_abs_max = quantizer_config.mode == QuantizationMode.SYMMETRIC
-        if not quantizer_config.per_channel:
-            return None, use_abs_max
+        if not collector_params.is_per_channel:
+            return None
 
         node = nncf_graph.get_node_by_name(target_point.target_node_name)
         if not target_point.is_weight_target_point():
@@ -141,30 +159,28 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
             # TODO (l-bat): Disable quantizer propagation through layout changing operations
             channel_axis = 1  # OpenVINO activations have channel first layout: [N, C, Z, Y, X]
             axes = get_channel_agnostic_reduction_axes([channel_axis], shape)
-            return axes, use_abs_max
+            return axes
 
         assert isinstance(node.layer_attributes, OVLayerAttributes)
         const_shape = node.layer_attributes.constant_attributes[target_point.port_id]["shape"]
 
-        if quantizer_config.per_channel:
-            channel_axes = get_weight_channel_axes(node, target_point.port_id)
+        if collector_params.is_per_channel:
+            channel_axes = get_weight_channel_axes(node)
             axes = get_channel_agnostic_reduction_axes(channel_axes, const_shape)
         else:
             axes = tuple(range(len(const_shape)))
-        return axes, use_abs_max
+        return axes
 
     @staticmethod
     def get_statistic_collector(
         range_estimator_params: RangeEstimatorParameters,
         nncf_graph: NNCFGraph,
         target_point: OVTargetPoint,
-        quantizer_config: QuantizerConfig,
+        collector_params: RangeInitCollectorParams,
         inplace: bool,
         num_samples: int = None,
     ) -> TensorCollector:
-        reduction_axes, use_abs_max = OVMinMaxAlgoBackend._get_reduction_axes_and_use_abs_max(
-            nncf_graph, target_point, quantizer_config
-        )
+        reduction_axes = OVMinMaxAlgoBackend._get_reduction_axes(nncf_graph, target_point, collector_params)
 
         collector = TensorCollector(OVMinMaxTensorStatistic)
         for params, container_key in zip(
@@ -172,12 +188,12 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
             [OVMinMaxTensorStatistic.MIN_STAT, OVMinMaxTensorStatistic.MAX_STAT],
         ):
             if params.statistics_type not in OV_REDUCERS_MAP:
-                raise RuntimeError(
+                raise nncf.InternalError(
                     f"Statistic type: {params.statistics_type} is not supported for OpenVino PTQ backend yet."
                 )
 
             if params.aggregator_type not in AGGREGATORS_MAP:
-                raise RuntimeError(
+                raise nncf.InternalError(
                     f"Aggregator type: {params.aggregator_type} is not supported for OpenVino PTQ backend yet."
                 )
 
@@ -190,7 +206,7 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
                 kwargs.update({"quantile": [quantile]})
             # TODO(dlyakhov): merge two quantile aggregators in one
             statistic_type = params.statistics_type
-            if use_abs_max and statistic_type == StatisticsType.MAX:
+            if collector_params.use_abs_max and statistic_type == StatisticsType.MAX:
                 statistic_type = StatisticsType.ABS_MAX
             reducer = OV_REDUCERS_MAP[statistic_type](**kwargs)
 
@@ -233,9 +249,11 @@ class OVMinMaxAlgoBackend(MinMaxAlgoBackend):
         ignored_names = []
         target_nodes = nncf_graph.get_nodes_by_metatypes([om.OVGRUSequenceMetatype])
         for node in target_nodes:
-            if isinstance(node.layer_attributes, OVLayerAttributes):
-                if node.layer_attributes.input_attributes["linear_before_reset"]:
-                    ignored_names.append(node.node_name)
+            if (
+                isinstance(node.layer_attributes, OVLayerAttributes)
+                and node.layer_attributes.input_attributes["linear_before_reset"]
+            ):
+                ignored_names.append(node.node_name)
         return ignored_names
 
     @staticmethod

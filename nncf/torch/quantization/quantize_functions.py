@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -224,7 +224,7 @@ class TuneRange(torch.autograd.Function):
         input_high[input_high < 0] = 0
         n = levels - 1
         # Need a cast here because fp16 division yields fp32 results sometimes
-        scale = (levels / (input_high - input_low_copy)).to(dtype=input_high.dtype)
+        scale = (n / (input_high - input_low_copy)).to(dtype=input_high.dtype)
         zp = torch.round(-input_low_copy * scale)
 
         new_input_low = torch.where(zp < n, zp / (zp - n) * input_high, input_low_copy)
@@ -246,3 +246,18 @@ class TuneRange(torch.autograd.Function):
         grad_input_low = grad_outputs[0]
         grad_input_range = grad_outputs[1]
         return grad_input_low, grad_input_range, None
+
+
+@register_operator()
+def decompress(input: torch.Tensor, scale: torch.Tensor, zero_point: torch.Tensor) -> torch.Tensor:
+    """
+    Decompress the input tensor.
+
+    :param input: An input tensor
+    :param scale: A scale tensor
+    :param zero_point: A zero point tensor
+    :return: The decompressed tensor
+    """
+    input = input.type(dtype=scale.dtype)
+    decompressed_input = (input - zero_point) * scale
+    return decompressed_input

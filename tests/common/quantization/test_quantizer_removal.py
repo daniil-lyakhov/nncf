@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -24,7 +24,7 @@ from tests.common.quantization.metatypes import METATYPES_FOR_TEST
 from tests.common.quantization.metatypes import QUANTIZABLE_METATYPES
 from tests.common.quantization.metatypes import QUANTIZE_AGNOSTIC_METATYPES
 from tests.common.quantization.metatypes import QUANTIZER_METATYPES
-from tests.common.quantization.metatypes import SHAPEOF_METATYPES
+from tests.common.quantization.metatypes import ShapeOfTestMetatype
 
 
 @dataclass
@@ -226,7 +226,10 @@ def create_test_params():
 @pytest.mark.parametrize("nncf_graph,test_case", create_test_params())
 def test_find_quantizer_nodes_to_cut(nncf_graph: NNCFGraph, test_case: TestCase):
     quantizer_node = nncf_graph.get_node_by_name(test_case.node_name)
-    nncf_graph_without_shapeof = remove_shapeof_subgraphs(deepcopy(nncf_graph), SHAPEOF_METATYPES)
+    # As test graphs are fully connected and does not have readvariable metatyep,
+    # this should work
+    input_nodes = nncf_graph.get_input_nodes()
+    nncf_graph_without_shapeof = remove_shapeof_subgraphs(deepcopy(nncf_graph), [ShapeOfTestMetatype], input_nodes)
     nodes, ops = find_quantizer_nodes_to_cut(
         nncf_graph_without_shapeof,
         quantizer_node,

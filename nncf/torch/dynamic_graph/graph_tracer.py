@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,10 +13,15 @@ from typing import Any, Callable, Dict, Optional, Tuple, TypeVar
 
 import torch
 
+from nncf.common.logging import nncf_logger
 from nncf.torch.dynamic_graph.context import TracingContext
 from nncf.torch.dynamic_graph.graph import DynamicGraph
+from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
+from nncf.torch.dynamic_graph.io_handling import LoaderInputInfo
 from nncf.torch.dynamic_graph.io_handling import ModelInputInfo
+from nncf.torch.dynamic_graph.wrappers import wrap_parameters
 from nncf.torch.utils import get_model_device
+from nncf.torch.utils import is_multidevice
 
 
 class GraphTracer:
@@ -24,7 +29,11 @@ class GraphTracer:
         self.custom_forward_fn = custom_forward_fn
 
     def trace_graph(
-        self, model: torch.nn.Module, context_to_use: Optional[TracingContext] = None, as_eval: bool = False
+        self,
+        model: torch.nn.Module,
+        context_to_use: Optional[TracingContext] = None,
+        as_eval: bool = False,
+        trace_parameters: bool = False,
     ) -> DynamicGraph:
         sd = deepcopy(model.state_dict())
 
@@ -37,6 +46,9 @@ class GraphTracer:
         with context_to_use as _ctx:
             _ctx.base_module_thread_local_replica = model
             with torch.no_grad():
+                if trace_parameters:
+                    wrap_parameters(model)
+
                 if as_eval:
                     with training_mode_switcher(model, is_training=False):
                         self.custom_forward_fn(model)
@@ -65,8 +77,16 @@ def create_dummy_forward_fn(
         from nncf.torch.dynamic_graph.io_handling import wrap_nncf_model_inputs_with_objwalk
         from nncf.torch.dynamic_graph.io_handling import wrap_nncf_model_outputs_with_objwalk
 
-        device = get_model_device(model)
-        args, kwargs = input_info.get_forward_inputs(device=str(device))
+        device = None
+        if isinstance(input_info, (FillerInputInfo, LoaderInputInfo)):
+            if is_multidevice(model):
+                nncf_logger.warning(
+                    "Multidevice model detected when tracing the model's dynamic graph - will pass example "
+                    "inputs to the model as-is without changing their device."
+                )
+            else:
+                device = get_model_device(model)
+        args, kwargs = input_info.get_forward_inputs(device)
 
         if with_input_tracing:
             if wrap_inputs_fn is None:

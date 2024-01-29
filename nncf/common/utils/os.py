@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -14,6 +14,13 @@ from pathlib import Path
 
 import psutil
 
+import nncf
+
+
+def fail_if_symlink(file: Path):
+    if file.is_symlink():
+        raise nncf.ValidationError("File {} is a symbolic link, aborting.".format(str(file)))
+
 
 @contextmanager
 def safe_open(file: Path, *args, **kwargs):
@@ -26,8 +33,7 @@ def safe_open(file: Path, *args, **kwargs):
     :param file: The path to the file.
     :return: A file object.
     """
-    if file.is_symlink():
-        raise RuntimeError("File {} is a symbolic link, aborting.".format(str(file)))
+    fail_if_symlink(file)
     with open(str(file), *args, **kwargs) as f:
         yield f
 

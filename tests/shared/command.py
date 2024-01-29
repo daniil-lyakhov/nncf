@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -49,7 +49,7 @@ class Command:
         except OSError as err:
             print(err)
 
-    def run(self, timeout=3600, assert_returncode_zero=True):
+    def run(self, timeout=3600, assert_returncode_zero=True, stdout=True):
         print(f"Running command: {self.cmd}")
 
         def target():
@@ -72,9 +72,11 @@ class Command:
                     for line in self.process.stdout:
                         line = line.decode("utf-8")
                         self.output.append(line)
-                        sys.stdout.write(line)
+                        if stdout:
+                            sys.stdout.write(line)
 
-                    sys.stdout.flush()
+                    if stdout:
+                        sys.stdout.flush()
                     self.process.stdout.close()
 
                     self.process.wait()

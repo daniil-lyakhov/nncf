@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,10 +13,11 @@ from copy import deepcopy
 from functools import partial
 from inspect import Parameter
 from inspect import Signature
-from typing import Any, Dict, List, Optional, Protocol, Set, Tuple, Type
+from typing import Any, Dict, List, Optional, Protocol, Set, Tuple, Type, Union
 
 import torch
 
+import nncf
 from nncf import Dataset
 from nncf import NNCFConfig
 from nncf.common.graph.definitions import MODEL_INPUT_OP_NAME
@@ -87,7 +88,7 @@ class ModelInputInfo(abc.ABC):
     """
 
     @abc.abstractmethod
-    def get_forward_inputs(self, device: str = None) -> Tuple[Tuple, Dict]:
+    def get_forward_inputs(self, device: Optional[Union[str, torch.device]] = None) -> Tuple[Tuple, Dict]:
         """
         Returns the tuple of (args, kwargs) for passing into the compressed model's forward method when necessary.
         The returned arguments should be such that the model's forward with these arguments executes the main
@@ -178,7 +179,7 @@ class FillerInputInfo(ModelInputInfo):
         """
         input_infos = config.get("input_info")
         if input_infos is None:
-            raise RuntimeError("Passed NNCFConfig does not have an 'input_info' field")
+            raise nncf.ValidationError("Passed NNCFConfig does not have an 'input_info' field")
         if isinstance(input_infos, dict):
             return FillerInputInfo(
                 [
@@ -202,9 +203,11 @@ class FillerInputInfo(ModelInputInfo):
                     )
                 )
             return FillerInputInfo(elements)
-        raise RuntimeError("Invalid input_infos specified in config - should be either dict or list of dicts")
+        raise nncf.ValidationError("Invalid input_infos specified in config - should be either dict or list of dicts")
 
-    def get_forward_inputs(self, device: str = None) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor]]:
+    def get_forward_inputs(
+        self, device: Optional[Union[str, torch.device]] = None
+    ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor]]:
         args_list = []
         kwargs = {}
         for fe in self.elements:
@@ -227,7 +230,7 @@ class ExactInputsInfo(ModelInputInfo):
         self._forward_args = forward_args
         self._forward_kwargs = forward_kwargs
 
-    def get_forward_inputs(self, device: str = None) -> Tuple[Tuple, Dict]:
+    def get_forward_inputs(self, device: Optional[Union[str, torch.device]] = None) -> Tuple[Tuple, Dict]:
         if device is None:
             return self._forward_args, self._forward_kwargs
         to_device_fn = partial(torch.Tensor.to, device=device)
@@ -237,34 +240,38 @@ class ExactInputsInfo(ModelInputInfo):
         kwargs_at_device = objwalk(kwargs_copy, is_tensor, to_device_fn)
         return args_at_device, kwargs_at_device
 
+
+class ExampleInputInfo(ExactInputsInfo):
     @classmethod
-    def from_example_input(cls, example_input: Any) -> "ExactInputsInfo":
+    def from_example_input(cls, example_input: Any) -> "ExampleInputInfo":
         """
-        Builds an ExactInputsInfo object based on the example input.
+        Builds an ExampleInputInfo object based on the example input.
 
         :param dataset: An nncf.Dataset whose first element will be used as an example model input
-        :return: An initialized ExactInputsInfo object.
+        :return: An initialized ExampleInputInfo object.
         """
         if isinstance(example_input, tuple):
-            return ExactInputsInfo(example_input, {})
+            return ExampleInputInfo(example_input, {})
         if isinstance(example_input, dict):
-            return ExactInputsInfo(tuple(), example_input)
-        return ExactInputsInfo((example_input,), {})
+            return ExampleInputInfo(tuple(), example_input)
+        return ExampleInputInfo((example_input,), {})
 
     @classmethod
-    def from_nncf_dataset(cls, dataset: Dataset) -> "ExactInputsInfo":
+    def from_nncf_dataset(cls, dataset: Dataset) -> "ExampleInputInfo":
         """
-        Checks the first element of the provided nncf.Dataset and builds an ExactInputsInfo object that would
+        Checks the first element of the provided nncf.Dataset and builds an ExampleInputInfo object that would
         provide the same input to the model at corresponding compression stages.
 
         :param dataset: An nncf.Dataset whose first element will be used as an example model input
-        :return: An initialized ExactInputsInfo object.
+        :return: An initialized ExampleInputInfo object.
         """
         example_input = next(iter(dataset.get_inference_data()))
         return cls.from_example_input(example_input)
 
+
+class LoaderInputInfo(ExactInputsInfo):
     @classmethod
-    def from_nncf_config_dataloaders(cls, config: NNCFConfig) -> Optional["ExactInputsInfo"]:
+    def from_nncf_config_dataloaders(cls, config: NNCFConfig) -> Optional["LoaderInputInfo"]:
         """
         Examines the user-provided structures registered with the NNCFConfig instance used for compression to find
         structures that contain a dataloader. The dataloader's first element is used to provide an example input to
@@ -273,7 +280,7 @@ class ExactInputsInfo(ModelInputInfo):
         :param config: An nncf.NNCFConfig instance. Must have at least one NNCFExtraConfigStruct attached that can
           provide a dataloader (these are listed in nncf.torch.dynamic_graph.io_handling.EXTRA_STRUCTS_WITH_DATALOADERS)
 
-        :return: An initialized ExactInputsInfo object.
+        :return: An initialized LoaderInputInfo object.
         """
         extra_structs = config.get_all_extra_structs()
         for extra_struct in extra_structs:
@@ -283,7 +290,7 @@ class ExactInputsInfo(ModelInputInfo):
                 wrapped_dataloader = wrap_dataloader_for_init(dataloader)
                 dataloader_output = next(iter(wrapped_dataloader))
                 args, kwargs = wrapped_dataloader.get_inputs(dataloader_output)
-                return ExactInputsInfo(args, kwargs)
+                return LoaderInputInfo(args, kwargs)
         # config extra structs had no suitable dataloaders
         return None
 

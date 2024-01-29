@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -54,7 +54,7 @@ def get_depthwise_conv_nncf_graph() -> NNCFGraphToTestDepthwiseConv:
         transpose=False,
         padding_values=(1, 1),
     )
-    return NNCFGraphToTestDepthwiseConv(PTDepthwiseConv2dSubtype, conv_layer_attrs)
+    return NNCFGraphToTestDepthwiseConv(PTDepthwiseConv2dSubtype, conv_layer_attrs, nncf_graph_cls=PTNNCFGraph)
 
 
 def get_single_no_weight_matmul_nncf_graph() -> NNCFGraphToTest:

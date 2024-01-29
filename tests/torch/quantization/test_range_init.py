@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -23,6 +23,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.models import squeezenet1_1
 
+import nncf
 import nncf.torch.tensor_statistics.collectors as pt_collectors
 from nncf.common.graph import NNCFNodeName
 from nncf.common.quantization.initialization.range import PerLayerRangeInitConfig
@@ -30,7 +31,7 @@ from nncf.common.quantization.initialization.range import RangeInitConfig
 from nncf.common.quantization.quantizer_setup import ActivationQuantizationInsertionPoint
 from nncf.common.quantization.quantizer_setup import SingleConfigQuantizationPoint
 from nncf.common.quantization.quantizer_setup import WeightQuantizationInsertionPoint
-from nncf.common.quantization.structs import QuantizationMode
+from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
 from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.quantization.structs import QuantizerGroup
 from nncf.config import NNCFConfig
@@ -39,7 +40,7 @@ from nncf.torch import utils
 from nncf.torch.checkpoint_loading import load_state
 from nncf.torch.initialization import DefaultInitializingDataLoader
 from nncf.torch.initialization import wrap_dataloader_for_init
-from nncf.torch.nncf_network import EXTERNAL_QUANTIZERS_STORAGE_NAME
+from nncf.torch.quantization.external_quantizer import EXTERNAL_QUANTIZERS_STORAGE_NAME
 from nncf.torch.quantization.init_range import PTRangeInitCollectorParams
 from nncf.torch.quantization.init_range import PTRangeInitParams
 from nncf.torch.quantization.init_range import StatCollectorGenerator
@@ -171,7 +172,11 @@ def generate_qp(
     elif target is QuantizerGroup.ACTIVATIONS:
         qip = ActivationQuantizationInsertionPoint(target_node_name=node_name, input_port_id=input_port_id)
     else:
-        raise RuntimeError()
+        raise nncf.InvalidQuantizerGroupError(
+            f"Invalid quantizer group: {target}. "
+            f"Supported groups are {QuantizerGroup.WEIGHTS}"
+            f"and {QuantizerGroup.ACTIVATIONS}."
+        )
     return SingleConfigQuantizationPoint(qip, QuantizerConfig(), [node_name])
 
 

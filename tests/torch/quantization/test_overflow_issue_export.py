@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -16,10 +16,10 @@ import pytest
 import torch
 from torch import nn
 
+from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
 from nncf.torch.checkpoint_loading import load_state
 from nncf.torch.quantization.layers import AsymmetricQuantizer
 from nncf.torch.quantization.layers import PTQuantizerSpec
-from nncf.torch.quantization.layers import QuantizationMode
 from nncf.torch.quantization.layers import SymmetricQuantizer
 from tests.torch.helpers import TwoConvTestModel
 from tests.torch.helpers import create_compressed_model_and_algo_for_test

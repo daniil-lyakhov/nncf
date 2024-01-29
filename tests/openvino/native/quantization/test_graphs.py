@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -10,6 +10,7 @@
 # limitations under the License.
 
 
+from pathlib import Path
 from typing import Dict
 
 import numpy as np
@@ -22,13 +23,15 @@ from nncf.openvino.graph.nncf_graph_builder import GraphConverter
 from nncf.openvino.quantization.quantize_model import quantize_impl
 from nncf.openvino.statistics.aggregator import OVStatisticsAggregator
 from nncf.parameters import ModelType
+from nncf.parameters import QuantizationMode
 from nncf.parameters import TargetDevice
+from nncf.quantization.advanced_parameters import OverflowFix
 from nncf.quantization.algorithms.smooth_quant.algorithm import SmoothQuant
-from tests.openvino.conftest import OPENVINO_NATIVE_TEST_ROOT
 from tests.openvino.native.common import compare_nncf_graphs
 from tests.openvino.native.common import dump_model
+from tests.openvino.native.common import get_actual_reference_for_current_openvino
 from tests.openvino.native.common import get_dataset_for_test
-from tests.openvino.native.common import get_openvino_version
+from tests.openvino.native.common import get_openvino_major_minor_version
 from tests.openvino.native.models import SYNTHETIC_MODELS
 from tests.openvino.native.models import DepthwiseConv3DModel
 from tests.openvino.native.models import DepthwiseConv4DModel
@@ -36,12 +39,12 @@ from tests.openvino.native.models import DepthwiseConv5DModel
 from tests.openvino.native.models import GRUSequenceModel
 from tests.openvino.native.models import IfModel
 from tests.openvino.native.models import MatmulSoftmaxMatmulBlock
+from tests.openvino.native.models import ScaledDotProductAttentionModel
 from tests.openvino.native.quantization.test_fq_params_calculation import quantize_model
 from tests.openvino.omz_helpers import convert_model
 from tests.openvino.omz_helpers import download_model
 
-OV_VERSION = get_openvino_version()
-QUANTIZED_REF_GRAPHS_DIR = OPENVINO_NATIVE_TEST_ROOT / "data" / OV_VERSION / "reference_graphs" / "quantized"
+QUANTIZED_REF_GRAPHS_DIR = Path("reference_graphs") / "quantized"
 
 
 @pytest.mark.parametrize("model_creator_func", SYNTHETIC_MODELS.values())
@@ -51,7 +54,7 @@ def test_synthetic_models_fq_placement(model_creator_func):
         model.ov_model, {"preset": QuantizationPreset.PERFORMANCE, "inplace_statistics": True}
     )
 
-    path_ref_graph = QUANTIZED_REF_GRAPHS_DIR / model.ref_graph_name
+    path_ref_graph = get_actual_reference_for_current_openvino(QUANTIZED_REF_GRAPHS_DIR / model.ref_graph_name)
     compare_nncf_graphs(quantized_model, path_ref_graph)
 
 
@@ -62,7 +65,7 @@ def test_depthwise_models_fq_placement(model_creator_func):
         model.ov_model, {"preset": QuantizationPreset.PERFORMANCE, "inplace_statistics": True}
     )
 
-    path_ref_graph = QUANTIZED_REF_GRAPHS_DIR / model.ref_graph_name
+    path_ref_graph = get_actual_reference_for_current_openvino(QUANTIZED_REF_GRAPHS_DIR / model.ref_graph_name)
     compare_nncf_graphs(quantized_model, path_ref_graph)
 
 
@@ -88,7 +91,7 @@ def test_omz_models_fq_placement(model_name_params, tmp_path, omz_cache_dir):
     quantized_model = quantize_model(model, q_params)
 
     result_name = f"{model_name}_{params_str}"
-    path_ref_graph = QUANTIZED_REF_GRAPHS_DIR / f"{result_name}.dot"
+    path_ref_graph = get_actual_reference_for_current_openvino(QUANTIZED_REF_GRAPHS_DIR / f"{result_name}.dot")
     xml_path = tmp_path / (result_name + ".xml")
     bin_path = tmp_path / (result_name + ".bin")
     dump_model(quantized_model, str(xml_path), str(bin_path))
@@ -103,7 +106,7 @@ def test_transformer_models_fq_placement(model_creator_func, tmp_path):
         {"preset": QuantizationPreset.PERFORMANCE, "inplace_statistics": True, "model_type": ModelType.TRANSFORMER},
     )
 
-    path_ref_graph = QUANTIZED_REF_GRAPHS_DIR / model.ref_graph_name
+    path_ref_graph = get_actual_reference_for_current_openvino(QUANTIZED_REF_GRAPHS_DIR / model.ref_graph_name)
     xml_path = tmp_path / (model.ref_model_name + ".xml")
     bin_path = tmp_path / (model.ref_model_name + ".bin")
     dump_model(quantized_model, str(xml_path), str(bin_path))
@@ -126,7 +129,7 @@ def test_omz_models_sq_placement(model_name_params, tmp_path, omz_cache_dir):
 
     quantized_model = smooth_quant_model(model, q_params, quantize=False)
 
-    path_ref_graph = QUANTIZED_REF_GRAPHS_DIR / f"{model_name}_sq.dot"
+    path_ref_graph = get_actual_reference_for_current_openvino(QUANTIZED_REF_GRAPHS_DIR / f"{model_name}_sq.dot")
     xml_path = tmp_path / (model_name + ".xml")
     bin_path = tmp_path / (model_name + ".bin")
     dump_model(quantized_model, str(xml_path), str(bin_path))
@@ -156,7 +159,9 @@ def test_ignore_nodes_by_attribues(linear_before_reset):
     model = GRUSequenceModel(**{"linear_before_reset": linear_before_reset}).ov_model
     quantized_model = quantize_model(model, {})
     postfix = "T" if linear_before_reset else "F"
-    path_ref_graph = QUANTIZED_REF_GRAPHS_DIR / f"GRUSequenceModel_linear_before_reset_{postfix}.dot"
+    path_ref_graph = get_actual_reference_for_current_openvino(
+        QUANTIZED_REF_GRAPHS_DIR / f"GRUSequenceModel_linear_before_reset_{postfix}.dot"
+    )
     compare_nncf_graphs(quantized_model, path_ref_graph)
 
 
@@ -193,6 +198,60 @@ def test_if_model_fq_placement():
     then_body_path = if_model.ref_model_name + "_then.dot"
     else_body_path = if_model.ref_model_name + "_else.dot"
 
-    compare_nncf_graphs(quantized_model, QUANTIZED_REF_GRAPHS_DIR / main_model_path)
-    compare_nncf_graphs(if_op.get_function(0), QUANTIZED_REF_GRAPHS_DIR / then_body_path)
-    compare_nncf_graphs(if_op.get_function(1), QUANTIZED_REF_GRAPHS_DIR / else_body_path)
+    compare_nncf_graphs(
+        quantized_model, get_actual_reference_for_current_openvino(QUANTIZED_REF_GRAPHS_DIR / main_model_path)
+    )
+    compare_nncf_graphs(
+        if_op.get_function(0), get_actual_reference_for_current_openvino(QUANTIZED_REF_GRAPHS_DIR / then_body_path)
+    )
+    compare_nncf_graphs(
+        if_op.get_function(1), get_actual_reference_for_current_openvino(QUANTIZED_REF_GRAPHS_DIR / else_body_path)
+    )
+
+
+@pytest.mark.parametrize("q_params", [{}, {"model_type": ModelType.TRANSFORMER}], ids=["default", "transformer"])
+def test_scaled_dot_product_attention_placement(q_params, tmp_path):
+    ov_major_version, ov_minor_version = get_openvino_major_minor_version()
+    if ov_major_version < 2023 or (ov_major_version == 2023 and ov_minor_version < 3):
+        pytest.xfail("ScaledDotProductAttention is not supported until 2023.3")
+    model = ScaledDotProductAttentionModel().ov_model
+    quantized_model = quantize_model(model, q_params)
+
+    if q_params:
+        params_str = "_".join([param.value for param in q_params.values()])
+    else:
+        params_str = "default"
+
+    path_ref_graph = get_actual_reference_for_current_openvino(
+        QUANTIZED_REF_GRAPHS_DIR / "scaled_dot_product_attention.dot"
+    )
+    result_name = f"scaled_dot_product_attention_{params_str}"
+    xml_path = tmp_path / (result_name + ".xml")
+    bin_path = tmp_path / (result_name + ".bin")
+    dump_model(quantized_model, str(xml_path), str(bin_path))
+    compare_nncf_graphs(quantized_model, path_ref_graph)
+
+
+@pytest.mark.parametrize(
+    "model_creator_func",
+    [SYNTHETIC_MODELS.get("LinearModel"), SYNTHETIC_MODELS.get("ConvModel"), SYNTHETIC_MODELS.get("SharedConvModel")],
+)
+def test_synthetic_models_fc_placement(model_creator_func):
+    ov_major_version, ov_minor_version = get_openvino_major_minor_version()
+    if ov_major_version < 2023 or (ov_major_version == 2023 and ov_minor_version < 3):
+        pytest.xfail("FakeConvert is not supported until 2023.3")
+    model = model_creator_func()
+    quantized_model = quantize_model(
+        model.ov_model,
+        {
+            "preset": QuantizationPreset.PERFORMANCE,
+            "inplace_statistics": True,
+            "mode": QuantizationMode.FP8_E4M3,
+            "overflow_fix": OverflowFix.DISABLE,
+        },
+    )
+
+    path_ref_graph = get_actual_reference_for_current_openvino(
+        QUANTIZED_REF_GRAPHS_DIR / f"{model.ref_model_name}_FC.dot"
+    )
+    compare_nncf_graphs(quantized_model, path_ref_graph)

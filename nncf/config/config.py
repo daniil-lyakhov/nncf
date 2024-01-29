@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Type
 import jsonschema
 import jstyleson as json
 
+import nncf
 from nncf.common.logging import nncf_logger
 from nncf.common.utils.api_marker import api
 from nncf.common.utils.os import safe_open
@@ -57,7 +58,7 @@ class NNCFConfig(dict):
 
         :param path: Path to the .json file containing the NNCF configuration.
         """
-        file_path = Path(path).resolve()
+        file_path = Path(path)
         with safe_open(file_path) as f:
             loaded_json = json.load(f)
         return cls.from_dict(loaded_json)
@@ -71,7 +72,7 @@ class NNCFConfig(dict):
         for struct in struct_list:
             struct_id = struct.get_id()
             if struct_id in self.__nncf_extra_structs:
-                raise RuntimeError(f"{struct_id} is already registered as extra struct in NNCFConfig!")
+                raise nncf.InternalError(f"{struct_id} is already registered as extra struct in NNCFConfig!")
             self.__nncf_extra_structs[struct_id] = struct
 
     def get_extra_struct(self, struct_cls: Type[NNCFExtraConfigStruct]) -> NNCFExtraConfigStruct:

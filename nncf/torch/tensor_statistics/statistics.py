@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -15,6 +15,7 @@ from nncf.common.tensor_statistics.statistics import MeanTensorStatistic
 from nncf.common.tensor_statistics.statistics import MedianMADTensorStatistic
 from nncf.common.tensor_statistics.statistics import MinMaxTensorStatistic
 from nncf.common.tensor_statistics.statistics import PercentileTensorStatistic
+from nncf.common.tensor_statistics.statistics import RawTensorStatistic
 from nncf.common.tensor_statistics.statistics import TensorStatistic
 
 
@@ -37,6 +38,12 @@ class PTPercentileTensorStatistic(PercentileTensorStatistic):
 
 
 class PTMeanTensorStatistic(MeanTensorStatistic):
+    @staticmethod
+    def tensor_eq(tensor1: torch.Tensor, tensor2: torch.Tensor, rtol=1e-6) -> bool:
+        return bool(torch.allclose(tensor1, tensor2, rtol=rtol))
+
+
+class PTRawTensorStatistic(RawTensorStatistic):
     @staticmethod
     def tensor_eq(tensor1: torch.Tensor, tensor2: torch.Tensor, rtol=1e-6) -> bool:
         return bool(torch.allclose(tensor1, tensor2, rtol=rtol))

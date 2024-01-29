@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -109,7 +109,7 @@ INSTALL_REQUIRES = [
     "numpy>=1.19.1, <1.27",
     "openvino-telemetry>=2023.2.0",
     "packaging>=20.0",
-    "pandas>=1.1.5,<2.1",
+    "pandas>=1.1.5,<2.2",
     "psutil",
     "pydot>=1.4.1",
     "pymoo>=0.6.0.1",
@@ -133,7 +133,7 @@ TORCH_EXTRAS = [
 
 ONNX_EXTRAS = ["onnx~=1.13.1", "onnxruntime~=1.14.1;python_version < '3.11'"]
 
-OPENVINO_EXTRAS = ["openvino==2023.1"]
+OPENVINO_EXTRAS = ["openvino==2023.3"]
 
 
 EXTRAS_REQUIRE = {

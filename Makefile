@@ -50,20 +50,19 @@ test-examples-onnx:
 install-openvino-test:
 	pip install -U pip
 	pip install -e .[openvino]
+	pip install tensorflow==2.12.0
 	pip install -r tests/openvino/requirements.txt
 	pip install -r tests/cross_fw/install/requirements.txt
 	pip install -r tests/cross_fw/examples/requirements.txt
 
 install-openvino-dev: install-openvino-test install-pre-commit
-	pip install -r examples/experimental/openvino/bert/requirements.txt
-	pip install -r examples/experimental/openvino/yolo_v5/requirements.txt
 	pip install -r examples/post_training_quantization/openvino/mobilenet_v2/requirements.txt
 	pip install -r examples/post_training_quantization/openvino/anomaly_stfpm_quantize_with_accuracy_control/requirements.txt
 	pip install -r examples/post_training_quantization/openvino/yolov8/requirements.txt
 	pip install -r examples/post_training_quantization/openvino/yolov8_quantize_with_accuracy_control/requirements.txt
 
 test-openvino:
-	pytest ${COVERAGE_ARGS} tests/openvino $(DATA_ARG) --junitxml ${JUNITXML_PATH}
+	ONEDNN_MAX_CPU_ISA=AVX2 pytest ${COVERAGE_ARGS} tests/openvino $(DATA_ARG) --junitxml ${JUNITXML_PATH}
 
 test-install-openvino:
 	pytest tests/cross_fw/install -s        \
@@ -113,8 +112,17 @@ install-torch-dev: install-torch-test install-pre-commit
 	pip install -r examples/post_training_quantization/torch/mobilenet_v2/requirements.txt
 	pip install -r examples/post_training_quantization/torch/ssd300_vgg16/requirements.txt
 
+install-models-hub-torch:
+	pip install -U pip
+	pip install -e .
+	pip install -r tests/torch/models_hub_test/requirements.txt
+	# Install wheel to run pip with --no-build-isolation
+	pip install wheel
+	pip install --no-build-isolation -r tests/torch/models_hub_test/requirements_secondary.txt
+
+
 test-torch:
-	pytest ${COVERAGE_ARGS} tests/torch -m "not weekly and not nightly" --junitxml ${JUNITXML_PATH} $(DATA_ARG)
+	pytest ${COVERAGE_ARGS} tests/torch -m "not weekly and not nightly and not models_hub" --junitxml ${JUNITXML_PATH} $(DATA_ARG)
 
 test-torch-nightly:
 	pytest ${COVERAGE_ARGS} tests/torch -m nightly --junitxml ${JUNITXML_PATH} $(DATA_ARG)
@@ -138,6 +146,9 @@ test-examples-torch:
 		--backend torch                     \
 		--junitxml ${JUNITXML_PATH}
 
+test-models-hub-torch:
+	pytest tests/torch/models_hub_test --junitxml ${JUNITXML_PATH}
+
 ###############################################################################
 # Common part
 install-common-test:
@@ -157,3 +168,12 @@ test-examples:
 # Pre commit check
 pre-commit:
 	pre-commit run -a
+
+
+###############################################################################
+# Fuzzing tests
+install-fuzz-test: install-common-test
+	pip install -r tests/cross_fw/sdl/fuzz/requirements.txt
+
+test-fuzz:
+	python tests/cross_fw/sdl/fuzz/quantize_api.py

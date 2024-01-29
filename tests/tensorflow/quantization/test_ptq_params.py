@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -14,10 +14,10 @@ import pytest
 
 from nncf import NNCFConfig
 from nncf.common.quantization.structs import QuantizationPreset
+from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
 from nncf.parameters import TargetDevice
 from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
 from nncf.quantization.advanced_parameters import OverflowFix
-from nncf.quantization.advanced_parameters import QuantizationMode
 from nncf.quantization.advanced_parameters import QuantizationParameters
 from nncf.quantization.range_estimator import RangeEstimatorParametersSet
 from nncf.scopes import IgnoredScope

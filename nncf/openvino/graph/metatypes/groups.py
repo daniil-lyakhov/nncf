@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -81,12 +81,11 @@ INPUTS_QUANTIZABLE_OPERATIONS = [
     ov_metatypes.OVLSTMSequenceMetatype,
     ov_metatypes.OVGRUSequenceMetatype,
     ov_metatypes.OVGroupNormalizationMetatype,
+    ov_metatypes.OVScaledDotProductAttentionMetatype,
 ]
 
 
-FAKE_QUANTIZE_OPERATIONS = [
-    ov_metatypes.OVFakeQuantizeMetatype,
-]
+FAKE_QUANTIZE_OPERATIONS = [ov_metatypes.OVFakeQuantizeMetatype, ov_metatypes.OVFakeConvertMetatype]
 
 
 CONSTANT_OPERATIONS = [
@@ -188,4 +187,13 @@ OPERATIONS_WITH_BIAS = [
     ov_metatypes.OVConvolutionMetatype,
     # TODO: add all metatypes with bias
     ov_metatypes.OVMatMulMetatype,
+]
+
+
+CONV_OPERATIONS = [
+    ov_metatypes.OVConvolutionMetatype,
+    ov_metatypes.OVDepthwiseConvolutionMetatype,
+    ov_metatypes.OVGroupConvolutionMetatype,
+    ov_metatypes.OVConvolutionBackpropDataMetatype,
+    ov_metatypes.OVGroupConvolutionBackpropDataMetatype,
 ]

@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -10,8 +10,10 @@
 # limitations under the License.
 from abc import ABC
 from abc import abstractmethod
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypeVar
 
+import nncf
 from nncf import NNCFConfig
 from nncf.api.compression import CompressionAlgorithmBuilder
 from nncf.api.compression import CompressionAlgorithmController
@@ -20,6 +22,7 @@ from nncf.common.schedulers import StubCompressionScheduler
 from nncf.common.utils.api_marker import api
 from nncf.common.utils.backend import BackendType
 from nncf.common.utils.backend import get_backend
+from nncf.common.utils.os import fail_if_symlink
 from nncf.common.utils.registry import Registry
 from nncf.config.extractors import BNAdaptDataLoaderNotFoundError
 from nncf.config.extractors import extract_algo_specific_config
@@ -64,7 +67,7 @@ class BaseCompressionAlgorithmController(CompressionAlgorithmController, ABC):
     @property
     def name(self):
         if self._name is None:
-            raise RuntimeError("Internal error: name of the controller is not set!")
+            raise nncf.InternalError("Internal error: name of the controller is not set!")
         return self._name
 
     @property
@@ -102,6 +105,7 @@ class BaseCompressionAlgorithmController(CompressionAlgorithmController, ABC):
                 - (a, b, {}) for positional arguments only.
                 - ({'x': None, 'y': y},) for keyword arguments only.
         """
+        fail_if_symlink(Path(save_path))
         self.prepare_for_export()
         backend = get_backend(self.model)
         if backend is BackendType.TENSORFLOW:
@@ -174,7 +178,7 @@ class BaseCompressionAlgorithmController(CompressionAlgorithmController, ABC):
         :return: The compression state.
         """
         if self._builder_state is None:
-            raise RuntimeError("Internal error: builder state is not set for the controller")
+            raise nncf.InternalError("Internal error: builder state is not set for the controller")
 
         return {self.BUILDER_STATE: self._builder_state, self.CONTROLLER_STATE: self.get_state()}
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,6 +11,7 @@
 
 from typing import List, Optional, Type
 
+import nncf
 from nncf.common.graph.definitions import NNCFGraphNodeType
 from nncf.common.utils.registry import Registry
 
@@ -21,7 +22,7 @@ class OperatorMetatype:
 
     :param name: The name of the operator.
     :param hw_config_names: The names of the hardware configurations.
-    :param output_channel_axis: The axis along which the output channels of the operator are arranged.
+    :param output_channel_axis: The axis, along which the output channels of the operator are arranged.
     :param ignored_input_ports: Input ports of the operations that should not be considered for purposes of compression.
     """
 
@@ -29,6 +30,7 @@ class OperatorMetatype:
     hw_config_names: List[str] = []
     output_channel_axis: Optional[int] = None
     ignored_input_ports: List[int] = []
+    target_input_ports: Optional[List[int]] = None
 
     @classmethod
     def get_all_aliases(cls) -> List[str]:
@@ -101,7 +103,7 @@ class OperatorMetatypeRegistry(Registry):
             op_names = obj.get_all_aliases()
             for name in op_names:
                 if name in self._op_name_to_op_meta_dict and not obj.subtype_check(self._op_name_to_op_meta_dict[name]):
-                    raise RuntimeError(
+                    raise nncf.InternalError(
                         "Inconsistent operator metatype registry - single patched "
                         "op name maps to multiple metatypes!"
                     )
@@ -126,6 +128,7 @@ class OperatorMetatypeRegistry(Registry):
 NOOP_METATYPES = Registry("noop_metatypes")
 INPUT_NOOP_METATYPES = Registry("input_noop_metatypes")
 OUTPUT_NOOP_METATYPES = Registry("output_noop_metatypes")
+CONST_NOOP_METATYPES = Registry("const_noop_metatypes")
 
 
 class UnknownMetatype(OperatorMetatype):
@@ -174,3 +177,13 @@ class OutputNoopMetatype(OperatorMetatype):
     @classmethod
     def get_all_aliases(cls) -> List[str]:
         return [NNCFGraphNodeType.OUTPUT_NODE]
+
+
+@NOOP_METATYPES.register()
+@CONST_NOOP_METATYPES.register()
+class ConstNoopMetatype(OperatorMetatype):
+    name = "const_noop"
+
+    @classmethod
+    def get_all_aliases(cls) -> List[str]:
+        return [NNCFGraphNodeType.CONST_NODE]

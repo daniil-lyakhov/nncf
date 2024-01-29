@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -16,6 +16,7 @@ import torch
 from torch.distributed import barrier
 from torch.nn import Module
 
+import nncf
 from nncf.api.compression import CompressionAlgorithmController
 from nncf.common.compression import BaseCompressionAlgorithmController as BaseController
 from nncf.common.deprecation import warning_deprecated
@@ -35,8 +36,9 @@ from nncf.torch.compression_method_api import PTCompressionAlgorithmBuilder
 from nncf.torch.dynamic_graph.graph_tracer import WrapInputsFnType
 from nncf.torch.dynamic_graph.graph_tracer import WrapOutputsFnType
 from nncf.torch.dynamic_graph.io_handling import EXTRA_STRUCTS_WITH_DATALOADERS
-from nncf.torch.dynamic_graph.io_handling import ExactInputsInfo
+from nncf.torch.dynamic_graph.io_handling import ExampleInputInfo
 from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
+from nncf.torch.dynamic_graph.io_handling import LoaderInputInfo
 from nncf.torch.dynamic_graph.io_handling import ModelInputInfo
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.utils import is_dist_avail_and_initialized
@@ -98,7 +100,7 @@ def create_compressed_model(
         as an object of NNCFNetwork.
     """
     if isinstance(model, NNCFNetwork):
-        raise RuntimeError(
+        raise nncf.InternalError(
             "The model object has already been compressed.\n"
             "NNCF for PyTorch modifies the model object in-place, and repeat calls to "
             "`nncf.torch.create_compressed_model` with the same model object passed as argument "
@@ -167,10 +169,10 @@ def get_input_info_from_config(config: NNCFConfig) -> ModelInputInfo:
     nncf_logger.debug(
         "Config has no 'input_info' section, trying to use dataloader output as model inputs " "for graph building."
     )
-    exact_info = ExactInputsInfo.from_nncf_config_dataloaders(config)
+    exact_info = LoaderInputInfo.from_nncf_config_dataloaders(config)
     if exact_info is not None:
         return exact_info
-    raise RuntimeError(
+    raise nncf.ValidationError(
         "Could not determine tensor inputs for the model's forward call.\n"
         "If you are using the `nncf.quantize` API, make sure that you supply the "
         "calibration dataloader to the `nncf.quantize` call.\n"
@@ -311,22 +313,40 @@ def create_compression_algorithm_builder_from_algo_names(
     return builder
 
 
-def wrap_model(model: torch.nn.Module, example_input: Any) -> NNCFNetwork:
+def wrap_model(
+    model: torch.nn.Module,
+    example_input: Any,
+    trace_parameters: bool = False,
+) -> NNCFNetwork:
     """
     Wraps a PyTorch model to the NNCFNetwork class.
 
     This function dynamically extends the instance of PyTorch model with NNCF-enabling functionality.
 
     :param model: PyTorch model.
-    :example_input: An example input that will be used for model tracing. A tuple is interpreted as an example input
-        of a set of non keyword arguments, and a dict as an example input of a set of keywords arguments.
+    :param example_input: An example input that will be used for model tracing. A tuple is interpreted
+        as an example input of a set of non keyword arguments, and a dict as an example input of a set
+        of keywords arguments.
+    :param trace_parameters: Whether to trace model parameters. Default is False.
     :return: A model wrapped by NNCFNetwork.
     """
 
-    input_info = ExactInputsInfo.from_example_input(example_input)
+    input_info = ExampleInputInfo.from_example_input(example_input)
 
     with training_mode_switcher(model, is_training=False):
-        nncf_network = NNCFNetwork(model, input_info=input_info)
+        nncf_network = NNCFNetwork(
+            model, input_info=input_info, replace_modules=not trace_parameters, trace_parameters=trace_parameters
+        )
         nncf_network.nncf.get_tracing_context().disable_trace_dynamic_graph()
 
     return nncf_network
+
+
+def is_wrapped_model(model: torch.nn.Module) -> bool:
+    """
+    Check that the model was wrapped by NNCFNetwork.
+
+    :param model: A model.
+    :return: True if the model is wrapped, False otherwise.
+    """
+    return isinstance(model, NNCFNetwork)

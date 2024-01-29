@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,8 +11,11 @@
 
 from typing import Type
 
+import numpy as np
 import pytest
+import torch
 
+from nncf.common.tensor import NNCFTensor
 from nncf.common.tensor_statistics.statistics import MeanTensorStatistic
 from nncf.common.tensor_statistics.statistics import MedianMADTensorStatistic
 from nncf.common.tensor_statistics.statistics import MinMaxTensorStatistic
@@ -26,9 +29,9 @@ from nncf.torch.tensor_statistics.statistics import PTPercentileTensorStatistic
 from tests.common.experimental.test_statistic_collector import TemplateTestStatisticCollector
 
 
-class TestOVStatisticCollector(TemplateTestStatisticCollector):
-    def get_nncf_tensor_cls(self):
-        return PTNNCFTensor
+class TestPTStatisticCollector(TemplateTestStatisticCollector):
+    def get_nncf_tensor(self, value: np.ndarray) -> NNCFTensor:
+        return PTNNCFTensor(torch.tensor(value))
 
     @pytest.fixture
     def min_max_statistic_cls(self) -> Type[MinMaxTensorStatistic]:

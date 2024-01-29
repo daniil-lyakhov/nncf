@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -186,8 +186,9 @@ class ModelDesc:
 
         self.wrap_inputs_fn = wrap_inputs_fn
 
-    @property
-    def dot_filename(self):
+    def dot_filename(self, trace_parameters=False):
+        if trace_parameters:
+            return self.model_name + "_with_parameters_tracing.dot"
         return self.model_name + ".dot"
 
 
@@ -252,7 +253,8 @@ def check_model_graph(compressed_model: NNCFNetwork, ref_dot_file_name: str, ref
 
 @pytest.mark.parametrize("desc", TEST_MODELS_DESC, ids=[m.model_name for m in TEST_MODELS_DESC])
 class TestModelsGraph:
-    def test_build_graph(self, desc: ModelDesc):
+    @pytest.mark.parametrize("trace_parameters", (False, True))
+    def test_build_graph(self, desc: ModelDesc, trace_parameters):
         net = desc.model_builder()
         input_sample_sizes = desc.input_sample_sizes
         if isinstance(input_sample_sizes, tuple):
@@ -263,8 +265,8 @@ class TestModelsGraph:
         if not dummy_forward_fn:
             dummy_forward_fn = create_dummy_forward_fn(input_info, desc.wrap_inputs_fn)
         graph_builder = GraphBuilder(custom_forward_fn=dummy_forward_fn)
-        graph = graph_builder.build_graph(net)
-        check_graph(graph, desc.dot_filename, "original")
+        graph = graph_builder.build_graph(net, trace_parameters=trace_parameters)
+        check_graph(graph, desc.dot_filename(trace_parameters), "original")
 
     def get_sparsifiable_modules(self, algo_name):
         # counts wrapped NNCF modules to ignore the ones that are called in the training mode only
@@ -296,7 +298,7 @@ class TestModelsGraph:
         sparsifiable_modules = self.get_sparsifiable_modules(algo)
         ref_num_sparsed = len(get_all_modules_by_type(model, sparsifiable_modules))
         assert ref_num_sparsed == len(compression_ctrl.sparsified_module_info)
-        check_model_graph(compressed_model, desc.dot_filename, algo)
+        check_model_graph(compressed_model, desc.dot_filename(), algo)
 
     def test_quantize_network(self, desc: ModelDesc, _case_config):
         model = desc.model_builder()
@@ -306,7 +308,7 @@ class TestModelsGraph:
         compressed_model, _ = create_compressed_model_and_algo_for_test(
             model, config, dummy_forward_fn=desc.dummy_forward_fn, wrap_inputs_fn=desc.wrap_inputs_fn
         )
-        check_model_graph(compressed_model, desc.dot_filename, _case_config.graph_dir)
+        check_model_graph(compressed_model, desc.dot_filename(), _case_config.graph_dir)
 
     def test_sparse_quantize_network(self, desc: ModelDesc):
         model = desc.model_builder()
@@ -323,7 +325,7 @@ class TestModelsGraph:
         ref_num_sparsed = len(get_all_modules_by_type(compressed_model, sparsifiable_modules))
 
         assert ref_num_sparsed == len(compression_ctrl.child_ctrls[0].sparsified_module_info)
-        check_model_graph(compressed_model, desc.dot_filename, "quantized_rb_sparsity")
+        check_model_graph(compressed_model, desc.dot_filename(), "quantized_rb_sparsity")
 
 
 @pytest.mark.skip(reason="Sporadic failures")
@@ -577,6 +579,39 @@ class TensorUnaryMethodsDesc(BaseDesc):
         return TestModel(self.tensor_method, **self.model_kwargs)
 
 
+class ConvLayerConvModelDesc(BaseDesc):
+    def __init__(
+        self,
+        layer: nn.Module,
+        conv_class: nn.Module,
+        input_sample_sizes: Union[Tuple[List[int], ...], List[int]] = None,
+        model_name: str = None,
+    ):
+        super().__init__(input_sample_sizes, model_name)
+
+        self.model_name = model_name
+        if model_name is None:
+            self.model_name = f"Conv_{layer.__class__.__name__}_Conv"
+        self.layer = layer
+        self.conv_class = conv_class
+
+    def get_model(self):
+        class TestModel(ModelWithDummyParameter):
+            def __init__(self, layer, conv_class):
+                super().__init__()
+                self._conv1 = conv_class(1, 1, 1)
+                self._layer = layer
+                self._conv2 = conv_class(1, 1, 1)
+
+            def forward(self, x):
+                x = self._conv1(x)
+                x = self._layer(x)
+                x = self._conv2(x)
+                return x
+
+        return TestModel(self.layer, self.conv_class)
+
+
 shift_scale_models = []
 params_combinations = list(itertools.product([True, False], repeat=2))
 
@@ -634,7 +669,13 @@ SYNTHETIC_MODEL_DESC_LIST = [
     TorchBinaryMethodDesc("Div", torch.div),
     TensorBinaryMethodsDesc("__div__"),
     TensorBinaryMethodsDesc("__idiv__"),
+    TensorBinaryMethodsDesc("__rdiv__"),
     TensorBinaryMethodsDesc("__truediv__"),
+    TensorBinaryMethodsDesc("__itruediv__"),
+    TensorBinaryMethodsDesc("__rtruediv__"),
+    TensorBinaryMethodsDesc("__floordiv__"),
+    TensorBinaryMethodsDesc("__ifloordiv__"),
+    TensorBinaryMethodsDesc("__rfloordiv__"),
     SingleLayerModelDesc(model_name="Exp", layer=torch.exp),
     SingleLayerModelDesc(model_name="Erf", layer=torch.erf),
     TorchBinaryMethodDesc(model_name="MatMul", torch_method=torch.matmul),
@@ -661,6 +702,14 @@ SYNTHETIC_MODEL_DESC_LIST = [
     SingleLayerModelDesc(layer=nn.MaxPool1d(1), input_sample_sizes=[1, 1, 1]),
     SingleLayerModelDesc(layer=nn.MaxPool2d(1), input_sample_sizes=[1, 1, 1]),
     SingleLayerModelDesc(layer=nn.MaxPool3d(1), input_sample_sizes=[1, 1, 1, 1]),
+    ConvLayerConvModelDesc(layer=nn.AdaptiveMaxPool1d(1), conv_class=nn.Conv1d, input_sample_sizes=[1, 1]),
+    ConvLayerConvModelDesc(layer=nn.AdaptiveMaxPool2d((1, 1)), conv_class=nn.Conv2d, input_sample_sizes=[1, 1, 1]),
+    ConvLayerConvModelDesc(
+        layer=nn.AdaptiveMaxPool3d((1, 1, 1)), conv_class=nn.Conv3d, input_sample_sizes=[1, 1, 1, 1]
+    ),
+    ConvLayerConvModelDesc(layer=nn.MaxPool1d(1), conv_class=nn.Conv1d, input_sample_sizes=[1, 1]),
+    ConvLayerConvModelDesc(layer=nn.MaxPool2d((1, 1)), conv_class=nn.Conv2d, input_sample_sizes=[1, 1, 1]),
+    ConvLayerConvModelDesc(layer=nn.MaxPool3d((1, 1, 1)), conv_class=nn.Conv3d, input_sample_sizes=[1, 1, 1, 1]),
     GeneralModelDesc(
         model_name="MaxUnpool3d",
         model_builder=PoolUnPool,
@@ -821,7 +870,7 @@ def test_compressed_graph_models_hw(desc, hw_config_type):
     sketch_graph = compressed_model.nncf.get_original_graph()
 
     potential_quantizer_graph = prepare_potential_quantizer_graph(sketch_graph, single_config_quantizer_setup)
-    path_to_dot = get_full_path_to_the_graph(desc.dot_filename, _case_dir(hw_config_type.value))
+    path_to_dot = get_full_path_to_the_graph(desc.dot_filename(), _case_dir(hw_config_type.value))
     compare_nx_graph_with_reference(potential_quantizer_graph, path_to_dot, sort_dot_graph=False)
 
 

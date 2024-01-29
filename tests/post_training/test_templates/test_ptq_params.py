@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -15,17 +15,22 @@ from typing import Dict
 
 import pytest
 
+import nncf
 from nncf.common.graph.operator_metatypes import InputNoopMetatype
 from nncf.common.graph.operator_metatypes import OperatorMetatype
 from nncf.common.graph.operator_metatypes import OutputNoopMetatype
 from nncf.common.graph.transformations.commands import TargetType
-from nncf.common.quantization.structs import QuantizationMode
 from nncf.common.quantization.structs import QuantizationPreset
+from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
 from nncf.common.quantization.structs import QuantizerConfig
 from nncf.common.quantization.structs import QuantizerGroup
 from nncf.common.tensor_statistics.statistic_point import StatisticPoint
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
 from nncf.common.tensor_statistics.statistics import MinMaxTensorStatistic
+from nncf.experimental.common.tensor_statistics.collectors import MaxAggregator
+from nncf.experimental.common.tensor_statistics.collectors import MeanAggregator
+from nncf.experimental.common.tensor_statistics.collectors import MinAggregator
+from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
 from nncf.parameters import ModelType
 from nncf.quantization.advanced_parameters import OverflowFix
 from nncf.quantization.algorithms.min_max.algorithm import MinMaxQuantization
@@ -91,13 +96,17 @@ class TemplateTestPTQParams:
     def get_algo_backend(self):
         pass
 
-    @abstractmethod
-    def check_is_min_max_statistic_collector(self, tensor_collector):
-        pass
+    def check_is_min_max_statistic_collector(self, tensor_collector: TensorCollector):
+        aggrs = [aggr.__class__ for aggr in tensor_collector.aggregators.values()]
+        assert len(aggrs) == 2
+        assert MinAggregator in aggrs
+        assert MaxAggregator in aggrs
 
-    @abstractmethod
-    def check_is_mean_min_max_statistic_collector(self, tensor_collector):
-        pass
+    def check_is_mean_min_max_statistic_collector(self, tensor_collector: TensorCollector):
+        aggrs = [aggr.__class__ for aggr in tensor_collector.aggregators.values()]
+        assert len(aggrs) == 2
+        assert MeanAggregator in aggrs
+        assert aggrs[0].__class__ == aggrs[1].__class__
 
     @abstractmethod
     def check_quantize_outputs_fq_num(self, quantize_outputs, act_num_q, weight_num_q):
@@ -161,9 +170,9 @@ class TemplateTestPTQParams:
         ignored_patterns = test_params["test_model_type_pass"]["ignored_patterns"]
         inference_nncf_graph = transform_to_inference_graph(
             deepcopy(nncf_graph),
+            min_max_algo._backend_entity.get_start_nodes_for_activation_path_tracing(nncf_graph),
             min_max_algo._backend_entity.shapeof_metatypes,
             min_max_algo._backend_entity.dropout_metatypes,
-            min_max_algo._backend_entity.read_variable_metatypes,
         )
         q_setup = min_max_algo._get_quantizer_setup(nncf_graph, inference_nncf_graph, hw_patterns, ignored_patterns)
         act_num_q, weight_num_q = 0, 0
@@ -186,9 +195,9 @@ class TemplateTestPTQParams:
         ignored_patterns = test_params["test_model_type_pass"]["ignored_patterns"]
         inference_nncf_graph = transform_to_inference_graph(
             deepcopy(nncf_graph),
+            min_max_algo._backend_entity.get_start_nodes_for_activation_path_tracing(nncf_graph),
             min_max_algo._backend_entity.shapeof_metatypes,
             min_max_algo._backend_entity.dropout_metatypes,
-            min_max_algo._backend_entity.read_variable_metatypes,
         )
         q_setup = min_max_algo._get_quantizer_setup(nncf_graph, inference_nncf_graph, hw_patterns, ignored_patterns)
         act_num_q, weight_num_q = 0, 0
@@ -211,9 +220,9 @@ class TemplateTestPTQParams:
         ignored_patterns = test_params["test_model_type_pass"]["ignored_patterns"]
         inference_nncf_graph = transform_to_inference_graph(
             deepcopy(nncf_graph),
+            min_max_algo._backend_entity.get_start_nodes_for_activation_path_tracing(nncf_graph),
             min_max_algo._backend_entity.shapeof_metatypes,
             min_max_algo._backend_entity.dropout_metatypes,
-            min_max_algo._backend_entity.read_variable_metatypes,
         )
         q_setup = min_max_algo._get_quantizer_setup(nncf_graph, inference_nncf_graph, hw_patterns, ignored_patterns)
         for quantization_point in q_setup.quantization_points.values():
@@ -276,14 +285,19 @@ class TemplateTestPTQParams:
     @pytest.mark.parametrize("validate_scopes", (True, False))
     def test_validate_scope(self, test_params, validate_scopes):
         nncf_graph = test_params["test_model_type_pass"]["nncf_graph"]
-        inference_nncf_graph = transform_to_inference_graph(deepcopy(nncf_graph), [], [])
+        inference_nncf_graph = transform_to_inference_graph(
+            deepcopy(nncf_graph),
+            self.get_algo_backend().get_start_nodes_for_activation_path_tracing(nncf_graph),
+            [],
+            [],
+        )
         ignored_patterns = test_params["test_model_type_pass"]["ignored_patterns"]
         algo = MinMaxQuantization(
             ignored_scope=IgnoredScope(names=["some_node"], validate=validate_scopes),
         )
         algo._backend_entity = self.get_algo_backend()
         if validate_scopes:
-            with pytest.raises(RuntimeError, match="Ignored nodes with name"):
+            with pytest.raises(nncf.ValidationError, match="Ignored nodes with name"):
                 algo._get_ignored_names(nncf_graph, inference_nncf_graph, ignored_patterns)
         else:
             algo._get_ignored_names(nncf_graph, inference_nncf_graph, ignored_patterns)
@@ -317,7 +331,7 @@ class TemplateTestPTQParams:
             "nncf.quantization.algorithms.min_max.algorithm.MinMaxQuantization._get_quantization_points_overflow_fix",
             return_value=mocker.MagicMock(),
         )
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(nncf.InternalError) as exc_info:
             algo.apply(None, None, stat_points)
 
         assert str(exc_info.value) == "Statistics were not collected for the node A"

@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -128,6 +128,22 @@ def post_training_quantization_torch_ssd300_vgg16() -> Dict[str, float]:
         "int8_model_size": results[5],
         "model_compression_rate": results[4] / results[5],
     }
+
+
+def llm_compression() -> Dict[str, float]:
+    from examples.llm_compression.openvino.tiny_llama.main import main as llm_compression_main
+
+    result = llm_compression_main()
+
+    return {"word_count": len(result.split())}
+
+
+def llm_tune_params() -> Dict[str, float]:
+    from examples.llm_compression.openvino.tiny_llama_find_hyperparams.main import main as llm_tune_params_main
+
+    ratio, group_size = llm_tune_params_main()
+
+    return {"ratio": ratio, "group_size": group_size}
 
 
 def main(argv):

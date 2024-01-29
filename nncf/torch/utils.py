@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,7 +11,7 @@
 import random
 from collections import OrderedDict
 from contextlib import contextmanager
-from typing import Any, Dict, List
+from typing import Any, Dict, Generator, List
 
 import numpy as np
 import torch
@@ -19,6 +19,7 @@ from torch import distributed as dist
 from torch import nn
 from torch.nn import Module
 
+import nncf
 from nncf.common.compression import BaseCompressionAlgorithmController as BaseController
 from nncf.common.deprecation import warning_deprecated
 from nncf.common.graph import NNCFNodeName
@@ -26,7 +27,7 @@ from nncf.common.logging import nncf_logger
 from nncf.common.scopes import matches_any
 from nncf.torch.dynamic_graph.scope import Scope
 from nncf.torch.dynamic_graph.scope import ScopeElement
-from nncf.torch.dynamic_graph.trace_tensor import TracedTensor
+from nncf.torch.dynamic_graph.trace_tensor import TracedTensorMixin
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.structures import ExecutionParameters
 
@@ -208,7 +209,7 @@ def is_tensor(obj):
 
 
 def is_traced_tensor(obj):
-    return isinstance(obj, TracedTensor)
+    return isinstance(obj, TracedTensorMixin)
 
 
 class _ModuleState:
@@ -245,7 +246,7 @@ def load_module_state(base_module: Module, state: _ModuleState, strict=False) ->
             msg = f"Could not find a module to restore state: {name}"
             nncf_logger.debug(msg)
             if strict:
-                raise RuntimeError(msg) from e
+                raise nncf.InternalError(msg) from e
 
     for name, param in base_module.named_parameters():
         param.requires_grad = state.requires_grad_state[name]
@@ -418,6 +419,24 @@ def get_model_device(model: torch.nn.Module) -> torch.device:
         # The model had no parameters at all, doesn't matter which device to choose
         device = torch.device("cpu")
     return device
+
+
+def get_all_model_devices_generator(model: torch.nn.Module) -> Generator[torch.device, None, None]:
+    for p in model.parameters():
+        yield p.device
+
+
+def is_multidevice(model: torch.nn.Module) -> bool:
+    device_generator = get_all_model_devices_generator(model)
+    try:
+        curr_device = next(device_generator)
+    except StopIteration:  # no parameters
+        return False
+
+    for d in device_generator:
+        if d != curr_device:
+            return True
+    return False
 
 
 def get_model_dtype(model: torch.nn.Module) -> torch.dtype:

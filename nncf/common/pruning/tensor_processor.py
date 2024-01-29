@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -28,7 +28,7 @@ class NNCFPruningBaseTensorProcessor:
         Join a list of NNCFTensors along an existing axis.
 
         :param tensors: List of NNCFTensors.
-        :param axis: The axis along which the tensors will be joined.
+        :param axis: The axis, along which the tensors will be joined.
         :returns: The concatenated List of the tensors.
         """
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -102,7 +102,7 @@ def is_any_weight_quantized(node: NNCFNode, nncf_graph: NNCFGraph) -> bool:
     """
     is_quantized_weight = False
     if node.layer_attributes.has_weight():
-        for port_id in node.layer_attributes.weight_attrs.keys():
+        for port_id in node.layer_attributes.weight_attrs:
             is_quantized_weight = is_quantized_weight or is_port_quantized(node, nncf_graph, port_id)
     return is_quantized_weight
 
@@ -152,31 +152,30 @@ def get_reduction_shape(shape: List[int], axis: int) -> ReductionAxes:
 
 def _get_weight_quantization_axis(node: NNCFNode, port_id: int) -> int:
     """
-    Returns weight tensor axis along quantizer parameters are calculated.
+    Returns weight tensor axis, along which quantizer parameters are calculated.
 
     :param node: NNCFNode, which has a weight on input port_id.
     :param port_id: Input port id on which there is a weight of a node.
-    :return: Axis along quantizer parameters are calculated.
+    :return: Axis, along which quantizer parameters are calculated.
     """
     weight_channel_axis = node.metatype.weight_channel_axis
-    if node.layer_attributes.has_node_attrs():
-        if node.metatype == om.ONNXGemmMetatype:
-            weight_shape = node.layer_attributes.weight_attrs[port_id]["shape"]
-            if (
-                port_id == 0
-                and node.layer_attributes.node_attrs["transA"] == 1
-                or port_id == 1
-                and node.layer_attributes.node_attrs["transB"] == 1
-            ):
-                weight_channel_axis = transpose_axis(weight_shape, weight_channel_axis)
+    if node.layer_attributes.has_node_attrs() and node.metatype == om.ONNXGemmMetatype:
+        weight_shape = node.layer_attributes.weight_attrs[port_id]["shape"]
+        if (
+            port_id == 0
+            and node.layer_attributes.node_attrs["transA"] == 1
+            or port_id == 1
+            and node.layer_attributes.node_attrs["transB"] == 1
+        ):
+            weight_channel_axis = transpose_axis(weight_shape, weight_channel_axis)
     return weight_channel_axis
 
 
 def _get_activation_quantization_axis() -> int:
     """
-    Returns activation tensor axis along quantizer parameters are calculated.
+    Returns activation tensor axis, along which quantizer parameters are calculated.
 
-    :return: Axis along quantizer parameters are calculated.
+    :return: Axis, along which quantizer parameters are calculated.
     """
     return 1  # Activations have channel first layout: [N, C, Z, Y, X]
 

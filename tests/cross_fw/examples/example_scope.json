@@ -55,18 +55,18 @@
         "cpu": "Intel(R) Core(TM) i9-10980XE CPU @ 3.00GHz",
         "accuracy_metrics": {
             "fp32_top1": 0.9680365324020386,
-            "int8_top1": 0.9683257937431335,
-            "accuracy_drop": -0.0002892613410949707
+            "int8_top1": 0.9636363983154297,
+            "accuracy_drop": 0.004400134086608887
         },
         "performance_metrics": {
-            "fp32_fps": 346.23,
-            "int8_fps": 833.56,
-            "performance_speed_up": 2.407532565057909
+            "fp32_fps": 330.17,
+            "int8_fps": 838.9,
+            "performance_speed_up": 2.5408123088106125
         },
         "model_size_metrics": {
             "fp32_model_size": 21.33917808532715,
-            "int8_model_size": 5.725968360900879,
-            "model_compression_rate": 3.726736988461077
+            "int8_model_size": 5.742419242858887,
+            "model_compression_rate": 3.7160606327836403
         }
     },
     "post_training_quantization_openvino_yolo8_quantize_with_accuracy_control": {
@@ -110,8 +110,8 @@
         "cpu": "Intel(R) Core(TM) i9-10980XE CPU @ 3.00GHz",
         "accuracy_metrics": {
             "fp32_top1": 0.9864968152866243,
-            "int8_top1": 0.9836942675159236,
-            "accuracy_drop": 0.0035668789808918078
+            "int8_top1": 0.9849681528662421,
+            "accuracy_drop": 0.0015286624203821875
         },
         "performance_metrics": {
             "fp32_fps": 1624.67,
@@ -119,9 +119,9 @@
             "performance_speed_up": 3.681947718613626
         },
         "model_size_metrics": {
-            "fp32_model_size": 8.605537414550781,
-            "int8_model_size": 2.748152732849121,
-            "model_compression_rate": 3.131389792018245
+            "fp32_model_size": 8.610844612121582,
+            "int8_model_size": 2.637709617614746,
+            "model_compression_rate": 3.264515758147889
         }
     },
     "post_training_quantization_torch_ssd300_vgg16": {
@@ -142,6 +142,23 @@
             "fp32_model_size": 137.3418207168579,
             "int8_model_size": 35.55147361755371,
             "model_compression_rate": 3.8631822183889652
+        }
+    },
+    "llm_compression": {
+        "backend": "openvino",
+        "requirements": "examples/llm_compression/openvino/tiny_llama/requirements.txt",
+        "cpu": "Intel(R) Core(TM) i9-10980XE CPU @ 3.00GHz",
+        "accuracy_metrics": {
+            "word_count": 71
+        }
+    },
+    "llm_tune_params": {
+        "backend": "openvino",
+        "requirements": "examples/llm_compression/openvino/tiny_llama_find_hyperparams/requirements.txt",
+        "cpu": "Intel(R) Core(TM) i9-10980XE CPU @ 3.00GHz",
+        "accuracy_metrics": {
+            "ratio": 0.9,
+            "group_size": 64
         }
     }
 }

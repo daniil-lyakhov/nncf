@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -12,7 +12,7 @@
 import functools
 import inspect
 from contextlib import contextmanager
-from typing import List
+from typing import List, Tuple
 
 import torch
 import torch.utils.cpp_extension
@@ -21,24 +21,26 @@ from torch.jit import is_tracing
 from torch.nn import DataParallel
 from torch.nn.parallel import DistributedDataParallel
 
+import nncf
 from nncf import nncf_logger
 from nncf.common.utils.api_marker import api
 from nncf.torch.dynamic_graph.structs import NamespaceTarget
 from nncf.torch.dynamic_graph.structs import PatchedOperatorInfo
+from nncf.torch.dynamic_graph.trace_tensor import TracedParameter
 from nncf.torch.dynamic_graph.trace_tensor import TracedTensor
 from nncf.torch.dynamic_graph.wrappers import ignore_scope
 from nncf.torch.dynamic_graph.wrappers import wrap_module_call
 from nncf.torch.dynamic_graph.wrappers import wrap_operator
 
 
-def get_namespace_to_patch(namespace_target: NamespaceTarget) -> object:
+def get_namespaces_to_patch(namespace_target: NamespaceTarget) -> Tuple[object, ...]:
     if namespace_target == NamespaceTarget.TORCH_NN_FUNCTIONAL:
-        return torch.nn.functional
+        return (torch.nn.functional,)
     if namespace_target == NamespaceTarget.TORCH_TENSOR:
-        return TracedTensor
+        return (TracedTensor, TracedParameter)
     if namespace_target == NamespaceTarget.TORCH:
-        return torch
-    raise RuntimeError("{} namespace wasn't found in {}".format(namespace_target, NamespaceTarget))
+        return (torch,)
+    raise nncf.ValidationError("{} namespace wasn't found in {}".format(namespace_target, NamespaceTarget))
 
 
 def get_namespace_to_extract_functions_from(namespace_target: NamespaceTarget) -> object:
@@ -48,7 +50,7 @@ def get_namespace_to_extract_functions_from(namespace_target: NamespaceTarget) -
         return torch.Tensor
     if namespace_target == NamespaceTarget.TORCH:
         return torch._C._VariableFunctions
-    raise RuntimeError("{} namespace wasn't found in {}".format(namespace_target, NamespaceTarget))
+    raise nncf.ValidationError("{} namespace wasn't found in {}".format(namespace_target, NamespaceTarget))
 
 
 class FunctionsToPatchWithoutTracing:
@@ -58,8 +60,6 @@ class FunctionsToPatchWithoutTracing:
         "as_tensor",
         "copysign",
         "copysign_",
-        "detach",
-        "detach_",
         "empty",
         "ones",
         "ones_like",
@@ -112,7 +112,6 @@ class FunctionsToPatchWithoutTracing:
         "storage",
         "storage_offset",
         "stride",
-        "to",
         "get_device",
     ]
 
@@ -122,35 +121,49 @@ class FunctionsToPatchWithoutTracing:
 class MagicFunctionsToPatch:
     MAGIC_FUNCTIONS_TO_PATCH = {
         NamespaceTarget.TORCH_TENSOR: [
+            "__abs__",
             "__add__",
-            "__iadd__",
-            "__radd__",
-            "__sub__",
-            "__isub__",
-            "__rsub__",
-            "__mul__",
-            "__matmul__",
-            "__rmatmul__",
-            "__imul__",
-            "__rmul__",
-            "__div__",
-            "__idiv__",
-            "__truediv__",
-            "__floordiv__",
-            "__ifloordiv__",
-            "__rfloordiv__",
-            "__getitem__",
-            "__lt__",
-            "__le__",
-            "__gt__",
-            "__ge__",
-            "__mod__",
-            "__eq__",
-            "__ne__",
-            "__or__",
-            "__xor__",
             "__and__",
+            "__div__",
+            "__eq__",
+            "__floordiv__",
+            "__ge__",
+            "__getitem__",
+            "__gt__",
+            "__iadd__",
+            "__iand__",
+            "__idiv__",
+            "__ifloordiv__",
+            "__imul__",
+            "__invert__",
+            "__ior__",
+            "__ipow__",
+            "__isub__",
+            "__itruediv__",
+            "__ixor__",
+            "__le__",
+            "__lt__",
+            "__matmul__",
+            "__mod__",
+            "__mul__",
+            "__ne__",
+            "__neg__",
+            "__or__",
             "__pow__",
+            "__radd__",
+            "__rand__",
+            "__rdiv__",
+            "__rfloordiv__",
+            "__rmatmul__",
+            "__rmul__",
+            "__ror__",
+            "__rpow__",
+            "__rsub__",
+            "__rtruediv__",
+            "__rxor__",
+            "__sub__",
+            "__truediv__",
+            "__xor__",
         ]
     }
 
@@ -355,8 +368,8 @@ def patch_torch_operators():
     for namespace, function_names in functions_to_patch.items():
         for function_name in function_names:
             op_info = PatchedOperatorInfo(function_name, namespace)
-            patched_namespace = get_namespace_to_patch(namespace)
-            patch_namespace_opname(patched_namespace, op_info)
+            for patched_namespace in get_namespaces_to_patch(namespace):
+                patch_namespace_opname(patched_namespace, op_info)
 
     # Patch operators without tracing so that
     # both they and any internal calls to otherwise traced functions do not appear into the model graph.
@@ -364,8 +377,8 @@ def patch_torch_operators():
     for namespace, function_names in functions_to_patch_without_tracing.items():
         for function_name in function_names:
             op_info = PatchedOperatorInfo(function_name, namespace, skip_trace=True)
-            patched_namespace = get_namespace_to_patch(namespace)
-            patch_namespace_opname(patched_namespace, op_info)
+            for patched_namespace in get_namespaces_to_patch(namespace):
+                patch_namespace_opname(patched_namespace, op_info)
 
     # Patch __repr__ twice in 'torch.Tensor' and 'TracedTensor'.
     # This is done to not add operations behind print() operator for the both TracedTensor and torch.Tensor.

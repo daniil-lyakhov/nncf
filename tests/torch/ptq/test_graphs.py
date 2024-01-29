@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -102,4 +102,4 @@ def test_min_max_classification_quantized_graphs(desc: ModelDesc, quantization_p
 
     quantized_model = quantization_algorithm.apply(nncf_network, nncf_network.nncf.get_graph(), dataset=None)
 
-    check_graph(quantized_model.nncf.get_graph(), desc.dot_filename, graph_dir)
+    check_graph(quantized_model.nncf.get_graph(), desc.dot_filename(), graph_dir)

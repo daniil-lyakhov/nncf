@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,7 +17,7 @@ from examples.tensorflow.classification.main import load_checkpoint
 from examples.tensorflow.classification.main import load_compression_state
 from nncf.common.graph.transformations.commands import TargetPoint
 from nncf.common.graph.transformations.commands import TargetType
-from nncf.common.quantization.structs import QuantizationMode
+from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
 from nncf.tensorflow import create_compression_callbacks
 from nncf.tensorflow import register_default_init_args
 from nncf.tensorflow.callbacks.checkpoint_callback import CheckpointManagerCallback

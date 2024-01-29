@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Intel Corporation
+# Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -179,7 +179,7 @@ class QuantizationEnv:
             self.qctrl.all_quantizations.keys()
         )
         if self.hw_cfg_type is None:
-            for qid in self.qconfig_space_map.keys():
+            for qid in self.qconfig_space_map:
                 conf = self.qctrl.all_quantizations[qid].get_quantizer_config()
                 conf_list_to_set = []
                 for bit in self.model_bitwidth_space:
