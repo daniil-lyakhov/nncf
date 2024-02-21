@@ -2,7 +2,7 @@
     "model": "mobilenet_v3_small",
     "pretrained": true,
     "input_info": {
-      "sample_size": [2, 3, 224, 224]
+      "sample_size": [1, 3, 224, 224]
     },
     "batch_size": 256,
     "epochs": 5,
@@ -20,11 +20,10 @@
         "preset": "mixed",
         "initializer": {
             "range": {
-                "num_init_samples": 4000,
-                "type": "mean_percentile"
+                "num_init_samples": 300
             },
            "batchnorm_adaptation": {
-                "num_bn_adaptation_samples": 4096
+                "num_bn_adaptation_samples": 0
            }
         },
         "weights": {

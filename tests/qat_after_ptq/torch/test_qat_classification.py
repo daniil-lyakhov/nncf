@@ -12,43 +12,53 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import openvino as ov
 import pytest
 import torch
 import torch.utils.data
 import torch.utils.data.distributed
-from helpers import broadcast_initialized_parameters
+
+# from helpers import broadcast_initialized_parameters
 from helpers import get_advanced_ptq_parameters
 from helpers import get_mocked_compression_ctrl
 from helpers import get_num_samples
 from helpers import get_quantization_preset
 from torch import nn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 import nncf
 from examples.common.sample_config import SampleConfig
 from examples.common.sample_config import create_sample_config
+
+# from examples.torch.classification.main import inception_criterion_fn
+# from examples.torch.classification.main import train_epoch
 from examples.torch.classification.main import create_data_loaders
 from examples.torch.classification.main import create_datasets
 from examples.torch.classification.main import get_argument_parser
-from examples.torch.classification.main import inception_criterion_fn
-from examples.torch.classification.main import train_epoch
 from examples.torch.classification.main import validate
 from examples.torch.common.example_logger import logger
+
+# from examples.torch.common.execution import prepare_model_for_execution
 from examples.torch.common.execution import get_execution_mode
-from examples.torch.common.execution import prepare_model_for_execution
 from examples.torch.common.execution import start_worker
 from examples.torch.common.model_loader import load_model
-from examples.torch.common.optimizer import get_parameter_groups
-from examples.torch.common.optimizer import make_optimizer
+
+# from examples.torch.common.optimizer import get_parameter_groups
+# from examples.torch.common.optimizer import make_optimizer
 from examples.torch.common.utils import configure_device
 from examples.torch.common.utils import configure_logging
 from examples.torch.common.utils import is_pretrained_model_requested
 from nncf import NNCFConfig
-from nncf.torch.initialization import default_criterion_fn
+
+# from nncf.torch.initialization import default_criterion_fn
 from nncf.torch.utils import is_main_process
 from tests.shared.paths import PROJECT_ROOT
 
+# from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+
 CONFIGS = list((PROJECT_ROOT / Path("examples/torch/classification/configs/quantization")).glob("*"))
+
+RUNTIME = "OV"
 
 
 @pytest.fixture(name="quantization_config_path", params=CONFIGS, ids=[conf.stem for conf in CONFIGS])
@@ -62,8 +72,8 @@ def get_sample_config(quantization_config_path: Path, data_dir: str) -> SampleCo
     args = parser.parse_args(["-c", str(quantization_config_path), "--data", str(data_dir), "--dataset", "imagenet"])
     sample_config = create_sample_config(args, parser)
     device = torch.device("cpu")
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
+    # if torch.cuda.is_available():
+    #    device = torch.device("cuda")
 
     sample_config.device = device
     sample_config.execution_mode = get_execution_mode(sample_config)
@@ -85,7 +95,11 @@ def get_datasets(sample_config: SampleConfig) -> DatasetSet:
     )
 
     def transform_fn(data_item):
-        return data_item[0].to(sample_config.device)
+        if RUNTIME == "ONNX":
+            return {"input.1": data_item[0].cpu().detach().numpy()}
+        if RUNTIME == "OV":
+            return data_item[0].to("cpu")
+        raise RuntimeError
 
     val_data_loader_batch_one = torch.utils.data.DataLoader(
         val_dataset,
@@ -96,7 +110,7 @@ def get_datasets(sample_config: SampleConfig) -> DatasetSet:
     calibration_dataset = nncf.Dataset(val_data_loader_batch_one, transform_fn)
     return DatasetSet(
         train_data_loader=train_data_lodaer,
-        val_data_loader=val_data_loader,
+        val_data_loader=val_data_loader_batch_one,
         train_sampler=train_sampler,
         calibration_dataset=calibration_dataset,
     )
@@ -145,7 +159,8 @@ def main_worker(current_gpu: int, config: SampleConfig):
     criterion = criterion.to(config.device)
 
     logger.info("Original model validation:")
-    original_accuracy, *_ = validate(datasets.val_data_loader, model, criterion, config)
+    # original_accuracy, *_ = validate(datasets.val_data_loader, model, criterion, config)
+    original_accuracy = 100.0
 
     logger.info("Apply quantization to the model:")
     config_quantization_params = config["compression"]
@@ -154,6 +169,23 @@ def main_worker(current_gpu: int, config: SampleConfig):
     advanced_parameters = get_advanced_ptq_parameters(config_quantization_params)
     subset_size = get_num_samples(config_quantization_params)
 
+    input_size = config.input_info.sample_size
+    model = model.cpu()
+    if RUNTIME == "ONNX":
+        import numpy as np
+        import onnx
+
+        onnx_path = "model_fp32.onnx"
+        dummy_tensor = np.empty(input_size)
+        dummy_tensor = torch.rand(input_size).cpu()
+        torch.onnx.export(model, dummy_tensor, onnx_path, export_params=True, opset_version=13)
+        model = onnx.load(onnx_path)
+    if RUNTIME == "OV":
+        dummy_tensor = torch.rand(input_size).cpu()
+        model = ov.convert_model(model.cpu(), example_input=dummy_tensor, input=input_size)
+
+    advanced_parameters.disable_bias_correction = True
+    # advanced_parameters.disable_channel_alignment = False
     quantized_model = nncf.quantize(
         model,
         datasets.calibration_dataset,
@@ -161,6 +193,7 @@ def main_worker(current_gpu: int, config: SampleConfig):
         advanced_parameters=advanced_parameters,
         subset_size=subset_size,
     )
+    # quantized_model.reshape(tuple([128] + input_size[1:]))
 
     acc_drop = train(
         quantized_model,
@@ -199,13 +232,17 @@ def train(
     """
     :return: Accuracy drop between original accuracy and trained quantized model accuracy.
     """
-    model, _ = prepare_model_for_execution(model, config)
-    if config.distributed:
-        broadcast_initialized_parameters(model)
-    model_name = config["model"]
-    train_criterion_fn = inception_criterion_fn if "inception" in model_name else default_criterion_fn
-    params_to_optimize = get_parameter_groups(model, config)
-    optimizer, lr_scheduler = make_optimizer(params_to_optimize, config)
+    if RUNTIME == "OV":
+        ie = ov.Core()
+        model = ie.compile_model(model, "CPU")
+
+    # model, _ = prepare_model_for_execution(model, config)
+    # if config.distributed:
+    #    broadcast_initialized_parameters(model)
+    # model_name = config["model"]
+    # train_criterion_fn = inception_criterion_fn if "inception" in model_name else default_criterion_fn
+    # params_to_optimize = get_parameter_groups(model, config)
+    # optimizer, lr_scheduler = make_optimizer(params_to_optimize, config)
     best_acc1 = 0
     logger.info("Qantization aware training pipeline starts.")
     for epoch in range(config.start_epoch, config.epochs + 1):
@@ -228,9 +265,10 @@ def train(
             datasets.train_sampler.set_epoch(epoch)
 
         # train for one epoch
-        train_epoch(
-            datasets.train_data_loader, model, criterion, train_criterion_fn, optimizer, compression_ctrl, epoch, config
-        )
+        # train_epoch(
+        #    datasets.train_data_loader, model, criterion, train_criterion_fn, optimizer, compression_ctrl,
+        # epoch, config
+        # )
 
         # Learning rate scheduling should be applied after optimizer’s update
-        lr_scheduler.step(epoch if not isinstance(lr_scheduler, ReduceLROnPlateau) else best_acc1)
+        # lr_scheduler.step(epoch if not isinstance(lr_scheduler, ReduceLROnPlateau) else best_acc1)

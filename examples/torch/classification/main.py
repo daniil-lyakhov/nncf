@@ -671,19 +671,34 @@ def validate(val_loader, model, criterion, config, epoch=0, log_validation_info=
     top1 = AverageMeter()
     top5 = AverageMeter()
 
+    runtime = "OV"
     # switch to evaluate mode
-    model.eval()
+    # model.eval()
 
     casting = autocast if config.mixed_precision else NullContextManager
     with torch.no_grad():
         end = time.time()
+        if runtime == "ONNX":
+            import onnxruntime as rt
+
+            rt_session_options = {}
+            serialized_model = model.SerializeToString()
+            sess = rt.InferenceSession(serialized_model, **rt_session_options)
+
         for i, (input_, target) in enumerate(val_loader):
-            input_ = input_.to(config.device)
-            target = target.to(config.device)
+            input_ = input_.to("cpu")
+            target = target.to("cpu")
 
             # compute output
             with casting():
-                output = model(input_)
+                if runtime == "OV":
+                    output = model(input_)
+                    output = output[list(output.keys())[0]]
+                    output = torch.tensor(output)
+                if runtime == "ONNX":
+                    [output] = sess.run([], {"input.1": input_.cpu().detach().numpy()})
+                    output = torch.tensor(output)
+
                 loss = default_criterion_fn(output, target, criterion)
 
             # measure accuracy and record loss
