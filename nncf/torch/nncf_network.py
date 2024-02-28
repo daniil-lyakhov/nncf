@@ -68,6 +68,8 @@ from nncf.torch.graph.operator_metatypes import OPERATORS_WITH_WEIGHTS_METATYPES
 from nncf.torch.graph.operator_metatypes import PTSplitMetatype
 from nncf.torch.graph.transformations.commands import DEFAULT_HOOKS_GROUP_NAME
 from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import PTTransformationCommand
+from nncf.torch.graph.transformations.serialization import serialize_command
 from nncf.torch.knowledge_distillation.knowledge_distillation_handler import KnowledgeDistillationLossHandler
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.nncf_module_replacement import replace_modules_by_nncf_modules
@@ -266,6 +268,7 @@ class NNCFNetworkInterface(torch.nn.Module):
         self._user_dummy_forward_fn = dummy_forward_fn
         self._kd_loss_handler = None
         self._groups_vs_hooks_handlers: Dict[str, List[HookHandle]] = defaultdict(list)
+        self._recorded_commands = []
 
         if wrap_inputs_fn is not None:
             self._wrap_inputs_fn = wrap_inputs_fn
@@ -478,6 +481,16 @@ class NNCFNetworkInterface(torch.nn.Module):
         for handle in self._groups_vs_hooks_handlers[hooks_group_name]:
             handle.remove()
         del self._groups_vs_hooks_handlers[hooks_group_name]
+
+    def record_commands(self, commands: List[PTTransformationCommand]):
+        for command in commands:
+            serialized_command = serialize_command(command)
+            if serialized_command:
+                self._recorded_commands.append(serialized_command)
+
+    @property
+    def recorded_commands(self):
+        return self._recorded_commands
 
     def get_graph(self) -> PTNNCFGraph:
         if self._compressed_context.graph.get_nodes_count() == 0 or self._compressed_graphs_pair.nncf_graph is None:

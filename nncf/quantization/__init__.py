@@ -15,3 +15,4 @@ from nncf.quantization.quantize_model import compress_weights as compress_weight
 from nncf.quantization.quantize_model import get_quantization_transformations as get_quantization_transformations
 from nncf.quantization.quantize_model import quantize as quantize
 from nncf.quantization.quantize_model import quantize_with_accuracy_control as quantize_with_accuracy_control
+from nncf.quantization.quantize_model import serialize_transformations as serialize_transformations

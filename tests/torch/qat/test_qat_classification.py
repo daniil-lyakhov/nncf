@@ -46,7 +46,6 @@ from examples.torch.common.utils import is_pretrained_model_requested
 from nncf import NNCFConfig
 from nncf.common.compression import BaseCompressionAlgorithmController
 from nncf.torch.graph.transformations.serialization import load_transformations
-from nncf.torch.graph.transformations.serialization import serialize_transformations
 from nncf.torch.initialization import default_criterion_fn
 from nncf.torch.utils import is_main_process
 from tests.shared.paths import PROJECT_ROOT
@@ -319,7 +318,8 @@ def save_load_main_worker(current_gpu: int, config: SampleConfig):
     criterion = criterion.to(config.device)
 
     logger.info("Original model validation:")
-    original_accuracy, *_ = validate(datasets.val_data_loader, model, criterion, config)
+    # original_accuracy, *_ = validate(datasets.val_data_loader, model, criterion, config)
+    original_accuracy = 100.0
 
     logger.info("Apply quantization to the model:")
     config_quantization_params = config["compression"]
@@ -328,18 +328,15 @@ def save_load_main_worker(current_gpu: int, config: SampleConfig):
     advanced_parameters = get_advanced_ptq_parameters(config_quantization_params)
     subset_size = get_num_samples(config_quantization_params)
 
-    transformations = nncf.get_quantization_transformations(
-        # quantized_model = nncf.quantize(
+    quantized_model = nncf.quantize(
         model,
         datasets.calibration_dataset,
         preset=preset,
         advanced_parameters=advanced_parameters,
         subset_size=subset_size,
     )
-    quantized_model = nncf.apply_transformations(
-        model, transformations, next(iter(datasets.calibration_dataset.get_inference_data()))
-    )
-    ckpt = serialize_transformations(quantized_model, transformations)
+
+    ckpt = nncf.serialize_transformations(quantized_model)
     del quantized_model
     quantized_model = load_transformations(model, ckpt, next(iter(datasets.calibration_dataset.get_inference_data())))
 

@@ -30,7 +30,10 @@ from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
 from nncf.quantization.algorithms.weight_compression.algorithm import WeightCompression
 from nncf.scopes import IgnoredScope
+from nncf.torch.graph.transformations.serialization import COMPRESSION_STATE_ATTR
+from nncf.torch.graph.transformations.serialization import MODEL_STATE_ATTR
 from nncf.torch.model_creation import wrap_model
+from nncf.torch.nncf_network import NNCFNetwork
 
 DEFAULT_RANGE_TYPE = "mean_min_max"
 
@@ -156,3 +159,12 @@ def get_quantization_transformations(
     return quantization_algorithm.get_transformation_layout(
         nncf_network, nncf_network.nncf.get_graph(), dataset=calibration_dataset
     )
+
+
+def serialize_transformations_impl(
+    model: NNCFNetwork,
+):
+    return {
+        MODEL_STATE_ATTR: model.state_dict(),
+        COMPRESSION_STATE_ATTR: model.nncf.recorded_commands,
+    }

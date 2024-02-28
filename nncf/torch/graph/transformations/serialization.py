@@ -14,16 +14,18 @@ from enum import Enum
 import torch
 
 import nncf
-from examples.torch.common.model_loader import COMPRESSION_STATE_ATTR
-from examples.torch.common.model_loader import MODEL_STATE_ATTR
 from nncf.common.graph.transformations.commands import TransformationPriority
 from nncf.common.graph.transformations.layout import TransformationLayout
+from nncf.torch.graph.transformations.commands import PTQuantizerInsertionCommand
+from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.commands import PTTransformationCommand
 from nncf.torch.layer_utils import COMPRESSION_MODULES
-from nncf.torch.model_transformer import PTQuantizerInsertionCommand
-from nncf.torch.model_transformer import PTSharedFnInsertionCommand
 from nncf.torch.quantization.layers import QUANTIZATION_MODULES
 from nncf.torch.quantization.layers import PTQuantizerSpec
+
+MODEL_STATE_ATTR = "state_dict"
+COMPRESSION_STATE_ATTR = "compression_state"
 
 
 class CompressionKeys(Enum):
@@ -31,33 +33,39 @@ class CompressionKeys(Enum):
     SHARED_INSERTION_COMMAND = "SHARED_INSERTION_COMMAND"
 
 
+def serialize_command(command: PTTransformationCommand):
+    if not isinstance(command, (PTQuantizerInsertionCommand, PTSharedFnInsertionCommand)):
+        return {}
+
+    serialized_transformation = dict()
+    if isinstance(command, PTQuantizerInsertionCommand):
+        serialized_transformation["type"] = CompressionKeys.QUANTIZER_INSERTION_COMMAND.value
+        serialized_transformation["target_point"] = command.target_point.get_state()
+        serialized_transformation["quantizer_spec"] = command.quantizer.quantizer_spec.get_state()
+    if isinstance(command, PTSharedFnInsertionCommand):
+        serialized_transformation["type"] = CompressionKeys.SHARED_INSERTION_COMMAND.value
+        serialized_transformation["target_points"] = [point.get_state() for point in command.target_points]
+        serialized_transformation["fn_name"] = command.fn.__name__
+        serialized_transformation["fn_state"] = command.fn.get_state()
+        serialized_transformation["op_name"] = command.op_name
+        serialized_transformation["priority"] = command.priority.value
+    serialized_transformation["hooks_group_name"] = command.hooks_group_name
+    return serialized_transformation
+
+
 def serialize_transformations(model: torch.nn.Module, transformations_layout: TransformationLayout):
     transformation_commands = []
-    for transformation in transformations_layout.transformations:
-        if not isinstance(transformation, (PTQuantizerInsertionCommand, PTSharedFnInsertionCommand)):
-            continue
-
-        serialized_transformation = dict()
-        if isinstance(transformation, PTQuantizerInsertionCommand):
-            serialized_transformation["type"] = CompressionKeys.QUANTIZER_INSERTION_COMMAND.value
-            serialized_transformation["target_point"] = transformation.target_point.get_state()
-            serialized_transformation["quantizer_spec"] = transformation.quantizer.quantizer_spec.get_state()
-        if isinstance(transformation, PTSharedFnInsertionCommand):
-            serialized_transformation["type"] = CompressionKeys.SHARED_INSERTION_COMMAND.value
-            serialized_transformation["target_points"] = [point.get_state() for point in transformation.target_points]
-            serialized_transformation["fn_name"] = transformation.fn.__name__
-            serialized_transformation["fn_state"] = transformation.fn.get_state()
-            serialized_transformation["op_name"] = transformation.op_name
-            serialized_transformation["priority"] = transformation.priority.value
-        serialized_transformation["hooks_group_name"] = transformation.hooks_group_name
-        transformation_commands.append(serialized_transformation)
+    for command in transformations_layout.transformations:
+        serialized_command = serialize_command(command)
+        if serialized_command:
+            transformation_commands.append(serialized_command)
 
     return {MODEL_STATE_ATTR: model.state_dict(), COMPRESSION_STATE_ATTR: transformation_commands}
 
 
-def load_transformations(model: torch.nn.Module, transformations, example_input) -> torch.nn.Module:
+def load_transformations(model: torch.nn.Module, transformations_state, example_input) -> torch.nn.Module:
     transformation_layout = TransformationLayout()
-    for command in transformations[COMPRESSION_STATE_ATTR]:
+    for command in transformations_state[COMPRESSION_STATE_ATTR]:
         if command["type"] == CompressionKeys.QUANTIZER_INSERTION_COMMAND.value:
             qspec = PTQuantizerSpec.from_state(command["quantizer_spec"])
             quantizer_cls = QUANTIZATION_MODULES.get(qspec.mode)
@@ -86,5 +94,5 @@ def load_transformations(model: torch.nn.Module, transformations, example_input)
             continue
         raise RuntimeError(f"Command type {command['type']} is not supported.")
     transformed_model = nncf.apply_transformations(model, transformation_layout, example_input)
-    transformed_model.load_state_dict(transformations[MODEL_STATE_ATTR])
+    transformed_model.load_state_dict(transformations_state[MODEL_STATE_ATTR])
     return transformed_model

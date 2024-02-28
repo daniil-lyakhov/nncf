@@ -535,3 +535,18 @@ def apply_transformations(
 
         return apply_transformations_impl(model, transformation_layout, example_input)
     raise nncf.UnsupportedBackendError(f"Unsupported type of backend: {backend}")
+
+
+@api(canonical_alias="nncf.serialize_transformations")
+def serialize_transformations(
+    model: TModel,
+) -> TModel:
+    """
+    Applies transformation layout to the model.
+    """
+    backend = get_backend(model)
+    if backend == BackendType.TORCH:
+        from nncf.torch.quantization.quantize_model import serialize_transformations_impl
+
+        return serialize_transformations_impl(model)
+    raise nncf.UnsupportedBackendError(f"Unsupported type of backend: {backend}")

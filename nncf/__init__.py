@@ -44,6 +44,7 @@ from nncf.quantization import compress_weights as compress_weights
 from nncf.quantization import get_quantization_transformations as get_quantization_transformations
 from nncf.quantization import quantize as quantize
 from nncf.quantization import quantize_with_accuracy_control as quantize_with_accuracy_control
+from nncf.quantization import serialize_transformations as serialize_transformations
 from nncf.quantization.advanced_parameters import (
     AdvancedAccuracyRestorerParameters as AdvancedAccuracyRestorerParameters,
 )
