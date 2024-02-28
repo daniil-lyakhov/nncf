@@ -14,6 +14,7 @@ from typing import Any, Callable, Iterable, List, Optional, Tuple, TypeVar, Unio
 import nncf
 from nncf.api.compression import TModel
 from nncf.common.deprecation import warning_deprecated
+from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.utils.api_marker import api
 from nncf.common.utils.backend import BackendType
@@ -482,3 +483,55 @@ def quantize_with_tune_hyperparams(
     quantized_model = hyperparameter_tuner.apply(model, validation_dataset)
 
     return quantized_model
+
+
+@api(canonical_alias="nncf.get_quantization_transformations")
+def get_quantization_transformations(
+    model: TModel,
+    calibration_dataset: Dataset,
+    mode: Optional[QuantizationMode] = None,
+    preset: Optional[QuantizationPreset] = None,
+    target_device: TargetDevice = TargetDevice.ANY,
+    subset_size: int = 300,
+    fast_bias_correction: bool = True,
+    model_type: Optional[ModelType] = None,
+    ignored_scope: Optional[IgnoredScope] = None,
+    advanced_parameters: Optional[AdvancedQuantizationParameters] = None,
+) -> TransformationLayout:
+    """
+    Applies transformation layout to the model.
+    """
+    backend = get_backend(model)
+    if backend == BackendType.TORCH:
+        from nncf.torch.quantization.quantize_model import get_quantization_transformations
+
+        return get_quantization_transformations(
+            model=model,
+            calibration_dataset=calibration_dataset,
+            mode=mode,
+            preset=preset,
+            target_device=target_device,
+            subset_size=subset_size,
+            fast_bias_correction=fast_bias_correction,
+            model_type=model_type,
+            ignored_scope=ignored_scope,
+            advanced_parameters=advanced_parameters,
+        )
+    raise nncf.UnsupportedBackendError(f"Unsupported type of backend: {backend}")
+
+
+@api(canonical_alias="nncf.apply_transformations")
+def apply_transformations(
+    model: TModel,
+    transformation_layout: TransformationLayout,
+    example_input: TTensor,
+) -> TModel:
+    """
+    Applies transformation layout to the model.
+    """
+    backend = get_backend(model)
+    if backend == BackendType.TORCH:
+        from nncf.torch.quantization.quantize_model import apply_transformations_impl
+
+        return apply_transformations_impl(model, transformation_layout, example_input)
+    raise nncf.UnsupportedBackendError(f"Unsupported type of backend: {backend}")

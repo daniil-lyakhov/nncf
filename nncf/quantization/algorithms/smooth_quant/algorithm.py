@@ -16,7 +16,6 @@ from typing import Dict, List, Optional, Tuple, TypeVar
 
 import nncf
 from nncf import Dataset
-from nncf.common.factory import ModelTransformerFactory
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.graph.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import OperatorMetatype
@@ -91,18 +90,17 @@ class SmoothQuant(Algorithm):
                 "Cannot return backend-specific entity because {} is not supported!".format(model_backend.value)
             )
 
-    def apply(
+    def get_transformation_layout(
         self,
         model: TModel,
         graph: NNCFGraph,
         statistic_points: Optional[StatisticPointsContainer] = None,
         dataset: Optional[Dataset] = None,
-    ) -> TModel:
+    ) -> TransformationLayout:
         self._set_backend_entity(model)
         alpha_map = self._get_alpha_map()
 
         nodes_to_smooth_data = self._get_nodes_to_smooth_data(graph, alpha_map.keys())
-        model_transformer = ModelTransformerFactory.create(model)
         transformation_layout = TransformationLayout()
 
         node_groups = self._group_nodes_by_source(nodes_to_smooth_data, graph)
@@ -168,9 +166,7 @@ class SmoothQuant(Algorithm):
                 source_node, activation_scale.data, source_output_port_id, nodes, scale_node_name
             )
             transformation_layout.register(scale_insertion_command)
-
-        transformed_model = model_transformer.transform(transformation_layout)
-        return transformed_model
+        return transformation_layout
 
     @staticmethod
     def _calculate_scale_and_ratio(

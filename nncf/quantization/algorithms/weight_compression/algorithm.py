@@ -18,6 +18,7 @@ from nncf.common.factory import StatisticsAggregatorFactory
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.graph.graph import NNCFNode
 from nncf.common.graph.transformations.commands import TargetType
+from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.logging import nncf_logger
 from nncf.common.logging.track_progress import track
 from nncf.common.scopes import should_consider_scope
@@ -365,7 +366,18 @@ class WeightCompression(Algorithm):
         return transformed_model
 
     def get_statistic_points(self, model: TModel, graph: NNCFGraph) -> StatisticPointsContainer:
-        pass
+        return StatisticPointsContainer()
+
+    def get_transformation_layout(
+        self,
+        model: TModel,
+        graph: NNCFGraph,
+        statistic_points: Optional[StatisticPointsContainer] = None,
+        dataset: Optional[Dataset] = None,
+    ) -> TransformationLayout:
+        raise NotImplementedError(
+            "get_transformation_layout is not implemented yet for the weights compression algorithm."
+        )
 
     def _get_activation_node_and_port(self, node: NNCFNode, nncf_graph: NNCFGraph) -> Tuple[NNCFNode, int]:
         """

@@ -71,6 +71,8 @@ class Pipeline:
         :param pipeline_steps: A sequence of pipeline steps to be executed in order.
         """
         self._pipeline_steps = pipeline_steps
+        self._algorithms_applied = False
+        self._transformation_layout_list = []
 
     @property
     def pipeline_steps(self) -> List[PipelineStep]:
@@ -114,11 +116,21 @@ class Pipeline:
         pipeline_steps = self._remove_unsupported_algorithms(get_backend(model))
         pipeline_step = pipeline_steps[step_index]
         for algorithm in pipeline_step[:-1]:
-            current_model = algorithm.apply(current_model, current_graph, step_statistics)
+            current_model = self._apply_algoritm(algorithm, current_model, step_statistics, current_graph)
             current_graph = NNCFGraphFactory.create(current_model)
-        current_model = pipeline_step[-1].apply(current_model, current_graph, step_statistics)
-
+        current_model = self._apply_algoritm(pipeline_step[-1], current_model, step_statistics, current_graph)
         return current_model
+
+    def _apply_algoritm(
+        self,
+        algorithm: Algorithm,
+        current_model: TModel,
+        step_statistics: StatisticPointsContainer,
+        current_graph: NNCFGraph,
+    ) -> TModel:
+        transformation_layout = algorithm.get_transformation_layout(current_model, current_graph, step_statistics)
+        self._transformation_layout_list.extend(transformation_layout.transformations)
+        return algorithm.apply_transformation_layout(current_model, transformation_layout)
 
     def run_from_step(
         self,
@@ -165,6 +177,7 @@ class Pipeline:
 
             step_graph = None  # We should rebuild the graph for the next pipeline step
 
+        self._algorithms_applied = True
         return step_model
 
     def get_statistic_points_for_step(

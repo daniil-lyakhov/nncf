@@ -15,7 +15,6 @@ import numpy as np
 
 from nncf import Dataset
 from nncf.common.factory import CommandCreatorFactory
-from nncf.common.factory import ModelTransformerFactory
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.graph.graph import NNCFNode
 from nncf.common.graph.patterns import GraphPattern
@@ -90,15 +89,14 @@ class ChannelAlignment(Algorithm):
 
             self._backend_entity = OVChannelAlignmentAlgoBackend()
 
-    def apply(
+    def get_transformation_layout(
         self,
         model: TModel,
         graph: NNCFGraph,
         statistic_points: Optional[StatisticPointsContainer] = None,
         dataset: Optional[Dataset] = None,
-    ) -> TModel:
+    ) -> TransformationLayout:
         self._set_backend_entity(model)
-        model_transformer = ModelTransformerFactory.create(model)
         transformation_layout = TransformationLayout()
 
         def filter_func(point: StatisticPoint) -> bool:
@@ -168,8 +166,7 @@ class ChannelAlignment(Algorithm):
                         command = command_creator.create_command_to_insert_bias(container.op, container.bias)
                     transformation_layout.register(command)
 
-        transformed_model = model_transformer.transform(transformation_layout)
-        return transformed_model
+        return transformation_layout
 
     @staticmethod
     def _align_means(

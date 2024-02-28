@@ -10,6 +10,8 @@
 # limitations under the License.
 """Post-training quantization APIs."""
 from nncf.common.quantization.structs import QuantizationPreset as QuantizationPreset
+from nncf.quantization.quantize_model import apply_transformations as apply_transformations
 from nncf.quantization.quantize_model import compress_weights as compress_weights
+from nncf.quantization.quantize_model import get_quantization_transformations as get_quantization_transformations
 from nncf.quantization.quantize_model import quantize as quantize
 from nncf.quantization.quantize_model import quantize_with_accuracy_control as quantize_with_accuracy_control

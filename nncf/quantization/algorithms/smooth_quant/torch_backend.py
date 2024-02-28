@@ -31,19 +31,29 @@ from nncf.quantization.algorithms.smooth_quant.backend import SmoothQuantAlgoBac
 from nncf.torch.graph.transformations.command_creation import create_command_to_update_weight
 from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.layer_utils import COMPRESSION_MODULES
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.quantization.default_quantization import DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT
 from nncf.torch.tensor_statistics.collectors import PTAbsMaxReducer
 from nncf.torch.tensor_statistics.collectors import PTNNCFCollectorTensorProcessor
 
+COMPRESSION_MODULES.register()
+
 
 class SQMultiply(torch.nn.Module):
-    def __init__(self, scale_value):
+    def __init__(self, scale_value=1.0):
         super().__init__()
         self._scale_value = scale_value
 
     def forward(self, x):
         return torch.mul(x, self._scale_value)
+
+    def get_state(self):
+        return {}
+
+    @classmethod
+    def from_state(cls, state):
+        return cls()
 
 
 PT_PRE_LAYER_TARGET_TYPE = TargetType.OPERATOR_PRE_HOOK

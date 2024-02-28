@@ -121,13 +121,13 @@ class FastBiasCorrection(Algorithm):
                 "Cannot return backend-specific entity because {} is not supported!".format(model_backend.value)
             )
 
-    def apply(
+    def get_transformation_layout(
         self,
         model: TModel,
         graph: NNCFGraph,
         statistic_points: Optional[StatisticPointsContainer] = None,
         dataset: Optional[Dataset] = None,
-    ) -> TModel:
+    ) -> TransformationLayout:
         self._set_backend_entity(model)
 
         model_transformer = ModelTransformerFactory.create(model)
@@ -185,9 +185,7 @@ class FastBiasCorrection(Algorithm):
         transformation_layout = TransformationLayout()
         for node, bias_value in node_and_new_bias_value:
             transformation_layout.register(self._backend_entity.create_bias_correction_command(node, bias_value, graph))
-        transformed_model = model_transformer.transform(transformation_layout)
-
-        return transformed_model
+        return transformation_layout
 
     @staticmethod
     def _get_bias_shift_magnitude(current_bias_value: Tensor, updated_bias_value: Tensor) -> float:

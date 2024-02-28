@@ -18,7 +18,6 @@ import numpy as np
 
 import nncf
 from nncf import Dataset
-from nncf.common.factory import ModelTransformerFactory
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.graph.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import OperatorMetatype
@@ -807,15 +806,14 @@ class MinMaxQuantization(Algorithm):
                 output.update(nodes)
         return output
 
-    def apply(
+    def get_transformation_layout(
         self,
         model: TModel,
         graph: NNCFGraph,
         statistic_points: Optional[StatisticPointsContainer] = None,
         dataset: Optional[Dataset] = None,
-    ) -> TModel:
+    ) -> TransformationLayout:
         transformation_layout = TransformationLayout()
-        model_transformer = ModelTransformerFactory.create(model)
         quantization_target_points, unified_scale_groups = self._get_quantization_target_points(model, graph)
         quantization_points_overflow_fix = self._get_quantization_points_overflow_fix(
             self._overflow_fix, quantization_target_points, graph
@@ -899,10 +897,7 @@ class MinMaxQuantization(Algorithm):
                         graph, quantization_target_point, qconfig, parameters
                     )
                 transformation_layout.register(command)
-        if not transformation_layout.transformations:
-            nncf_logger.info("The model has no operations to apply quantization.")
-        quantized_model = model_transformer.transform(transformation_layout)
-        return quantized_model
+        return transformation_layout
 
     def get_statistic_points(self, model: TModel, graph: NNCFGraph) -> StatisticPointsContainer:
         self._set_backend_entity(model)

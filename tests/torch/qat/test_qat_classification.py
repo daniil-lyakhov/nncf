@@ -45,6 +45,8 @@ from examples.torch.common.utils import configure_logging
 from examples.torch.common.utils import is_pretrained_model_requested
 from nncf import NNCFConfig
 from nncf.common.compression import BaseCompressionAlgorithmController
+from nncf.torch.graph.transformations.serialization import load_transformations
+from nncf.torch.graph.transformations.serialization import serialize_transformations
 from nncf.torch.initialization import default_criterion_fn
 from nncf.torch.utils import is_main_process
 from tests.shared.paths import PROJECT_ROOT
@@ -225,6 +227,16 @@ def test_compression_training(quantization_config: SampleConfig):
     start_worker(main_worker, quantization_config)
 
 
+def test_compression_training_with_safe_and_load_state(quantization_config):
+    if quantization_config.model == "mobilenet_v3_small":
+        # Use default range initializer for mobilenet_v3_small
+        # as due to PTQ advantages it works better for the model.
+        del quantization_config.nncf_config["compression"]["initializer"]["range"]
+        del quantization_config["compression"]["initializer"]["range"]
+
+    start_worker(save_load_main_worker, quantization_config)
+
+
 def main_worker(current_gpu: int, config: SampleConfig):
     configure_device(current_gpu, config)
     if is_main_process():
@@ -266,6 +278,70 @@ def main_worker(current_gpu: int, config: SampleConfig):
         advanced_parameters=advanced_parameters,
         subset_size=subset_size,
     )
+
+    train_criterion_fn = inception_criterion_fn if "inception" in model_name else default_criterion_fn
+    acc_drop = train(
+        quantized_model,
+        config,
+        criterion,
+        train_criterion_fn,
+        datasets,
+        original_accuracy,
+        get_mocked_compression_ctrl(),
+    )
+    assert accuracy_drop_is_acceptable(acc_drop)
+    check_training_correctness(config, model, datasets, criterion, train_criterion_fn)
+    logger.info("Done!")
+
+
+def save_load_main_worker(current_gpu: int, config: SampleConfig):
+    configure_device(current_gpu, config)
+    if is_main_process():
+        configure_logging(logger, config)
+    else:
+        config.tb = None
+
+    pretrained = is_pretrained_model_requested(config)
+    model_name = config["model"]
+    # create model
+    logger.info(f"\nCreating model from config: {config.config}")
+    model = load_model(
+        model_name,
+        pretrained=pretrained,
+        num_classes=config.get("num_classes", 1000),
+        model_params=config.get("model_params"),
+        weights_path=config.get("weights"),
+    )
+    model.to(config.device)
+
+    datasets = get_datasets(config)
+    criterion = nn.CrossEntropyLoss()
+    criterion = criterion.to(config.device)
+
+    logger.info("Original model validation:")
+    original_accuracy, *_ = validate(datasets.val_data_loader, model, criterion, config)
+
+    logger.info("Apply quantization to the model:")
+    config_quantization_params = config["compression"]
+
+    preset = get_quantization_preset(config_quantization_params)
+    advanced_parameters = get_advanced_ptq_parameters(config_quantization_params)
+    subset_size = get_num_samples(config_quantization_params)
+
+    transformations = nncf.get_quantization_transformations(
+        # quantized_model = nncf.quantize(
+        model,
+        datasets.calibration_dataset,
+        preset=preset,
+        advanced_parameters=advanced_parameters,
+        subset_size=subset_size,
+    )
+    quantized_model = nncf.apply_transformations(
+        model, transformations, next(iter(datasets.calibration_dataset.get_inference_data()))
+    )
+    ckpt = serialize_transformations(quantized_model, transformations)
+    del quantized_model
+    quantized_model = load_transformations(model, ckpt, next(iter(datasets.calibration_dataset.get_inference_data())))
 
     train_criterion_fn = inception_criterion_fn if "inception" in model_name else default_criterion_fn
     acc_drop = train(

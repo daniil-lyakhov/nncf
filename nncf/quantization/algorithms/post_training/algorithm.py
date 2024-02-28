@@ -14,6 +14,7 @@ from typing import Callable, List, Optional, TypeVar
 
 from nncf import Dataset
 from nncf.common.graph.graph import NNCFGraph
+from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
 from nncf.common.utils.backend import BackendType
@@ -91,6 +92,20 @@ class PostTrainingQuantization(Algorithm):
 
     def get_statistic_points(self, model: TModel, graph: NNCFGraph) -> StatisticPointsContainer:
         return self._pipeline.get_statistic_points_for_step(0, model, graph)
+
+    def get_transformation_layout(
+        self,
+        model: TModel,
+        graph: NNCFGraph,
+        statistic_points: Optional[StatisticPointsContainer] = None,
+        dataset: Optional[Dataset] = None,
+    ) -> TransformationLayout:
+        if not self._pipeline._algorithms_applied:
+            self.apply(model, graph, statistic_points, dataset)
+            return self.get_transformation_layout(model, graph, statistic_points, dataset)
+        transformation_layout = TransformationLayout()
+        transformation_layout.transformations.extend(self._pipeline._transformation_layout_list)
+        return transformation_layout
 
     def apply(
         self,
