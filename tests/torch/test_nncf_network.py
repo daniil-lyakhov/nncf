@@ -27,6 +27,7 @@ from nncf import nncf_logger
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import UnknownMetatype
 from nncf.common.graph.transformations.commands import TargetType
+from nncf.common.graph.transformations.commands import TransformationPriority
 from nncf.common.hook_handle import HookHandle
 from nncf.torch import register_module
 from nncf.torch.dynamic_graph.io_handling import ExampleInputInfo
@@ -39,9 +40,15 @@ from nncf.torch.graph.graph import PTNNCFGraph
 from nncf.torch.graph.graph_builder import GraphBuilder
 from nncf.torch.graph.operator_metatypes import PTConv2dMetatype
 from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
+from nncf.torch.graph.transformations.commands import PTInsertionCommand
+from nncf.torch.graph.transformations.commands import PTQuantizerInsertionCommand
+from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
+from nncf.torch.graph.transformations.commands import PTTargetPoint
+from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.layers import NNCFConv2d
 from nncf.torch.model_creation import wrap_model
+from nncf.torch.model_transformer import PTModelTransformer
 from nncf.torch.nncf_module_replacement import replace_modules_by_nncf_modules
 from nncf.torch.nncf_network import ExtraCompressionModuleType
 from nncf.torch.nncf_network import NNCFNetwork
@@ -1024,3 +1031,85 @@ class TestHookHandles:
 
             del ref_hooks[-2]
             _check(ref_hooks)
+
+
+class DummyOpWithState:
+    def __init__(self, state: str):
+        self._state = state
+
+    def __call__(self, x):
+        return x
+
+    def get_state(self):
+        return self._state.copy()
+
+    @classmethod
+    def from_state(cls, state: str):
+        return cls(state)
+
+
+TWO_CONV_MODEL_NODES_NAMES = [
+    "TwoConvTestModel/Sequential[features]/Sequential[0]/NNCFConv2d[0]/conv2d_0",
+    "TwoConvTestModel/Sequential[features]/Sequential[1]/NNCFConv2d[0]/conv2d_0",
+]
+
+
+def _create_pt_insertion_command(
+    target_type: TargetType, priority: TransformationPriority, group: str = "default_group"
+):
+    target_point = PTTargetPoint(
+        target_type=target_type, target_node_name=TWO_CONV_MODEL_NODES_NAMES[0], input_port_id=0
+    )
+    fn = DummyOpWithState("DUMMY_STATE")
+    return PTInsertionCommand(point=target_point, fn=fn, priority=priority, hooks_group_name=group)
+
+
+def _create_pt_shared_fn_insertion_command(
+    target_type: TargetType, priority: TransformationPriority, group: str = "default_group"
+):
+    target_points = []
+    for node_name in TWO_CONV_MODEL_NODES_NAMES:
+        target_points.append(PTTargetPoint(target_type=target_type, target_node_name=node_name, input_port_id=0))
+    fn = DummyOpWithState("DUMMY_STATE")
+    return PTSharedFnInsertionCommand(
+        target_points=target_points, fn=fn, op_unique_name="UNIQUE_NAME", priority=priority, hooks_group_name=group
+    )
+
+
+def _create_pt_quantizer_insertion_command(
+    target_type: TargetType, priority: TransformationPriority, group: str = "default_group"
+):
+    target_point = PTTargetPoint(
+        target_type=target_type, target_node_name=TWO_CONV_MODEL_NODES_NAMES[0], input_port_id=0
+    )
+    fn = DummyOpWithState("DUMMY_STATE")
+    return PTQuantizerInsertionCommand(point=target_point, quantizer=fn, hooks_group_name=group)
+
+
+@pytest.mark.parametrize("priority", TransformationPriority)
+@pytest.mark.parametrize(
+    "target_type", (TargetType.OPERATION_WITH_WEIGHTS, TargetType.OPERATOR_PRE_HOOK, TargetType.OPERATOR_POST_HOOK)
+)
+@pytest.mark.parametrize(
+    "command_builder",
+    (_create_pt_insertion_command, _create_pt_shared_fn_insertion_command, _create_pt_quantizer_insertion_command),
+)
+def test_get_applied_modification_commands(command_builder, target_type, priority):
+    command = command_builder(target_type, priority)
+    if (
+        isinstance(command, PTQuantizerInsertionCommand)
+        and priority is not TransformationPriority.QUANTIZATION_PRIORITY
+    ):
+        pytest.mark.skip()
+
+    model = TwoConvTestModel()
+    nncf_model = NNCFNetwork(deepcopy(model), input_info=FillerInputInfo([FillerInputElement([1, 1, 4, 4])]))
+    # nncf_graph = nncf_model.nncf.get_original_graph()
+    model_tranformer = PTModelTransformer(nncf_model)
+
+    layout = PTTransformationLayout()
+    layout.register(command)
+    model_tranformer.transform(layout)
+
+    # applied_commands = nncf_model.nncf.get_applied_modification_commands()
+    # a = 5
