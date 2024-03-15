@@ -127,9 +127,7 @@ class PTModelTransformer(ModelTransformer):
             model.nncf.add_compression_module(shared_command.op_name, shared_command.fn, compression_model_type)
 
             for target_point in shared_command.target_points:
-                fn = ExternalOpCallHook(
-                    EXTERNAL_OP_STORAGE_NAME, model.nncf.get_tracing_context(), shared_command.op_name
-                )
+                fn = ExternalOpCallHook(EXTERNAL_OP_STORAGE_NAME, shared_command.op_name)
                 insertion_commands.append(
                     PTInsertionCommand(
                         target_point,
@@ -173,7 +171,7 @@ class PTModelTransformer(ModelTransformer):
                 quantizer_id = NonWeightQuantizerId(target_point.target_node_name, target_point.input_port_id)
                 storage_key = str(quantizer_id)
                 model.nncf.add_compression_module(storage_key, quantizer_module, compression_model_type)
-                fn = ExternalQuantizerCallHook(model.nncf.get_tracing_context(), storage_key)
+                fn = ExternalQuantizerCallHook(storage_key)
 
             insertion_commands.append(
                 PTInsertionCommand(target_point, fn, TransformationPriority.QUANTIZATION_PRIORITY)

@@ -9,9 +9,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any
+from typing import Any, Dict
 
-from nncf.torch.dynamic_graph.context import TracingContext
+from nncf.torch.dynamic_graph.context import get_current_context
 
 EXTERNAL_OP_STORAGE_NAME = "external_op"
 
@@ -26,17 +26,25 @@ class ExternalOpCallHook:
     the base module execution.
     """
 
-    def __init__(self, storage_name: str, context: TracingContext, storage_key: str):
+    STORAGE_NAME_KEY = "storage_name"
+    STORAGE_KEY_KEY = "storage_key"
+
+    def __init__(self, storage_name: str, storage_key: str):
         """
         :param storage_name: Attribute name of a model NNCFInterface.
-        :param context: Current tracing context.
         :param storage_key: Key to retrieve callable hook
         """
         self._storage_name = storage_name
-        self._compressed_context = context
         self._storage_key = storage_key
 
     def __call__(self, *args: Any, **kwargs) -> Any:
-        replica = self._compressed_context.base_module_thread_local_replica
+        replica = get_current_context().base_module_thread_local_replica
         storage = getattr(replica.nncf, self._storage_name)
         return storage[self._storage_key](*args, **kwargs)
+
+    def get_state(self) -> Dict[str, Any]:
+        return {self.STORAGE_NAME_KEY: self._storage_key, self.STORAGE_KEY_KEY: self._storage_key}
+
+    @classmethod
+    def from_state(cls, state) -> "ExternalOpCallHook":
+        return cls(storage_name=state[cls.STORAGE_NAME_KEY], storage_key=state[cls.STORAGE_KEY_KEY])

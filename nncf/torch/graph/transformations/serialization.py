@@ -42,7 +42,7 @@ def serialize_command(command: PTTransformationCommand):
         serialized_transformation["type"] = CompressionKeys.QUANTIZER_INSERTION_COMMAND.value
         serialized_transformation["target_point"] = command.target_point.get_state()
         serialized_transformation["quantizer_spec"] = command.quantizer.quantizer_spec.get_state()
-    if isinstance(command, PTSharedFnInsertionCommand):
+    elif isinstance(command, PTSharedFnInsertionCommand):
         serialized_transformation["type"] = CompressionKeys.SHARED_INSERTION_COMMAND.value
         serialized_transformation["target_points"] = [point.get_state() for point in command.target_points]
         serialized_transformation["fn_name"] = command.fn.__name__

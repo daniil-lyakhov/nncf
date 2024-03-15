@@ -1208,15 +1208,11 @@ class QuantizationBuilder(PTCompressionAlgorithmBuilder):
                     # share the single module and this would be impossible for multiple weight quantizer sharing if
                     # the corresponding UpdateWeights operations contained real modules (these would simply get copied
                     # by PyTorch internals)
-                    callable_obj = ExternalQuantizerCallHook(
-                        target_model.nncf.get_tracing_context(), external_quantizer_storage_key, self._debug_interface
-                    )
+                    callable_obj = ExternalQuantizerCallHook(external_quantizer_storage_key, self._debug_interface)
             else:
                 # Hooks will be identical for each affected op_address in the linked scenario
                 # - will call one and the same quantizer
-                callable_obj = ExternalQuantizerCallHook(
-                    target_model.nncf.get_tracing_context(), external_quantizer_storage_key, self._debug_interface
-                )
+                callable_obj = ExternalQuantizerCallHook(external_quantizer_storage_key, self._debug_interface)
 
             nncf_logger.debug(
                 f"Performing "

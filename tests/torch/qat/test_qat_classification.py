@@ -326,14 +326,14 @@ def save_load_main_worker(current_gpu: int, config: SampleConfig):
 
     preset = get_quantization_preset(config_quantization_params)
     advanced_parameters = get_advanced_ptq_parameters(config_quantization_params)
-    subset_size = get_num_samples(config_quantization_params)
+    # subset_size = get_num_samples(config_quantization_params)
 
     quantized_model = nncf.quantize(
         model,
         datasets.calibration_dataset,
         preset=preset,
         advanced_parameters=advanced_parameters,
-        subset_size=subset_size,
+        subset_size=1,
     )
 
     ckpt = nncf.serialize_transformations(quantized_model)

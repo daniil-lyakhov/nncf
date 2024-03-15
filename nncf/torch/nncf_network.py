@@ -61,12 +61,14 @@ from nncf.torch.dynamic_graph.trace_functions import strip_traced_tensors
 from nncf.torch.dynamic_graph.wrappers import wrap_module_call
 from nncf.torch.dynamic_graph.wrappers import wrap_parameters
 from nncf.torch.external_hook import EXTERNAL_OP_STORAGE_NAME
+from nncf.torch.external_hook import ExternalOpCallHook
 from nncf.torch.graph.graph import PTNNCFGraph
 from nncf.torch.graph.graph_builder import GraphBuilder
 from nncf.torch.graph.graph_builder import GraphConverter
 from nncf.torch.graph.operator_metatypes import OPERATORS_WITH_WEIGHTS_METATYPES
 from nncf.torch.graph.operator_metatypes import PTSplitMetatype
 from nncf.torch.graph.transformations.commands import DEFAULT_HOOKS_GROUP_NAME
+from nncf.torch.graph.transformations.commands import PTQuantizerInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.graph.transformations.commands import PTTransformationCommand
 from nncf.torch.graph.transformations.serialization import serialize_command
@@ -808,6 +810,87 @@ class NNCFNetworkInterface(torch.nn.Module):
                 result.append(scope_in_model)
         return result
 
+    COMPRESSION_MODULES_KEY = "compression_modules"
+
+    def get_applied_modification_commands(self):
+        from nncf.torch.module_operations import UpdateWeight
+        from nncf.torch.quantization.layers import BaseQuantizer
+
+        commands_list = []
+        nncf_graph = self.get_graph()
+        nncf_node_names_map = self.get_op_address_to_op_name_map()
+
+        # Collect commands for weights quantizers
+        for nncf_module, module_scope in self.get_nncf_modules().items():
+            if len(nncf_module.post_ops):
+                raise NotImplementedError
+
+            for ops, target_type in (
+                (nncf_module.pre_ops, TargetType.OPERATION_WITH_WEIGHTS),
+                (nncf_module.post_ops, None),
+            ):
+                for hook_id, module in ops.items():
+                    if not isinstance(module, UpdateWeight):
+                        raise NotImplementedError
+                    if not isinstance(module.op, BaseQuantizer):
+                        raise NotImplementedError
+                    assert hook_id == "0"
+                    quantizer = module.op
+                    for node_in_scope in nncf_graph.get_op_nodes_in_scope(module_scope):
+                        if "quantize" in node_in_scope.node_type:
+                            continue
+                        target_point = PTTargetPoint(
+                            target_type=target_type, target_node_name=node_in_scope.node_name, input_port_id=0
+                        )
+                        ### TODO: save hooks_group_name
+                        command = PTQuantizerInsertionCommand(point=target_point, quantizer=quantizer)
+                        commands_list.append(command)
+
+        # Collect all pre/post hooks for registered compression modules
+        context_hooks = defaultdict(lambda: defaultdict(list))
+        for ops, target_type in (
+            (self._compressed_context._pre_hooks, TargetType.OPERATOR_PRE_HOOK),
+            (self._compressed_context._post_hooks, TargetType.OPERATOR_POST_HOOK),
+        ):
+            for op_address, hooks in ops.items():
+                for hook_id, fn in hooks.items():
+                    if not isinstance(fn, ExternalOpCallHook):
+                        raise RuntimeError(f"Impossible to serialize hook: {fn}")
+                    info = f"TargetType: {target_type}, op_address: {op_address}, hook_id: {hook_id}, fn: {fn}"
+                    assert hasattr(
+                        self, fn._storage_name
+                    ), f"Storage name {fn._storage_name} is not registered. Info: {info}"
+                    assert fn._storage_key in getattr(
+                        self, fn._storage_name
+                    ), f"Storage key {fn._storage_key} is not registered. Info: {info}"
+                    context_hooks[fn._storage_name][fn._storage_key].append(
+                        (target_type, nncf_node_names_map[op_address], hook_id, fn)
+                    )
+
+        # Create commands to insert compressed module and pre/post hooks
+        for module_type, storage in context_hooks.items():
+            for storage_key, call_hook_list_info in storage.items():
+                if module_type == EXTERNAL_QUANTIZERS_STORAGE_NAME:
+                    quantizer_module = getattr(self, module_type)[storage_key]
+                    assert len(call_hook_list_info) == 1
+                    target_type, target_node_name, hook_id, fn = call_hook_list_info[0]
+                    assert hook_id == "0"
+                    input_port_id = None
+                    if target_type == TargetType.OPERATOR_PRE_HOOK:
+                        # TODO: create a pre-hook id
+                        pass
+                    target_point = PTTargetPoint(target_type, target_node_name, input_port_id=input_port_id)
+                    # TODO: map hooks_group_name
+                    command = PTQuantizerInsertionCommand(target_point, quantizer=quantizer_module)
+                    commands_list.append(command)
+
+        # TODO: Build PTQuantizerInsertionCommand/PTSharedFnInsertionCommand commands
+        return commands_list
+
+    @classmethod
+    def load_compression_state(cls, state):
+        pass
+
     def get_node_to_op_address_mapping(self) -> Dict[NNCFNodeName, OperationAddress]:
         """
         Returns map of NNCFGraph node names vs DynamicGraph operation addresses.
@@ -824,6 +907,20 @@ class NNCFNetworkInterface(torch.nn.Module):
             op_address = node.op_exec_context.op_address
             nncf_node = graph_pair.nncf_graph.get_node_by_id(node_id)
             retval[nncf_node.node_name] = op_address
+        return retval
+
+    def get_op_address_to_op_name_map(self):
+        graph_pair = self._compressed_graphs_pair
+        if graph_pair is None:
+            graph_pair = self._original_graphs_pair
+
+        retval = {}
+        for node in graph_pair.dynamic_graph.get_all_nodes():
+            node_id = node.node_id
+            op_address = node.op_exec_context.op_address
+            nncf_node = graph_pair.nncf_graph.get_node_by_id(node_id)
+            # TODO: check nothing is missed here
+            retval[op_address] = nncf_node.node_name
         return retval
 
     def set_compression_controller(self, ctrl: CompressionAlgorithmController):

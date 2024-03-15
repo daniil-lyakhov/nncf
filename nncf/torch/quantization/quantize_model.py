@@ -30,8 +30,7 @@ from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
 from nncf.quantization.algorithms.weight_compression.algorithm import WeightCompression
 from nncf.scopes import IgnoredScope
-from nncf.torch.graph.transformations.serialization import COMPRESSION_STATE_ATTR
-from nncf.torch.graph.transformations.serialization import MODEL_STATE_ATTR
+from nncf.torch.graph.transformations.serialization import serialize_transformations
 from nncf.torch.model_creation import wrap_model
 from nncf.torch.nncf_network import NNCFNetwork
 
@@ -164,7 +163,7 @@ def get_quantization_transformations(
 def serialize_transformations_impl(
     model: NNCFNetwork,
 ):
-    return {
-        MODEL_STATE_ATTR: model.state_dict(),
-        COMPRESSION_STATE_ATTR: model.nncf.recorded_commands,
-    }
+    commands = model.nncf.get_applied_modification_commands()
+    layout = TransformationLayout()
+    layout._transformations = commands
+    return serialize_transformations(model, layout)
