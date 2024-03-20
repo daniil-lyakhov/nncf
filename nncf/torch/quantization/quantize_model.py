@@ -10,7 +10,7 @@
 # limitations under the License.
 
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 
@@ -107,8 +107,14 @@ def compress_weights_impl(
 
 
 def apply_transformations_impl(
-    model: torch.nn.Module, transformation_layout: TransformationLayout, example_input: Tensor
+    model: torch.nn.Module, transformation_layout: TransformationLayout, example_input: Tuple[Tensor, dict]
 ):
+    if len(example_input[0]):
+        example_input = example_input[0]
+        ### KWARGS ARE MISSING
+    else:
+        example_input = example_input[1]
+
     copied_model = deepcopy(model)
     nncf_network = wrap_model(copied_model.eval(), example_input)
     model_transformer = ModelTransformerFactory.create(nncf_network)

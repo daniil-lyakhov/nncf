@@ -568,6 +568,14 @@ class BaseQuantizer(nn.Module, ABC):
             zero_point - Quantizer zero point.
         """
 
+    def get_state(self):
+        return self.quantizer_spec.get_state()
+
+    @classmethod
+    def from_state(cls, state) -> "BaseQuantizer":
+        qsetup = PTQuantizerSpec.from_state(state)
+        return cls(qsetup)
+
 
 class QuantizersSwitcher:
     """Enables/disables quantizers with saving and restoring original state"""

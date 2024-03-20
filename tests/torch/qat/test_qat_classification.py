@@ -336,9 +336,11 @@ def save_load_main_worker(current_gpu: int, config: SampleConfig):
         subset_size=1,
     )
 
-    ckpt = nncf.serialize_transformations(quantized_model)
+    transformations_state = nncf.serialize_transformations(quantized_model)
+    state_dict = quantized_model.state_dict()
     del quantized_model
-    quantized_model = load_transformations(model, ckpt, next(iter(datasets.calibration_dataset.get_inference_data())))
+    quantized_model = load_transformations(model, transformations_state)
+    quantized_model.load_state_dict(state_dict)
 
     train_criterion_fn = inception_criterion_fn if "inception" in model_name else default_criterion_fn
     acc_drop = train(

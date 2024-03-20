@@ -37,9 +37,8 @@ from nncf.torch.quantization.default_quantization import DEFAULT_PT_QUANT_TRAIT_
 from nncf.torch.tensor_statistics.collectors import PTAbsMaxReducer
 from nncf.torch.tensor_statistics.collectors import PTNNCFCollectorTensorProcessor
 
-COMPRESSION_MODULES.register()
 
-
+@COMPRESSION_MODULES.register()
 class SQMultiply(torch.nn.Module):
     def __init__(self, scale_value=1.0):
         super().__init__()

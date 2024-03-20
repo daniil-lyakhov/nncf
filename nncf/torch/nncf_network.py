@@ -66,10 +66,9 @@ from nncf.torch.graph.graph_builder import GraphBuilder
 from nncf.torch.graph.graph_builder import GraphConverter
 from nncf.torch.graph.operator_metatypes import OPERATORS_WITH_WEIGHTS_METATYPES
 from nncf.torch.graph.operator_metatypes import PTSplitMetatype
+from nncf.torch.graph.transformations.command_creation import create_quantizer_insertion_command
 from nncf.torch.graph.transformations.commands import DEFAULT_HOOKS_GROUP_NAME
 from nncf.torch.graph.transformations.commands import ExtraCompressionModuleType
-from nncf.torch.graph.transformations.commands import PTInsertionCommand
-from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.graph.transformations.commands import PTTransformationCommand
 from nncf.torch.graph.transformations.serialization import serialize_command
@@ -816,6 +815,7 @@ class NNCFNetworkInterface(torch.nn.Module):
                 for hook_id, module in ops.items():
                     if not isinstance(module, UpdateWeight):
                         raise NotImplementedError
+                    ### TODO: make it common
                     if not isinstance(module.op, BaseQuantizer):
                         raise NotImplementedError
                     assert hook_id == "0"
@@ -823,12 +823,9 @@ class NNCFNetworkInterface(torch.nn.Module):
                     for node_in_scope in nncf_graph.get_op_nodes_in_scope(module_scope):
                         if "quantize" in node_in_scope.node_type:
                             continue
-                        target_point = PTTargetPoint(
-                            target_type=target_type, target_node_name=node_in_scope.node_name, input_port_id=0
-                        )
+                        target_point = PTTargetPoint(target_type=target_type, target_node_name=node_in_scope.node_name)
                         ### TODO: save hooks_group_name
-                        ### TODO: make it common
-                        command = PTInsertionCommand(point=target_point, quantizer=quantizer)
+                        command = create_quantizer_insertion_command(target_point, quantizer)
                         commands_list.append(command)
 
         # Collect all pre/post hooks for registered compression modules
@@ -856,22 +853,18 @@ class NNCFNetworkInterface(torch.nn.Module):
         for module_type, storage in context_hooks.items():
             for storage_key, call_hook_list_info in storage.items():
                 if module_type == EXTERNAL_QUANTIZERS_STORAGE_NAME:
-                    compression_module = getattr(self, module_type)[storage_key]
+                    quantizer_module = getattr(self, module_type)[storage_key]
                     assert len(call_hook_list_info) == 1
                     target_type, target_node_name, hook_id, fn = call_hook_list_info[0]
                     assert hook_id == "0"
                     input_port_id = None
                     if target_type == TargetType.OPERATOR_PRE_HOOK:
                         # TODO: create a pre-hook id
-                        pass
+                        breakpoint()
+
                     target_point = PTTargetPoint(target_type, target_node_name, input_port_id=input_port_id)
                     # TODO: map hooks_group_name
-                    command = PTSharedFnInsertionCommand(
-                        [target_point],
-                        fn=compression_module,
-                        compression_module_type=module_type,
-                        priority=TransformationPriority.QUANTIZATION_PRIORITY,
-                    )
+                    command = create_quantizer_insertion_command(target_point, quantizer_module)
                     commands_list.append(command)
 
         # TODO: Build PTQuantizerInsertionCommand/PTSharedFnInsertionCommand commands
