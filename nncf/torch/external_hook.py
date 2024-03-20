@@ -26,9 +26,6 @@ class ExternalOpCallHook:
     the base module execution.
     """
 
-    STORAGE_NAME_KEY = "storage_name"
-    STORAGE_KEY_KEY = "storage_key"
-
     def __init__(self, storage_name: str, storage_key: str):
         """
         :param storage_name: Attribute name of a model NNCFInterface.
