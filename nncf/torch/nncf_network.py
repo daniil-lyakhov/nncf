@@ -41,6 +41,7 @@ from nncf.common.insertion_point_graph import PreHookInsertionPoint
 from nncf.common.utils.debug import is_debug
 from nncf.torch.debug import CombinedDebugInterface
 from nncf.torch.debug import debuggable_forward
+from nncf.torch.dynamic_graph.context import PreHookId
 from nncf.torch.dynamic_graph.context import TracingContext
 from nncf.torch.dynamic_graph.graph import DynamicGraph
 from nncf.torch.dynamic_graph.graph import ShapeIgnoringTensorMetaComparator
@@ -69,6 +70,8 @@ from nncf.torch.graph.operator_metatypes import PTSplitMetatype
 from nncf.torch.graph.transformations.command_creation import create_quantizer_insertion_command
 from nncf.torch.graph.transformations.commands import DEFAULT_HOOKS_GROUP_NAME
 from nncf.torch.graph.transformations.commands import ExtraCompressionModuleType
+from nncf.torch.graph.transformations.commands import PTInsertionCommand
+from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.graph.transformations.commands import PTTransformationCommand
 from nncf.torch.graph.transformations.serialization import serialize_command
@@ -799,75 +802,114 @@ class NNCFNetworkInterface(torch.nn.Module):
         from nncf.torch.module_operations import UpdateWeight
         from nncf.torch.quantization.layers import BaseQuantizer
 
+        def _create_pt_insert_command(module, target_type, target_node_name, hook_id, input_port_id):
+            priority = TransformationPriority.DEFAULT_PRIORITY
+            if isinstance(module, BaseQuantizer):
+                assert hook_id == "0"
+                priority = TransformationPriority.QUANTIZATION_PRIORITY
+
+            target_point = PTTargetPoint(
+                target_type=target_type, target_node_name=target_node_name, input_port_id=input_port_id
+            )
+            ### TODO: save hooks_group_name
+            ### TODO: save hooks priority
+            return PTInsertionCommand(point=target_point, fn=module, priority=priority)
+
+        def _check_external_call_hook_is_valid(hook: ExternalOpCallHook, info: str):
+            assert hasattr(
+                self, hook._storage_name
+            ), f"Storage name {hook._storage_name} is not registered. Info: {info}"
+            assert hook._storage_key in getattr(
+                self, hook._storage_name
+            ), f"Storage key {hook._storage_key} is not registered. Info: {info}"
+
+        # Collect all pre/post hooks for registered compression modules
+        context_hooks = defaultdict(lambda: defaultdict(list))
         commands_list = []
         nncf_graph = self.get_graph()
         nncf_node_names_map = self.get_op_address_to_op_name_map()
 
         # Collect commands for weights quantizers
         for nncf_module, module_scope in self.get_nncf_modules().items():
-            if len(nncf_module.post_ops):
-                raise NotImplementedError
-
             for ops, target_type in (
-                (nncf_module.pre_ops, TargetType.OPERATION_WITH_WEIGHTS),
-                (nncf_module.post_ops, None),
+                (nncf_module.pre_ops, TargetType.PRE_LAYER_OPERATION),
+                (nncf_module.post_ops, TargetType.POST_LAYER_OPERATION),
             ):
                 for hook_id, module in ops.items():
-                    if not isinstance(module, UpdateWeight):
-                        raise NotImplementedError
-                    ### TODO: make it common
-                    if not isinstance(module.op, BaseQuantizer):
-                        raise NotImplementedError
-                    assert hook_id == "0"
-                    quantizer = module.op
-                    for node_in_scope in nncf_graph.get_op_nodes_in_scope(module_scope):
-                        if "quantize" in node_in_scope.node_type:
-                            continue
-                        target_point = PTTargetPoint(target_type=target_type, target_node_name=node_in_scope.node_name)
-                        ### TODO: save hooks_group_name
-                        command = create_quantizer_insertion_command(target_point, quantizer)
+                    nodes_in_scope = nncf_graph.get_op_node_in_scope(module_scope)
+                    assert len(nodes_in_scope) == 1
+                    nncf_node = nodes_in_scope[0]
+                    if isinstance(module, UpdateWeight):
+                        target_type = TargetType.OPERATION_WITH_WEIGHTS
+                        module = module.op
+                    if not isinstance(module, ExternalOpCallHook):
+                        command = _create_pt_insert_command(module, target_type, nncf_node.node_name, hook_id, None)
                         commands_list.append(command)
+                        continue
 
-        # Collect all pre/post hooks for registered compression modules
-        context_hooks = defaultdict(lambda: defaultdict(list))
+                    info = f"TargetType: {target_type}, nncf node name: {nncf_node.node_name},"
+                    " hook_id: {hook_id}, fn: {module}"
+                    _check_external_call_hook_is_valid(module, info)
+
+                    context_hooks[module._storage_name][module._storage_key].append(
+                        (target_type, nncf_node.node_name, hook_id, module, None)
+                    )
+
         for ops, target_type in (
             (self._compressed_context._pre_hooks, TargetType.OPERATOR_PRE_HOOK),
             (self._compressed_context._post_hooks, TargetType.OPERATOR_POST_HOOK),
         ):
             for op_address, hooks in ops.items():
                 for hook_id, fn in hooks.items():
+                    if isinstance(op_address, PreHookId):
+                        input_port_id = op_address.input_port_id
+                        op_address = op_address.op_address
+                    else:
+                        input_port_id = None
+                    target_node_name = nncf_node_names_map[op_address]
+
                     if not isinstance(fn, ExternalOpCallHook):
-                        raise RuntimeError(f"Impossible to serialize hook: {fn}")
+                        command = _create_pt_insert_command(fn, target_type, target_node_name, hook_id, input_port_id)
+                        commands_list.append(command)
+                        continue
+
                     info = f"TargetType: {target_type}, op_address: {op_address}, hook_id: {hook_id}, fn: {fn}"
-                    assert hasattr(
-                        self, fn._storage_name
-                    ), f"Storage name {fn._storage_name} is not registered. Info: {info}"
-                    assert fn._storage_key in getattr(
-                        self, fn._storage_name
-                    ), f"Storage key {fn._storage_key} is not registered. Info: {info}"
+                    _check_external_call_hook_is_valid(fn, info)
+
                     context_hooks[fn._storage_name][fn._storage_key].append(
-                        (target_type, nncf_node_names_map[op_address], hook_id, fn)
+                        (target_type, target_node_name, hook_id, fn, input_port_id)
                     )
 
         # Create commands to insert compressed module and pre/post hooks
         for module_type, storage in context_hooks.items():
             for storage_key, call_hook_list_info in storage.items():
+                compression_module = getattr(self, module_type)[storage_key]
                 if module_type == EXTERNAL_QUANTIZERS_STORAGE_NAME:
-                    quantizer_module = getattr(self, module_type)[storage_key]
                     assert len(call_hook_list_info) == 1
-                    target_type, target_node_name, hook_id, fn = call_hook_list_info[0]
+
+                    target_type, target_node_name, hook_id, fn, input_port_id = call_hook_list_info[0]
                     assert hook_id == "0"
-                    input_port_id = None
-                    if target_type == TargetType.OPERATOR_PRE_HOOK:
-                        # TODO: create a pre-hook id
-                        breakpoint()
 
                     target_point = PTTargetPoint(target_type, target_node_name, input_port_id=input_port_id)
                     # TODO: map hooks_group_name
-                    command = create_quantizer_insertion_command(target_point, quantizer_module)
+                    command = create_quantizer_insertion_command(target_point, compression_module)
                     commands_list.append(command)
+                elif module_type == EXTERNAL_OP_STORAGE_NAME:
+                    target_points = []
+                    for target_type, target_node_name, hook_id, fn, input_port_id in call_hook_list_info:
+                        target_points.append(PTTargetPoint(target_type, target_node_name, input_port_id=input_port_id))
+                    # TODO: save insertion priority
+                    # TODO: map hooks_group_name
+                    command = PTSharedFnInsertionCommand(
+                        target_points=target_points,
+                        fn=compression_module,
+                        op_unique_name=storage_key,
+                        compression_module_type=ExtraCompressionModuleType.EXTERNAL_OP,
+                    )
+                    commands_list.append(command)
+                else:
+                    raise RuntimeError(f"Module type {module_type} is not supported")
 
-        # TODO: Build PTQuantizerInsertionCommand/PTSharedFnInsertionCommand commands
         return commands_list
 
     @classmethod

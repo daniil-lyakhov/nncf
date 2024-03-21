@@ -44,13 +44,11 @@ from nncf.torch.graph.transformations.commands import ExtraCompressionModuleType
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
 from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
-
-# from nncf.torch.graph.transformations.layout import PTTransformationLayout
+from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.layers import NNCFConv2d
 from nncf.torch.model_creation import wrap_model
-
-# from nncf.torch.model_transformer import PTModelTransformer
+from nncf.torch.model_transformer import PTModelTransformer
 from nncf.torch.nncf_module_replacement import replace_modules_by_nncf_modules
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.nncf_network import PTInsertionPoint
@@ -1034,12 +1032,18 @@ class TestHookHandles:
             _check(ref_hooks)
 
 
-class DummyOpWithState:
+class DummyOpWithState(torch.nn.Module):
     def __init__(self, state: str):
+        super().__init__()
         self._state = state
 
-    def __call__(self, x):
-        return x
+    def __call__(self, *args):
+        if len(args) == 1:
+            return args[0]
+        # To work correctly with
+        # TargetType.PRE_LAYER_OPERATION
+        # TargetType.POST_LAYER_OPERATION
+        return None
 
     def get_state(self):
         return self._state.copy()
@@ -1077,44 +1081,59 @@ def _create_pt_shared_fn_insertion_command(
     )
 
 
-def _create_pt_quantizer_insertion_command(
-    target_type: TargetType, priority: TransformationPriority, group: str = "default_group"
-):
-    return
-    # target_point = PTTargetPoint(
-    #    target_type=target_type, target_node_name=TWO_CONV_MODEL_NODES_NAMES[0], input_port_id=0
-    # )
-    # fn = DummyOpWithState("DUMMY_STATE")
-    # return None
-    # return (point=target_point, quantizer=fn, hooks_group_name=group)
-
-
-@pytest.mark.parametrize("priority", TransformationPriority)
 @pytest.mark.parametrize(
-    "target_type", (TargetType.OPERATION_WITH_WEIGHTS, TargetType.OPERATOR_PRE_HOOK, TargetType.OPERATOR_POST_HOOK)
+    "target_type",
+    (
+        TargetType.OPERATION_WITH_WEIGHTS,
+        TargetType.OPERATOR_PRE_HOOK,
+        TargetType.OPERATOR_POST_HOOK,
+        TargetType.PRE_LAYER_OPERATION,
+        TargetType.POST_LAYER_OPERATION,
+    ),
 )
 @pytest.mark.parametrize(
     "command_builder",
-    (_create_pt_insertion_command, _create_pt_shared_fn_insertion_command, _create_pt_quantizer_insertion_command),
+    (_create_pt_insertion_command, _create_pt_shared_fn_insertion_command),
 )
-def test_get_applied_modification_commands(command_builder, target_type, priority):
-    return
-    # command = command_builder(target_type, priority)
-    # if (
-    #    # isinstance(command, AAA)
-    #    # and priority is not TransformationPriority.QUANTIZATION_PRIORITY
-    #    True
-    # ):
-    #    pytest.mark.skip()
+def test_get_applied_modification_commands(command_builder, target_type):
+    command = command_builder(target_type, TransformationPriority.DEFAULT_PRIORITY)
+    if isinstance(command, PTSharedFnInsertionCommand) and target_type in [
+        TargetType.PRE_LAYER_OPERATION,
+        TargetType.POST_LAYER_OPERATION,
+    ]:
+        pytest.skip(f"PTSharedFnInsertionCommand is not supporting target type {target_type}")
 
-    # model = TwoConvTestModel()
-    # nncf_model = NNCFNetwork(deepcopy(model), input_info=FillerInputInfo([FillerInputElement([1, 1, 4, 4])]))
-    ## nncf_graph = nncf_model.nncf.get_original_graph()
-    # model_tranformer = PTModelTransformer(nncf_model)
+    model = TwoConvTestModel()
+    nncf_model = NNCFNetwork(deepcopy(model), input_info=FillerInputInfo([FillerInputElement([1, 1, 4, 4])]))
+    model_tranformer = PTModelTransformer(nncf_model)
 
-    # layout = PTTransformationLayout()
-    # layout.register(command)
-    # model_tranformer.transform(layout)
+    layout = PTTransformationLayout()
+    layout.register(command)
+    model_tranformer.transform(layout)
 
-    # applied_commands = nncf_model.nncf.get_applied_modification_commands()
-    # a = 5
+    applied_commands = nncf_model.nncf.get_applied_modification_commands()
+
+    assert len(applied_commands) == 1
+    applied_command = applied_commands[0]
+    assert type(applied_command) is type(command)
+    assert applied_command.fn is command.fn
+    ### TODO: map hooks group name
+    # assert applied_command.hooks_group_name == command.hooks_group_name
+    ### priority is checked in the
+
+    def _target_points_are_equal(tp_original: PTTargetPoint, tp_recovered: PTTargetPoint):
+        if tp_original != tp_recovered:
+            return False
+        if tp_original.target_type == TargetType.OPERATOR_PRE_HOOK:
+            return tp_original.input_port_id == tp_recovered.input_port_id
+        return True
+
+    if isinstance(applied_command, PTInsertionCommand):
+        assert _target_points_are_equal(command.target_point, applied_command.target_point)
+    elif isinstance(applied_command, PTSharedFnInsertionCommand):
+        all(_target_points_are_equal(a, b) for a, b in zip(command.target_points, applied_command.target_points))
+        assert applied_command.target_points == command.target_points
+        assert applied_command.op_name == command.op_name
+        assert applied_command.compression_module_type == command.compression_module_type
+    else:
+        raise RuntimeError()
