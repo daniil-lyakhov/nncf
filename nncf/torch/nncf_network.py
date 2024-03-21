@@ -67,7 +67,6 @@ from nncf.torch.graph.graph_builder import GraphBuilder
 from nncf.torch.graph.graph_builder import GraphConverter
 from nncf.torch.graph.operator_metatypes import OPERATORS_WITH_WEIGHTS_METATYPES
 from nncf.torch.graph.operator_metatypes import PTSplitMetatype
-from nncf.torch.graph.transformations.command_creation import create_quantizer_insertion_command
 from nncf.torch.graph.transformations.commands import DEFAULT_HOOKS_GROUP_NAME
 from nncf.torch.graph.transformations.commands import ExtraCompressionModuleType
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
@@ -800,19 +799,12 @@ class NNCFNetworkInterface(torch.nn.Module):
 
     def get_applied_modification_commands(self):
         from nncf.torch.module_operations import UpdateWeight
-        from nncf.torch.quantization.layers import BaseQuantizer
 
-        def _create_pt_insert_command(module, target_type, target_node_name, hook_id, input_port_id):
-            priority = TransformationPriority.DEFAULT_PRIORITY
-            if isinstance(module, BaseQuantizer):
-                assert hook_id == "0"
-                priority = TransformationPriority.QUANTIZATION_PRIORITY
-
+        def _create_pt_insert_command(module, target_type, target_node_name, priority, input_port_id):
             target_point = PTTargetPoint(
                 target_type=target_type, target_node_name=target_node_name, input_port_id=input_port_id
             )
             ### TODO: save hooks_group_name
-            ### TODO: save hooks priority
             return PTInsertionCommand(point=target_point, fn=module, priority=priority)
 
         def _check_external_call_hook_is_valid(hook: ExternalOpCallHook, info: str):
@@ -829,13 +821,13 @@ class NNCFNetworkInterface(torch.nn.Module):
         nncf_graph = self.get_graph()
         nncf_node_names_map = self.get_op_address_to_op_name_map()
 
-        # Collect commands for weights quantizers
+        # Collect weights insertion commands
         for nncf_module, module_scope in self.get_nncf_modules().items():
             for ops, target_type in (
                 (nncf_module.pre_ops, TargetType.PRE_LAYER_OPERATION),
                 (nncf_module.post_ops, TargetType.POST_LAYER_OPERATION),
             ):
-                for hook_id, module in ops.items():
+                for priority, module in enumerate(ops.values()):
                     nodes_in_scope = nncf_graph.get_op_node_in_scope(module_scope)
                     assert len(nodes_in_scope) == 1
                     nncf_node = nodes_in_scope[0]
@@ -843,16 +835,16 @@ class NNCFNetworkInterface(torch.nn.Module):
                         target_type = TargetType.OPERATION_WITH_WEIGHTS
                         module = module.op
                     if not isinstance(module, ExternalOpCallHook):
-                        command = _create_pt_insert_command(module, target_type, nncf_node.node_name, hook_id, None)
+                        command = _create_pt_insert_command(module, target_type, nncf_node.node_name, priority, None)
                         commands_list.append(command)
                         continue
 
                     info = f"TargetType: {target_type}, nncf node name: {nncf_node.node_name},"
-                    " hook_id: {hook_id}, fn: {module}"
+                    f" priority: {priority}, fn: {module}"
                     _check_external_call_hook_is_valid(module, info)
 
                     context_hooks[module._storage_name][module._storage_key].append(
-                        (target_type, nncf_node.node_name, hook_id, module, None)
+                        (target_type, nncf_node.node_name, priority, module, None)
                     )
 
         for ops, target_type in (
@@ -860,55 +852,50 @@ class NNCFNetworkInterface(torch.nn.Module):
             (self._compressed_context._post_hooks, TargetType.OPERATOR_POST_HOOK),
         ):
             for op_address, hooks in ops.items():
-                for hook_id, fn in hooks.items():
-                    if isinstance(op_address, PreHookId):
-                        input_port_id = op_address.input_port_id
-                        op_address = op_address.op_address
-                    else:
-                        input_port_id = None
+                if isinstance(op_address, PreHookId):
+                    input_port_id = op_address.input_port_id
+                    op_address = op_address.op_address
+                else:
+                    input_port_id = None
+                for priority, fn in enumerate(hooks.values()):
                     target_node_name = nncf_node_names_map[op_address]
 
                     if not isinstance(fn, ExternalOpCallHook):
-                        command = _create_pt_insert_command(fn, target_type, target_node_name, hook_id, input_port_id)
+                        command = _create_pt_insert_command(fn, target_type, target_node_name, priority, input_port_id)
                         commands_list.append(command)
                         continue
 
-                    info = f"TargetType: {target_type}, op_address: {op_address}, hook_id: {hook_id}, fn: {fn}"
+                    info = f"TargetType: {target_type}, op_address: {op_address}, priority: {priority}, fn: {fn}"
                     _check_external_call_hook_is_valid(fn, info)
 
                     context_hooks[fn._storage_name][fn._storage_key].append(
-                        (target_type, target_node_name, hook_id, fn, input_port_id)
+                        (target_type, target_node_name, priority, fn, input_port_id)
                     )
 
         # Create commands to insert compressed module and pre/post hooks
-        for module_type, storage in context_hooks.items():
+        for module_type_name, storage in context_hooks.items():
             for storage_key, call_hook_list_info in storage.items():
-                compression_module = getattr(self, module_type)[storage_key]
-                if module_type == EXTERNAL_QUANTIZERS_STORAGE_NAME:
-                    assert len(call_hook_list_info) == 1
+                compression_module = getattr(self, module_type_name)[storage_key]
+                target_points = []
+                for target_type, target_node_name, priority, fn, input_port_id in call_hook_list_info:
+                    target_points.append(PTTargetPoint(target_type, target_node_name, input_port_id=input_port_id))
 
-                    target_type, target_node_name, hook_id, fn, input_port_id = call_hook_list_info[0]
-                    assert hook_id == "0"
-
-                    target_point = PTTargetPoint(target_type, target_node_name, input_port_id=input_port_id)
-                    # TODO: map hooks_group_name
-                    command = create_quantizer_insertion_command(target_point, compression_module)
-                    commands_list.append(command)
-                elif module_type == EXTERNAL_OP_STORAGE_NAME:
-                    target_points = []
-                    for target_type, target_node_name, hook_id, fn, input_port_id in call_hook_list_info:
-                        target_points.append(PTTargetPoint(target_type, target_node_name, input_port_id=input_port_id))
-                    # TODO: save insertion priority
-                    # TODO: map hooks_group_name
-                    command = PTSharedFnInsertionCommand(
-                        target_points=target_points,
-                        fn=compression_module,
-                        op_unique_name=storage_key,
-                        compression_module_type=ExtraCompressionModuleType.EXTERNAL_OP,
-                    )
-                    commands_list.append(command)
+                if module_type_name == EXTERNAL_QUANTIZERS_STORAGE_NAME:
+                    module_type = ExtraCompressionModuleType.EXTERNAL_QUANTIZER
+                elif module_type_name == EXTERNAL_OP_STORAGE_NAME:
+                    module_type = ExtraCompressionModuleType.EXTERNAL_OP
                 else:
-                    raise RuntimeError(f"Module type {module_type} is not supported")
+                    raise RuntimeError(f"Module type {module_type_name} is not supported")
+
+                # TODO: map hooks_group_name
+                command = PTSharedFnInsertionCommand(
+                    target_points=target_points,
+                    fn=compression_module,
+                    op_unique_name=storage_key,
+                    compression_module_type=module_type,
+                    priority=priority,
+                )
+                commands_list.append(command)
 
         return commands_list
 
