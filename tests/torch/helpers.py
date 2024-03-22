@@ -29,6 +29,7 @@ from torch.utils.data import Dataset
 
 import nncf
 from nncf.common.graph.transformations.commands import TargetType
+from nncf.common.graph.transformations.commands import TransformationPriority
 from nncf.config import NNCFConfig
 from nncf.config.extractors import extract_algorithm_names
 from nncf.config.structures import BNAdaptationInitArgs
@@ -38,6 +39,10 @@ from nncf.torch.dynamic_graph.context import PreHookId
 from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
 from nncf.torch.dynamic_graph.operation_address import OperationAddress
 from nncf.torch.dynamic_graph.scope import Scope
+from nncf.torch.graph.transformations.commands import ExtraCompressionModuleType
+from nncf.torch.graph.transformations.commands import PTInsertionCommand
+from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
+from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.initialization import PTInitializingDataLoader
 from nncf.torch.initialization import register_default_init_args
 from nncf.torch.layers import NNCF_MODULES_MAP
@@ -172,6 +177,11 @@ class BasicConvTestModel(nn.Module):
 
 
 class TwoConvTestModel(nn.Module):
+    NNCF_CONV_NODES_NAMES = [
+        "TwoConvTestModel/Sequential[features]/Sequential[0]/NNCFConv2d[0]/conv2d_0",
+        "TwoConvTestModel/Sequential[features]/Sequential[1]/NNCFConv2d[0]/conv2d_0",
+    ]
+
     def __init__(self):
         super().__init__()
         self.features = []
@@ -197,6 +207,41 @@ class TwoConvTestModel(nn.Module):
     @property
     def nz_bias_num(self):
         return 2
+
+    @staticmethod
+    def create_pt_insertion_command(
+        target_type: TargetType, priority: TransformationPriority, fn=None, group: str = "default_group"
+    ):
+        target_point = PTTargetPoint(
+            target_type=target_type, target_node_name=TwoConvTestModel.NNCF_CONV_NODES_NAMES[0], input_port_id=0
+        )
+        if fn is None:
+            fn = DummyOpWithState("DUMMY_STATE")
+        return PTInsertionCommand(point=target_point, fn=fn, priority=priority, hooks_group_name=group)
+
+    @staticmethod
+    def create_pt_shared_fn_insertion_command(
+        target_type: TargetType,
+        priority: TransformationPriority,
+        compression_module_type: ExtraCompressionModuleType,
+        fn=None,
+        group: str = "default_group",
+        op_unique_name: str = "UNIQUE_NAME",
+    ):
+        target_points = []
+
+        for node_name in TwoConvTestModel.NNCF_CONV_NODES_NAMES:
+            target_points.append(PTTargetPoint(target_type=target_type, target_node_name=node_name, input_port_id=0))
+        if fn is None:
+            fn = DummyOpWithState("DUMMY_STATE")
+        return PTSharedFnInsertionCommand(
+            target_points=target_points,
+            fn=fn,
+            compression_module_type=compression_module_type,
+            op_unique_name=op_unique_name,
+            priority=priority,
+            hooks_group_name=group,
+        )
 
 
 class LeNet(nn.Module):
@@ -252,6 +297,58 @@ class SharedCustomConv(nn.Module):
         a = F.conv2d(x, self.weight)
         b = F.conv2d(x + 1, self.weight)
         return a + b
+
+
+class DummyOpWithState(torch.nn.Module):
+    def __init__(self, state: str):
+        super().__init__()
+        self._state = state
+
+    def __call__(self, *args):
+        if len(args) == 1:
+            return args[0]
+        # To work correctly with
+        # TargetType.PRE_LAYER_OPERATION
+        # TargetType.POST_LAYER_OPERATION
+        return None
+
+    def get_state(self):
+        return self._state
+
+    @classmethod
+    def from_state(cls, state: str):
+        return cls(state)
+
+
+def target_points_are_equal(tp_original: PTTargetPoint, tp_recovered: PTTargetPoint):
+    if tp_original != tp_recovered:
+        return False
+    if tp_original.target_type == TargetType.OPERATOR_PRE_HOOK:
+        return tp_original.input_port_id == tp_recovered.input_port_id
+    return True
+
+
+def check_commands_are_equal(
+    command, applied_command, check_priority: bool = True, check_hooks_group_name: bool = True, check_fn_ref=True
+):
+    assert type(applied_command) is type(command)
+    # Check reference to functions are equal.
+    if check_fn_ref:
+        assert applied_command.fn is command.fn
+    if check_hooks_group_name:
+        assert applied_command.hooks_group_name == command.hooks_group_name
+    if check_priority:
+        assert applied_command.priority == command.priority
+
+    if isinstance(applied_command, PTInsertionCommand):
+        assert target_points_are_equal(command.target_point, applied_command.target_point)
+    elif isinstance(applied_command, PTSharedFnInsertionCommand):
+        all(target_points_are_equal(a, b) for a, b in zip(command.target_points, applied_command.target_points))
+        assert applied_command.target_points == command.target_points
+        assert applied_command.op_name == command.op_name
+        assert applied_command.compression_module_type == command.compression_module_type
+    else:
+        raise RuntimeError()
 
 
 def get_empty_config(

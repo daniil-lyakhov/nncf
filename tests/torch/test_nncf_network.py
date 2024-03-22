@@ -43,7 +43,6 @@ from nncf.torch.graph.operator_metatypes import PTModuleConv2dMetatype
 from nncf.torch.graph.transformations.commands import ExtraCompressionModuleType
 from nncf.torch.graph.transformations.commands import PTInsertionCommand
 from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
-from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.layers import NNCFConv2d
@@ -58,6 +57,7 @@ from tests.torch.composite.test_sparsity_quantization import get_basic_sparsity_
 from tests.torch.helpers import BasicConvTestModel
 from tests.torch.helpers import HookChecker
 from tests.torch.helpers import TwoConvTestModel
+from tests.torch.helpers import check_commands_are_equal
 from tests.torch.helpers import check_correct_nncf_modules_replacement
 from tests.torch.helpers import create_compressed_model_and_algo_for_test
 from tests.torch.helpers import register_bn_adaptation_init_args
@@ -1032,65 +1032,6 @@ class TestHookHandles:
             _check(ref_hooks)
 
 
-class DummyOpWithState(torch.nn.Module):
-    def __init__(self, state: str):
-        super().__init__()
-        self._state = state
-
-    def __call__(self, *args):
-        if len(args) == 1:
-            return args[0]
-        # To work correctly with
-        # TargetType.PRE_LAYER_OPERATION
-        # TargetType.POST_LAYER_OPERATION
-        return None
-
-    def get_state(self):
-        return self._state.copy()
-
-    @classmethod
-    def from_state(cls, state: str):
-        return cls(state)
-
-
-TWO_CONV_MODEL_NODES_NAMES = [
-    "TwoConvTestModel/Sequential[features]/Sequential[0]/NNCFConv2d[0]/conv2d_0",
-    "TwoConvTestModel/Sequential[features]/Sequential[1]/NNCFConv2d[0]/conv2d_0",
-]
-
-
-def _create_pt_insertion_command(
-    target_type: TargetType, priority: TransformationPriority, group: str = "default_group"
-):
-    target_point = PTTargetPoint(
-        target_type=target_type, target_node_name=TWO_CONV_MODEL_NODES_NAMES[0], input_port_id=0
-    )
-    fn = DummyOpWithState("DUMMY_STATE")
-    return PTInsertionCommand(point=target_point, fn=fn, priority=priority, hooks_group_name=group)
-
-
-def _create_pt_shared_fn_insertion_command(
-    target_type: TargetType,
-    priority: TransformationPriority,
-    compression_module_type: ExtraCompressionModuleType,
-    group: str = "default_group",
-    op_unique_name: str = "UNIQUE_NAME",
-):
-    target_points = []
-
-    for node_name in TWO_CONV_MODEL_NODES_NAMES:
-        target_points.append(PTTargetPoint(target_type=target_type, target_node_name=node_name, input_port_id=0))
-    fn = DummyOpWithState("DUMMY_STATE")
-    return PTSharedFnInsertionCommand(
-        target_points=target_points,
-        fn=fn,
-        compression_module_type=compression_module_type,
-        op_unique_name=op_unique_name,
-        priority=priority,
-        hooks_group_name=group,
-    )
-
-
 @pytest.mark.parametrize(
     "target_type",
     (
@@ -1104,16 +1045,17 @@ def _create_pt_shared_fn_insertion_command(
 @pytest.mark.parametrize(
     "command_builder,command_type",
     (
-        (_create_pt_insertion_command, PTInsertionCommand),
+        (TwoConvTestModel.create_pt_insertion_command, PTInsertionCommand),
         (
             functools.partial(
-                _create_pt_shared_fn_insertion_command, compression_module_type=ExtraCompressionModuleType.EXTERNAL_OP
+                TwoConvTestModel.create_pt_shared_fn_insertion_command,
+                compression_module_type=ExtraCompressionModuleType.EXTERNAL_OP,
             ),
             PTSharedFnInsertionCommand,
         ),
         (
             functools.partial(
-                _create_pt_shared_fn_insertion_command,
+                TwoConvTestModel.create_pt_shared_fn_insertion_command,
                 compression_module_type=ExtraCompressionModuleType.EXTERNAL_QUANTIZER,
             ),
             PTSharedFnInsertionCommand,
@@ -1141,7 +1083,9 @@ class TestGetAppliedModificationCommands:
 
         assert len(applied_commands) == 1
         applied_command = applied_commands[0]
-        self._check_commands_are_equal_except_priority_and_hooks_group(command, applied_command)
+
+        ### TODO: map hooks group name
+        check_commands_are_equal(command, applied_command, check_priority=False, check_hooks_group_name=False)
 
     def test_priority_of_get_applied_modification_commands(self, command_builder, target_type, command_type):
         layout = PTTransformationLayout()
@@ -1170,36 +1114,5 @@ class TestGetAppliedModificationCommands:
         assert len(applied_commands) == len(commands)
         for applied_command in applied_commands:
             command = commands[applied_command.priority]
-            self._check_commands_are_equal_except_priority_and_hooks_group(command, applied_command)
-
-    @staticmethod
-    def _target_points_are_equal(tp_original: PTTargetPoint, tp_recovered: PTTargetPoint):
-        if tp_original != tp_recovered:
-            return False
-        if tp_original.target_type == TargetType.OPERATOR_PRE_HOOK:
-            return tp_original.input_port_id == tp_recovered.input_port_id
-        return True
-
-    @staticmethod
-    def _check_commands_are_equal_except_priority_and_hooks_group(command, applied_command):
-        assert type(applied_command) is type(command)
-        # Check reference to functions are equal.
-        # Important for the priority check
-        assert applied_command.fn is command.fn
-        ### TODO: map hooks group name
-        # assert applied_command.hooks_group_name == command.hooks_group_name
-
-        if isinstance(applied_command, PTInsertionCommand):
-            assert TestGetAppliedModificationCommands._target_points_are_equal(
-                command.target_point, applied_command.target_point
-            )
-        elif isinstance(applied_command, PTSharedFnInsertionCommand):
-            all(
-                TestGetAppliedModificationCommands._target_points_are_equal(a, b)
-                for a, b in zip(command.target_points, applied_command.target_points)
-            )
-            assert applied_command.target_points == command.target_points
-            assert applied_command.op_name == command.op_name
-            assert applied_command.compression_module_type == command.compression_module_type
-        else:
-            raise RuntimeError()
+            ### TODO: map hooks group name
+            check_commands_are_equal(command, applied_command, check_priority=False, check_hooks_group_name=False)

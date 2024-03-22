@@ -10,6 +10,7 @@
 # limitations under the License.
 
 from enum import Enum
+from typing import Any, Dict, Union
 
 import torch
 
@@ -31,7 +32,28 @@ class CompressionKeys(Enum):
     INSERTION_COMMAND = "INSERTION_COMMAND"
 
 
-def serialize_command(command: PTTransformationCommand):
+def serialize_transformations(model: torch.nn.Module, transformations_layout: TransformationLayout) -> Dict[str, Any]:
+    transformation_commands = []
+    for command in transformations_layout.transformations:
+        serialized_command = serialize_command(command)
+        if serialized_command:
+            transformation_commands.append(serialized_command)
+
+    return {
+        COMPRESSION_STATE_ATTR: transformation_commands,
+        EXAMPLE_INPUT_ATTR: model.nncf._input_info.get_forward_inputs(),
+    }
+
+
+def load_transformations(model: torch.nn.Module, transformations_state) -> torch.nn.Module:
+    transformation_layout = TransformationLayout()
+    for serialized_command in transformations_state[COMPRESSION_STATE_ATTR]:
+        command = load_command(serialized_command)
+        transformation_layout.register(command)
+    return nncf.apply_transformations(model, transformation_layout, transformations_state[EXAMPLE_INPUT_ATTR])
+
+
+def serialize_command(command: PTTransformationCommand) -> Dict[str, Any]:
     if not isinstance(command, (PTSharedFnInsertionCommand, PTInsertionCommand)):
         return {}
 
@@ -56,49 +78,34 @@ def serialize_command(command: PTTransformationCommand):
     serialized_transformation["compression_module_name"] = compression_module_name
     serialized_transformation["fn_state"] = command.fn.get_state()
     serialized_transformation["hooks_group_name"] = command.hooks_group_name
-    serialized_transformation["priority"] = command.priority.value
+    priority = command.priority
+    serialized_transformation["priority"] = priority.value if isinstance(priority, Enum) else priority
     return serialized_transformation
 
 
-def serialize_transformations(model: torch.nn.Module, transformations_layout: TransformationLayout):
-    transformation_commands = []
-    for command in transformations_layout.transformations:
-        serialized_command = serialize_command(command)
-        if serialized_command:
-            transformation_commands.append(serialized_command)
+def load_command(serialized_command: Dict[str, Any]) -> Union[PTInsertionCommand, PTSharedFnInsertionCommand]:
+    module_cls = COMPRESSION_MODULES.get(serialized_command["compression_module_name"])
+    fn = module_cls.from_state(serialized_command["fn_state"])
+    priority = serialized_command["priority"]
+    if priority in iter(TransformationPriority):
+        priority = TransformationPriority(priority)
 
-    return {
-        COMPRESSION_STATE_ATTR: transformation_commands,
-        EXAMPLE_INPUT_ATTR: model.nncf._input_info.get_forward_inputs(),
-    }
+    if serialized_command["type"] == CompressionKeys.INSERTION_COMMAND.value:
+        target_point = PTTargetPoint.from_state(serialized_command["target_point"])
+        serialized_command = PTInsertionCommand(
+            point=target_point, fn=fn, priority=priority, hooks_group_name=serialized_command["hooks_group_name"]
+        )
+        return serialized_command
 
-
-def load_transformations(model: torch.nn.Module, transformations_state) -> torch.nn.Module:
-    transformation_layout = TransformationLayout()
-    for command in transformations_state[COMPRESSION_STATE_ATTR]:
-        module_cls = COMPRESSION_MODULES.get(command["compression_module_name"])
-        fn = module_cls.from_state(command["fn_state"])
-        priority = TransformationPriority(command["priority"])
-        if command["type"] == CompressionKeys.INSERTION_COMMAND.value:
-            target_point = PTTargetPoint.from_state(command["target_point"])
-            command = PTInsertionCommand(
-                point=target_point, fn=fn, priority=priority, hooks_group_name=command["hooks_group_name"]
-            )
-            transformation_layout.register(command)
-            continue
-
-        if command["type"] == CompressionKeys.SHARED_INSERTION_COMMAND.value:
-            target_points = [PTTargetPoint.from_state(state) for state in command["target_points"]]
-            command = PTSharedFnInsertionCommand(
-                target_points=target_points,
-                fn=fn,
-                op_unique_name=command["op_name"],
-                compression_module_type=command["compression_module_type"],
-                priority=priority,
-                hooks_group_name=command["hooks_group_name"],
-            )
-            transformation_layout.register(command)
-
-            continue
-        raise RuntimeError(f"Command type {command['type']} is not supported.")
-    return nncf.apply_transformations(model, transformation_layout, transformations_state[EXAMPLE_INPUT_ATTR])
+    if serialized_command["type"] == CompressionKeys.SHARED_INSERTION_COMMAND.value:
+        target_points = [PTTargetPoint.from_state(state) for state in serialized_command["target_points"]]
+        serialized_command = PTSharedFnInsertionCommand(
+            target_points=target_points,
+            fn=fn,
+            op_unique_name=serialized_command["op_name"],
+            compression_module_type=serialized_command["compression_module_type"],
+            priority=priority,
+            hooks_group_name=serialized_command["hooks_group_name"],
+        )
+        return serialized_command
+    raise RuntimeError(f"Command type {serialized_command['type']} is not supported.")
