@@ -76,6 +76,7 @@ from nncf.torch.graph.transformations.commands import PTTransformationCommand
 from nncf.torch.graph.transformations.serialization import serialize_command
 from nncf.torch.knowledge_distillation.knowledge_distillation_handler import KnowledgeDistillationLossHandler
 from nncf.torch.layer_utils import _NNCFModuleMixin
+from nncf.torch.module_operations import UpdateWeight
 from nncf.torch.nncf_module_replacement import replace_modules_by_nncf_modules
 from nncf.torch.quantization.external_quantizer import EXTERNAL_QUANTIZERS_STORAGE_NAME
 from nncf.torch.utils import compute_FLOPs_hook
@@ -795,11 +796,7 @@ class NNCFNetworkInterface(torch.nn.Module):
                 result.append(scope_in_model)
         return result
 
-    COMPRESSION_MODULES_KEY = "compression_modules"
-
     def get_applied_modification_commands(self):
-        from nncf.torch.module_operations import UpdateWeight
-
         def _create_pt_insert_command(module, target_type, target_node_name, priority, input_port_id):
             target_point = PTTargetPoint(
                 target_type=target_type, target_node_name=target_node_name, input_port_id=input_port_id
