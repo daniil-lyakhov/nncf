@@ -40,19 +40,12 @@ from nncf.torch.tensor_statistics.collectors import PTNNCFCollectorTensorProcess
 
 @COMPRESSION_MODULES.register()
 class SQMultiply(torch.nn.Module):
-    def __init__(self, scale_value=1.0):
+    def __init__(self, scale_value):
         super().__init__()
         self._scale_value = scale_value
 
     def forward(self, x):
         return torch.mul(x, self._scale_value)
-
-    def get_state(self):
-        return {}
-
-    @classmethod
-    def from_state(cls, state):
-        return cls()
 
 
 PT_PRE_LAYER_TARGET_TYPE = TargetType.OPERATOR_PRE_HOOK

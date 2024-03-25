@@ -226,16 +226,6 @@ def test_compression_training(quantization_config: SampleConfig):
     start_worker(main_worker, quantization_config)
 
 
-def test_compression_training_with_safe_and_load_state(quantization_config):
-    if quantization_config.model == "mobilenet_v3_small":
-        # Use default range initializer for mobilenet_v3_small
-        # as due to PTQ advantages it works better for the model.
-        del quantization_config.nncf_config["compression"]["initializer"]["range"]
-        del quantization_config["compression"]["initializer"]["range"]
-
-    start_worker(save_load_main_worker, quantization_config)
-
-
 def main_worker(current_gpu: int, config: SampleConfig):
     configure_device(current_gpu, config)
     if is_main_process():

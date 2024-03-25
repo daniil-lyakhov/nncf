@@ -17,7 +17,6 @@ from nncf import Dataset
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.graph.graph import NNCFNode
 from nncf.common.graph.graph_matching import find_subgraphs_matching_pattern
-from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.logging.track_progress import track
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
 from nncf.common.utils.backend import BackendType
@@ -267,13 +266,11 @@ class AWQ(Algorithm):
         return model
 
     def get_statistic_points(self, model: TModel, graph: NNCFGraph) -> StatisticPointsContainer:
-        return StatisticPointsContainer()
+        """
+        Returns statistic points, for which StatisticsCollector should collect statistics.
 
-    def get_transformation_layout(
-        self,
-        model: TModel,
-        graph: NNCFGraph,
-        statistic_points: Optional[StatisticPointsContainer] = None,
-        dataset: Optional[Dataset] = None,
-    ) -> TransformationLayout:
-        raise NotImplementedError("get_transformation_layout is not implemented yet for the AWQ compression algorithm.")
+        :param model: Model for statistics collection.
+        :param graph: Model graph.
+        :return: Statistic points, for which StatisticsCollector should collect statistics.
+        """
+        return StatisticPointsContainer()

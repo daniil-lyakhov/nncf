@@ -261,16 +261,6 @@ class BaseTestPipeline(ABC):
         self.prepare_preprocessor()
         self.prepare_calibration_dataset()
 
-    def get_state(self):
-        """
-        Get state of the compressed model.
-        """
-
-    def load_state(self, state):
-        """
-        load state of the compressed model.
-        """
-
     def validate(self) -> None:
         """
         Validate and compare result with reference.
@@ -422,9 +412,3 @@ class PTQTestPipeline(BaseTestPipeline):
         stats = PTQTimeStats()
         stats.fill(stdout)
         self.run_info.stats_from_output = stats
-
-    def get_state(self):
-        return self.compressed_model.state_dict().copy()
-
-    def load_state(self, state):
-        self.compressed_model.load_state_dict(state)

@@ -274,22 +274,22 @@ class PTMinMaxAlgoBackend(MinMaxAlgoBackend):
         quantizer = quantizer_cls(quantizer_spec)
 
         # Fill it with minmax
-        PTMinMaxAlgoBackend._fill_quantizer_parameters(quantizer, parameters, quantizer_spec.scale_shape)
+        PTMinMaxAlgoBackend._fill_quantizer_parameters(quantizer, parameters)
         return quantizer
 
     @staticmethod
-    def _fill_quantizer_parameters(quantizer: BaseQuantizer, parameters: FakeQuantizeParameters, scale_shape) -> None:
+    def _fill_quantizer_parameters(quantizer: BaseQuantizer, parameters: FakeQuantizeParameters) -> None:
         if isinstance(quantizer, AsymmetricQuantizer):
-            quantizer.input_low = torch.nn.Parameter(parameters.input_low.data.reshape(scale_shape))
+            quantizer.input_low = torch.nn.Parameter(parameters.input_low.data)
             input_range = parameters.input_high - parameters.input_low
             # Subtract eps from the input_range to make quantizer parameters equal to
             # original parameters on the forward call.
-            quantizer.input_range = torch.nn.Parameter((input_range.data - quantizer.eps).reshape(scale_shape))
+            quantizer.input_range = torch.nn.Parameter(input_range.data - quantizer.eps)
         else:
             quantizer.signed = bool(torch.any(parameters.input_low.data < 0))
             # Subtract eps from the scale to make quantizer parameters equal to
             # original parameters on the forward call.
-            quantizer.scale = torch.nn.Parameter((parameters.input_high.data - quantizer.eps).reshape(scale_shape))
+            quantizer.scale = torch.nn.Parameter(parameters.input_high.data - quantizer.eps)
 
     @staticmethod
     def create_quantizer_insertion_command(

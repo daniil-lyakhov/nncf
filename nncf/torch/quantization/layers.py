@@ -286,7 +286,6 @@ class PTQuantizerSetup(QuantizerSetupBase):
 class BaseQuantizer(nn.Module, ABC):
     def __init__(self, qspec: PTQuantizerSpec):
         super().__init__()
-        self._qspec = qspec
         self._narrow_range = qspec.narrow_range
         self._signedness_to_force = qspec.signedness_to_force
         self._is_using_log_scale_storage = qspec.logarithm_scale
@@ -352,10 +351,6 @@ class BaseQuantizer(nn.Module, ABC):
     @property
     def levels(self):
         return get_num_levels(self.level_low, self.level_high)
-
-    @property
-    def quantizer_spec(self) -> PTQuantizerSpec:
-        return self._qspec
 
     @abstractmethod
     def enable_gradients(self):

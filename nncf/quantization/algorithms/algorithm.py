@@ -14,9 +14,7 @@ from abc import abstractmethod
 from typing import List, Optional, TypeVar
 
 from nncf import Dataset
-from nncf.common.factory import ModelTransformerFactory
 from nncf.common.graph.graph import NNCFGraph
-from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
 from nncf.common.utils.backend import BackendType
 
@@ -37,6 +35,7 @@ class Algorithm(ABC):
         :return: List of backends supported by the algorithm.
         """
 
+    @abstractmethod
     def apply(
         self,
         model: TModel,
@@ -53,28 +52,6 @@ class Algorithm(ABC):
         :param dataset: A representative dataset for the calibration process.
         :return: A resulting model.
         """
-        transformation_layout = self.get_transformation_layout(model, graph, statistic_points, dataset)
-        return self.apply_transformation_layout(transformation_layout)
-
-    @abstractmethod
-    def get_transformation_layout(
-        self,
-        model: TModel,
-        graph: NNCFGraph,
-        statistic_points: Optional[StatisticPointsContainer] = None,
-        dataset: Optional[Dataset] = None,
-    ) -> TransformationLayout:
-        """
-        get_transformation_layout
-        """
-
-    def apply_transformation_layout(self, model: TModel, transformation_layout: TransformationLayout) -> TModel:
-        """
-        apply_transformation_layout
-        """
-        model_transformer = ModelTransformerFactory.create(model)
-        transformed_model = model_transformer.transform(transformation_layout)
-        return transformed_model
 
     @abstractmethod
     def get_statistic_points(self, model: TModel, graph: NNCFGraph) -> StatisticPointsContainer:

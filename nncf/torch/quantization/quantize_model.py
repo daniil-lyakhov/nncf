@@ -17,7 +17,7 @@ import torch
 import nncf
 from nncf.common.factory import ModelTransformerFactory
 from nncf.common.factory import NNCFGraphFactory
-from nncf.common.graph.transformations.layout import TransformationLayout
+from nncf.common.graph.transformations import TransformationLayout
 from nncf.common.quantization.structs import QuantizationPreset
 from nncf.data import Dataset
 from nncf.experimental.tensor import Tensor
@@ -122,48 +122,6 @@ def apply_transformations_impl(
 
     transformed_model.nncf.disable_dynamic_graph_building()
     return transformed_model
-
-
-def get_quantization_transformations(
-    model: torch.nn.Module,
-    calibration_dataset: Dataset,
-    mode: Optional[QuantizationMode] = None,
-    preset: Optional[QuantizationPreset] = None,
-    target_device: TargetDevice = TargetDevice.ANY,
-    subset_size: int = 300,
-    fast_bias_correction: bool = True,
-    model_type: Optional[ModelType] = None,
-    ignored_scope: Optional[IgnoredScope] = None,
-    advanced_parameters: Optional[AdvancedQuantizationParameters] = None,
-) -> torch.nn.Module:
-    """
-    Implementation of the `quantize()` method for the PyTorch backend.
-    """
-    if fast_bias_correction is False:
-        raise ValueError(f"fast_bias_correction={fast_bias_correction} is not supported")
-    if target_device == TargetDevice.CPU_SPR:
-        raise nncf.InternalError("target_device == CPU_SPR is not supported")
-    if mode is not None:
-        raise ValueError(f"mode={mode} is not supported")
-
-    copied_model = deepcopy(model)
-
-    example_input = next(iter(calibration_dataset.get_inference_data()))
-    nncf_network = wrap_model(copied_model.eval(), example_input)
-
-    quantization_algorithm = PostTrainingQuantization(
-        preset=preset,
-        target_device=target_device,
-        subset_size=subset_size,
-        fast_bias_correction=fast_bias_correction,
-        model_type=model_type,
-        ignored_scope=ignored_scope,
-        advanced_parameters=advanced_parameters,
-    )
-
-    return quantization_algorithm.get_transformation_layout(
-        nncf_network, nncf_network.nncf.get_graph(), dataset=calibration_dataset
-    )
 
 
 def serialize_transformations_impl(

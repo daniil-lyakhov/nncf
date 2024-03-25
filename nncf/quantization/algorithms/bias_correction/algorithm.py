@@ -128,15 +128,16 @@ class BiasCorrection(Algorithm):
                 "Cannot return backend-specific entity because {} is not supported!".format(model_backend.value)
             )
 
-    def get_transformation_layout(
+    def apply(
         self,
         model: TModel,
         graph: NNCFGraph,
         statistic_points: Optional[StatisticPointsContainer] = None,
         dataset: Optional[Dataset] = None,
-    ) -> TransformationLayout:
+    ) -> TModel:
         self._set_backend_entity(model)
         main_transformations_layout = TransformationLayout()
+        main_model_transformer = ModelTransformerFactory.create(model)
 
         model_copy = copy_model(model)
         graph_copy = NNCFGraphFactory.create(model_copy)
@@ -201,7 +202,7 @@ class BiasCorrection(Algorithm):
             # to reduce memory usage during the algorithm's pipeline.
             self._remove_unnecessary_stats(position, subgraphs_data)
 
-        return main_transformations_layout
+        return main_model_transformer.transform(main_transformations_layout)
 
     def _is_node_correctable(self, node: NNCFNode, nncf_graph: NNCFGraph) -> bool:
         """
