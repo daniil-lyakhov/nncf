@@ -27,6 +27,8 @@ from torchvision import transforms
 
 import nncf
 from nncf.common.logging.track_progress import track
+from nncf.torch import load_from_checkpoint
+from nncf.torch import save_checkpoint
 
 ROOT = Path(__file__).parent.resolve()
 CHECKPOINT_URL = "https://huggingface.co/alexsu52/mobilenet_v2_imagenette/resolve/main/pytorch_model.bin"
@@ -145,6 +147,14 @@ def transform_fn(data_item: Tuple[torch.Tensor, int], device: torch.device) -> t
 subset_size = 300 // batch_size
 calibration_dataset = nncf.Dataset(val_data_loader, partial(transform_fn, device=device))
 torch_quantized_model = nncf.quantize(torch_model, calibration_dataset, subset_size=subset_size)
+
+
+# Save, delete and load compression
+save_dir_path = ROOT / "compressed_ckpt"
+save_checkpoint(torch_quantized_model, save_dir_path)
+del torch_quantized_model
+example_input = torch.ones((128, 3, 224, 224)).cuda()
+torch_quantized_model = load_from_checkpoint(torch_model, save_dir_path, example_input)
 
 ###############################################################################
 # Benchmark performance, calculate compression rate and validate accuracy
