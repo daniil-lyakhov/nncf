@@ -22,16 +22,14 @@ from ultralytics.utils.torch_utils import de_parallel
 from ultralytics.utils.torch_utils import strip_optimizer
 
 import nncf
-from nncf.common.factory import ModelTransformerFactory
-from nncf.torch import wrap_model
-from nncf.torch.graph.transformations.serialization import load_transformations
-from nncf.torch.graph.transformations.serialization import serialize_transformations
+from nncf.torch import get_aux_config
+from nncf.torch import load_from_aux
 from nncf.torch.model_creation import is_wrapped_model
 
-CHECKPOINT_PATH = "yolov8n.pt"
+# CHECKPOINT_PATH = "yolov8n.pt"
 # CHECKPOINT_PATH = "path/to/saved/ckpt"
 # CHECKPOINT_PATH = "path/to/saved/ckpt"
-CHECKPOINT_PATH = "/home/dlyakhov/Projects/ultralytics/runs/detect/train77/weights/best.pt"
+CHECKPOINT_PATH = "/home/dlyakhov/Projects/ultralytics/runs/detect/train92/weights/best.pt"
 
 
 class MyTrainer(DetectionTrainer):
@@ -45,7 +43,7 @@ class MyTrainer(DetectionTrainer):
         if not is_wrapped_model(self.model):
             # Make copy of model to support `DetectionTrainer` save/load logic
             self.original_model = deepcopy(self.model)
-            if ckpt.get("NNCF_TRANSFORMATIONS_STATE"):
+            if ckpt.get("NNCF_AUX_CONFIG"):
                 self.resume_model_for_qat(ckpt)
             else:
                 self.prepare_model_for_qat()
@@ -77,14 +75,8 @@ class MyTrainer(DetectionTrainer):
         self.model = nncf.quantize(self.model.to(self.device), calibration_dataset, ignored_scope=ignored_scope)
 
     def resume_model_for_qat(self, ckpt):
-        transformations_layout = load_transformations(ckpt["NNCF_TRANSFORMATIONS_STATE"])
-
-        nncf_network = wrap_model(self.model.to(self.device), next(iter(self.get_nncf_dataset().get_inference_data())))
-        model_transformer = ModelTransformerFactory.create(nncf_network)
-        transformed_model = model_transformer.transform(transformations_layout)
-
-        transformed_model.nncf.disable_dynamic_graph_building()
-        self.model = transformed_model
+        example_input = next(iter(self.get_nncf_dataset().get_inference_data()))
+        self.model = load_from_aux(self.model.to(self.device), ckpt["NNCF_AUX_CONFIG"], example_input=example_input)
         self.model.load_state_dict(ckpt["model_state_dict"])
 
     def save_qat_model(self):
@@ -95,15 +87,14 @@ class MyTrainer(DetectionTrainer):
         metrics = {**self.metrics, **{"fitness": self.fitness}}
         results = {k.strip(): v for k, v in pd.read_csv(self.csv).to_dict(orient="list").items()}
 
-        transformations = self.model.nncf.get_applied_transformation_layout()
-        serialized_transformations = serialize_transformations(transformations)
+        aux_config = get_aux_config(self.model, save_input_info=False)
 
         ckpt = {
             "epoch": self.epoch,
             "best_fitness": self.best_fitness,
             "model": deepcopy(de_parallel(self.original_model)).half(),
             "model_state_dict": de_parallel(self.model).state_dict(),
-            "NNCF_TRANSFORMATIONS_STATE": serialized_transformations,
+            "NNCF_AUX_CONFIG": aux_config,
             "optimizer": self.optimizer.state_dict(),
             "train_args": vars(self.args),  # save as dict
             "train_metrics": metrics,

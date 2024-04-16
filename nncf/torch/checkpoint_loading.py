@@ -8,9 +8,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
+import os
 import re
+from copy import deepcopy
 from enum import Enum
-from typing import Dict, List, Set, Tuple
+from pathlib import Path
+from typing import Dict, List, Set, Tuple, Union
 
 import torch
 
@@ -433,3 +437,103 @@ class KeyMatcher:
         """
         num_matched_params = len(self._new_dict)
         self._processed_keys.handle_problematic(self._is_resume, num_matched_params == self._num_params_to_load)
+
+
+NNCF_TRANSFORMATIONS_KEY = "NNCF_TRANSFORMATIONS_STATE"
+
+
+def _get_input_info(nncf_network):
+    from nncf.torch.dynamic_graph.io_handling import FillerInputElement
+    from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
+
+    args, kwargs = nncf_network.nncf._input_info.get_forward_inputs()
+    elems = []
+
+    def type_to_str(type_):
+        return "float" if type_.is_floating_point else "long"
+
+    for arg in args:
+        elems.append(FillerInputElement(shape=list(arg.shape), type_str=type_to_str(arg.dtype)))
+    for k, v in kwargs.items():
+        elems.append(FillerInputElement(shape=list(v.shape), keyword=k, type_str=type_to_str(v.dtype)))
+    return FillerInputInfo(elems)
+
+
+def save_checkpoint(nncf_network, path: Union[Path, str]):
+    nncf_state = get_aux_config(nncf_network)
+    state_dict = nncf_network.state_dict()
+    assert NNCF_TRANSFORMATIONS_KEY not in state_dict
+    state_dict[NNCF_TRANSFORMATIONS_KEY] = nncf_state
+    torch.save(state_dict, path)
+
+
+def load_from_checkpoint(model: torch.nn.Module, path: Union[Path, str]):
+    state_dict = torch.load(path)
+    nncf_state = state_dict.pop(NNCF_TRANSFORMATIONS_KEY)
+    transformed_model = _apply_transformations(model, nncf_state)
+    transformed_model.load_state_dict(state_dict)
+    return transformed_model
+
+
+def _apply_transformations(model, nncf_state):
+    from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
+    from nncf.torch.graph.transformations.serialization import load_transformations
+
+    transformations = load_transformations(nncf_state["TRANSFORMATION_STATE"])
+    input_info = FillerInputInfo.from_state(nncf_state["INPUT_STATE"])
+    transformed_model = transform_model(model, transformations, input_info)
+    return transformed_model
+
+
+def transform_model(model, transformations, input_info):
+    from nncf.common.factory import ModelTransformerFactory
+    from nncf.torch.nncf_network import NNCFNetwork
+
+    nncf_network = NNCFNetwork(deepcopy(model), input_info=input_info)
+    model_transformer = ModelTransformerFactory.create(nncf_network)
+    transformed_model = model_transformer.transform(transformations)
+
+    transformed_model.nncf.disable_dynamic_graph_building()
+    return transformed_model
+
+
+def get_aux_config(nncf_network: torch.nn.Module, save_input_info=True):
+    from nncf.torch.graph.transformations.serialization import serialize_transformations
+
+    transformations = nncf_network.nncf.get_applied_transformation_layout()
+    aux_config = {
+        "TRANSFORMATION_STATE": serialize_transformations(transformations),
+    }
+
+    if save_input_info:
+        aux_config.update({"INPUT_STATE": _get_input_info(nncf_network).get_state()})
+    return aux_config
+
+
+SERIALIZED_TRANSFORMATIONS_PATH = "serialized_transformations.json"
+
+
+def save_aux(nncf_network, path: Union[Path, str]):
+    nncf_state = get_aux_config(nncf_network)
+    with open(os.path.join(path, SERIALIZED_TRANSFORMATIONS_PATH), "w") as out:
+        json.dump(nncf_state, out)
+
+
+def load_from_aux(model: torch.nn.Module, path, example_input=None) -> torch.nn.Module:
+    from nncf.torch.dynamic_graph.io_handling import ExactInputsInfo
+    from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
+    from nncf.torch.graph.transformations.serialization import load_transformations
+
+    if isinstance(path, dict):
+        nncf_state = path
+    else:
+        with open(os.path.join(path, SERIALIZED_TRANSFORMATIONS_PATH), "r") as out:
+            nncf_state = json.load(out)
+
+    if example_input is None:
+        input_info = FillerInputInfo.from_state(nncf_state["INPUT_STATE"])
+    else:
+        input_info = ExactInputsInfo(example_input, {})
+    transformations = load_transformations(nncf_state["TRANSFORMATION_STATE"])
+    transformed_model = transform_model(model, transformations, input_info)
+    return transformed_model
