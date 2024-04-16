@@ -11,7 +11,6 @@
 
 from copy import deepcopy
 from datetime import datetime
-from typing import Any, Dict, Tuple
 
 import torch
 from ultralytics.models.yolo.detect import DetectionTrainer
@@ -22,56 +21,19 @@ from ultralytics.utils import __version__
 from ultralytics.utils.torch_utils import de_parallel
 from ultralytics.utils.torch_utils import strip_optimizer
 
-from nncf import NNCFConfig
-from nncf.torch import create_compressed_model
-from nncf.torch import register_default_init_args
-from nncf.torch.dynamic_graph.io_handling import nncf_model_input
-from nncf.torch.initialization import PTInitializingDataLoader
+import nncf
+from nncf.torch import load_from_aux
 from nncf.torch.model_creation import is_wrapped_model
 
-
-# 1 integration issue:
-# MyInitializingDataLoader must support deep copy because DetectionTrainer does a deep copy
-# of the model and MyInitializingDataLoader during training setup. The input data_loader
-# of ultralytics.data.build.InfiniteDataLoader type does not support deep copy and
-# can not be used directly into MyInitializingDataLoader. The workaround for this limitation is
-# to create a deepcopable dataset from the data_loader.
-class MyInitializingDataLoader(PTInitializingDataLoader):
-    def __init__(self, data_loader, preprocess_batch_fn, num_samples=300):
-        super().__init__(data_loader)
-        self._batch_size = self._data_loader.batch_size
-        # Using list of images instead of 'ultralytics.data.build.InfiniteDataLoader' to support deepcopy.
-        self._data_loader = []
-        num_samples = num_samples / self._batch_size
-        for count, data_item in enumerate(data_loader):
-            if count > num_samples:
-                break
-            batch = preprocess_batch_fn(data_item)
-            self._data_loader.append((batch["img"], None))
-
-    @property
-    def batch_size(self):
-        return self._batch_size
-
-    def get_inputs(self, dataloader_output: Any) -> Tuple[Tuple, Dict]:
-        # your implementation - `dataloader_output` is what is returned by your dataloader,
-        # and you have to turn it into a (args, kwargs) tuple that is required by your model
-        # in this function, for instance, if your dataloader returns dictionaries where
-        # the input image is under key `"img"`, and your YOLOv8 model accepts the input
-        # images as 0-th `forward` positional arg, you would do:
-        return (dataloader_output[0],), {}
-
-    def get_target(self, dataloader_output: Any) -> Any:
-        # and in this function you should extract the "ground truth" value from your
-        # dataloader, so, for instance, if your dataloader output is a dictionary where
-        # ground truth images are under a "gt" key, then here you would write:
-        return dataloader_output[1]
+# CHECKPOINT_PATH = "yolov8n.pt"
+# CHECKPOINT_PATH = "path/to/saved/ckpt"
+# CHECKPOINT_PATH = "path/to/saved/ckpt"
+CHECKPOINT_PATH = "/home/dlyakhov/Projects/ultralytics/runs/detect/train92/weights/best.pt"
 
 
 class MyTrainer(DetectionTrainer):
-    def __init__(self, nncf_config_dict, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
+    def __init__(self, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
         super().__init__(cfg, overrides, _callbacks)
-        self.nncf_config = NNCFConfig.from_dict(nncf_config_dict)
         self.nncf_dataloader = None
 
     def setup_model(self):
@@ -80,7 +42,7 @@ class MyTrainer(DetectionTrainer):
         if not is_wrapped_model(self.model):
             # Make copy of model to support `DetectionTrainer` save/load logic
             self.original_model = deepcopy(self.model)
-            if ckpt.get("model_compression_state"):
+            if ckpt.get("NNCF_AUX_CONFIG"):
                 self.resume_model_for_qat(ckpt)
             else:
                 self.prepare_model_for_qat()
@@ -92,47 +54,28 @@ class MyTrainer(DetectionTrainer):
         if self.ema:
             self.ema.enabled = False
 
-    def get_nncf_dataloader(self):
+    def get_nncf_dataset(self):
         if self.nncf_dataloader is None:
-            num_samples = self.nncf_config["compression"]["initializer"]["range"]["num_init_samples"]
+
+            def transform_fn(x):
+                x = self.preprocess_batch(x)
+                return x["img"], None
+
             train_loader = self.get_dataloader(self.trainset, batch_size=1, rank=RANK, mode="train")
-            self.nncf_dataloader = MyInitializingDataLoader(train_loader, self.preprocess_batch, num_samples)
+            self.nncf_dataloader = nncf.Dataset(train_loader, transform_fn)
         return self.nncf_dataloader
 
-    def create_wrap_inputs_fn(self):
-        # 2 integration issue:
-        # NNCF requires the same structure of inputs in the forward function during model training
-        # for correct model tracing, but the DetectionModel forward function support image tensor
-        # or dict as input:
-        # def forward(self, x, *args, **kwargs):
-        #     if isinstance(x, dict):  # for cases of training and validating while training.
-        #         return self.loss(x, *args, **kwargs)
-        #     return self.predict(x, *args, **kwargs)
-        # In this case, wrap_inputs_fn should be implemented to specify the "original" model input
-        def wrap_inputs_fn(args, kwargs):
-            if isinstance(args[0], dict):
-                return args, kwargs
-            args = (nncf_model_input(args[0]),) + args[1:]
-            return args, kwargs
-
-        return wrap_inputs_fn
-
     def prepare_model_for_qat(self):
-        nncf_dataloader = self.get_nncf_dataloader()
-        self.nncf_config = register_default_init_args(self.nncf_config, nncf_dataloader)
-
-        self.model = self.model.to(self.device)
-        _, self.model = create_compressed_model(
-            self.model, self.nncf_config, wrap_inputs_fn=self.create_wrap_inputs_fn()
+        calibration_dataset = self.get_nncf_dataset()
+        # TODO figure out why inputs are being quantized. Do conv.pre_hook instead of input.post_hook
+        ignored_scope = nncf.IgnoredScope(
+            names=["DetectionModel/Sequential[model]/Conv[0]/NNCFConv2d[conv]/conv2d_0"], patterns=[".*/Detect.*"]
         )
+        self.model = nncf.quantize(self.model.to(self.device), calibration_dataset, ignored_scope=ignored_scope)
 
     def resume_model_for_qat(self, ckpt):
-        _, self.model = create_compressed_model(
-            self.model,
-            self.nncf_config,
-            compression_state=ckpt["model_compression_state"],
-            wrap_inputs_fn=self.create_wrap_inputs_fn(),
-        )
+        example_input = next(iter(self.get_nncf_dataset().get_inference_data()))
+        self.model = load_from_aux(self.model.to(self.device), ckpt["NNCF_AUX_CONFIG"], example_input)
         self.model.load_state_dict(ckpt["model_state_dict"])
 
     def save_qat_model(self):
@@ -141,17 +84,14 @@ class MyTrainer(DetectionTrainer):
         metrics = {**self.metrics, **{"fitness": self.fitness}}
         results = {k.strip(): v for k, v in pd.read_csv(self.csv).to_dict(orient="list").items()}
 
-        compression_controller = self.model.nncf.compression_controller
-        model_compression_state = {}
-        if compression_controller is not None:
-            model_compression_state = compression_controller.get_compression_state()
+        aux_config = self.model.nncf.get_aux_config()
 
         ckpt = {
             "epoch": self.epoch,
             "best_fitness": self.best_fitness,
             "model": deepcopy(de_parallel(self.original_model)).half(),
             "model_state_dict": de_parallel(self.model).state_dict(),
-            "model_compression_state": model_compression_state,
+            "NNCF_AUX_CONFIG": aux_config,
             "optimizer": self.optimizer.state_dict(),
             "train_args": vars(self.args),  # save as dict
             "train_metrics": metrics,
@@ -190,17 +130,8 @@ class MyTrainer(DetectionTrainer):
 
 
 def main():
-    args = dict(model="yolov8n.pt", data="coco8.yaml", epochs=3, mode="train", verbose=False)
-    nncf_config_dict = {
-        "input_info": {"sample_size": [1, 3, 640, 640]},
-        "log_dir": "yolov8_output",  # The log directory for NNCF-specific logging outputs.
-        "compression": {
-            "algorithm": "quantization",
-            "ignored_scopes": ["{re}/Detect"],  # ignored the post-processing
-            "initializer": {"range": {"num_init_samples": 300}},
-        },
-    }
-    nncf_trainer = MyTrainer(nncf_config_dict, overrides=args)
+    args = dict(model=CHECKPOINT_PATH, data="coco8.yaml", epochs=3, mode="train", verbose=False)
+    nncf_trainer = MyTrainer(overrides=args)
     nncf_trainer.train()
 
 

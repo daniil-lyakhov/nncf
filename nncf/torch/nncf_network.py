@@ -784,6 +784,14 @@ class NNCFNetworkInterface(torch.nn.Module):
                 result.append(scope_in_model)
         return result
 
+    def get_aux_config(self: torch.nn.Module):
+        from nncf.torch.graph.transformations.serialization import serialize_transformations
+
+        transformations = self.get_applied_transformation_layout()
+        return {
+            "TRANSFORMATION_STATE": serialize_transformations(transformations),
+        }
+
     def get_applied_transformation_layout(self) -> PTTransformationLayout:
         """
         Collects all hooks applied to the NNCFNetwork, converts them to insertion commands
