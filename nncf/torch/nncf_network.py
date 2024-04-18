@@ -784,7 +784,7 @@ class NNCFNetworkInterface(torch.nn.Module):
                 result.append(scope_in_model)
         return result
 
-    def get_aux_config(self: torch.nn.Module):
+    def transformations_config(self):
         from nncf.torch.graph.transformations.serialization import serialize_transformations
 
         transformations = self.get_applied_transformation_layout()

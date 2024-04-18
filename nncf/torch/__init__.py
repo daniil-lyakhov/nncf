@@ -71,6 +71,6 @@ from nncf.torch.checkpoint_loading import load_from_checkpoint
 from nncf.torch.checkpoint_loading import save_checkpoint
 from nncf.torch.checkpoint_loading import get_aux_config
 from nncf.torch.checkpoint_loading import save_aux
-from nncf.torch.checkpoint_loading import load_from_aux
+from nncf.torch.checkpoint_loading import from_config
 
 patch_torch_operators()

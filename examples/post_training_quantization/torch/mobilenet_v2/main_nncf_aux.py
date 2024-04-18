@@ -27,7 +27,6 @@ from torchvision import transforms
 
 import nncf
 from nncf.common.logging.track_progress import track
-from nncf.torch import load_from_aux
 
 ROOT = Path(__file__).parent.resolve()
 CHECKPOINT_URL = "https://huggingface.co/alexsu52/mobilenet_v2_imagenette/resolve/main/pytorch_model.bin"
@@ -149,11 +148,11 @@ torch_quantized_model = nncf.quantize(torch_model, calibration_dataset, subset_s
 
 
 # Get aux config, delete compressed model and load from aux config
-aux_config = torch_quantized_model.nncf.get_aux_config()
+transformations_config = torch_quantized_model.nncf.transformations_config()
 state_dict = torch_quantized_model.state_dict()
 del torch_quantized_model
 example_input = torch.ones((128, 3, 224, 224)).cuda()
-torch_quantized_model = load_from_aux(torch_model, aux_config, example_input)
+torch_quantized_model = nncf.torch.from_config(torch_model, transformations_config, example_input)
 torch_quantized_model.load_state_dict(state_dict)
 
 ###############################################################################

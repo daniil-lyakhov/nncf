@@ -523,7 +523,7 @@ def save_aux(nncf_network, path: Union[Path, str]):
         json.dump(nncf_state, out)
 
 
-def load_from_aux(model: torch.nn.Module, path, example_input) -> torch.nn.Module:
+def from_config(model: torch.nn.Module, path, example_input) -> torch.nn.Module:
     from nncf.torch.dynamic_graph.io_handling import ExampleInputInfo
     from nncf.torch.graph.transformations.serialization import load_transformations
 
