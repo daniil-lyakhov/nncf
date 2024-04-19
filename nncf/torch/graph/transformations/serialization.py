@@ -39,10 +39,12 @@ def serialize_transformations(transformations_layout: TransformationLayout) -> D
     return {COMPRESSION_STATE_ATTR: transformation_commands}
 
 
-def load_transformations(transformations_state: Dict[str, Any]) -> TransformationLayout:
+def load_transformations(transformations_state: Dict[str, Any], device=None) -> TransformationLayout:
     transformation_layout = TransformationLayout()
     for serialized_command in transformations_state[COMPRESSION_STATE_ATTR]:
         command = load_command(serialized_command)
+        if device is not None:
+            command.fn = command.fn.to(device)
         transformation_layout.register(command)
 
     return transformation_layout

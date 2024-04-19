@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Callable, Dict, Iterator, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar
 
 import torch
 from torch import nn
@@ -73,6 +73,8 @@ from nncf.torch.graph.transformations.commands import PTInsertionCommand
 from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
 from nncf.torch.graph.transformations.layout import PTTransformationLayout
+from nncf.torch.graph.transformations.serialization import load_transformations
+from nncf.torch.graph.transformations.serialization import serialize_transformations
 from nncf.torch.knowledge_distillation.knowledge_distillation_handler import KnowledgeDistillationLossHandler
 from nncf.torch.layer_utils import _NNCFModuleMixin
 from nncf.torch.module_operations import UpdateWeight
@@ -225,6 +227,27 @@ class NNCFNetworkInterface(torch.nn.Module):
         """
         self._custom_original_unbound_forward = None
 
+    @staticmethod
+    def _load_state_dict_nncf_pre_hook(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        breakpoint()
+        aux_config = state_dict[prefix + self.NNCF_AUX_CONFIG_KEY]
+
+        transformation_layout = load_transformations(aux_config)
+        from nncf.torch.model_transformer import PTModelTransformer
+
+        nncf_interface = self
+
+        class DummyModule(torch.nn.Module):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.nncf = nncf_interface
+
+        # device = get_model_device(self._model_ref)
+        transformer = PTModelTransformer(DummyModule())
+        transformer.transform(transformation_layout)
+
     def __init__(
         self,
         model: torch.nn.Module,
@@ -247,6 +270,7 @@ class NNCFNetworkInterface(torch.nn.Module):
         # avoid circular references
         object.__setattr__(self, "__model_ref", model)
 
+        self._register_load_state_dict_pre_hook(self._load_state_dict_nncf_pre_hook, with_module=True)
         if isinstance(model, NNCFNetwork):
             # Got an NNCFNetwork already, probably during shallow copying.
             self._original_class = model.nncf._original_class
@@ -965,6 +989,16 @@ class NNCFNetworkInterface(torch.nn.Module):
             if node.is_shared():
                 ret.append(node.layer_attributes.name)
         return ret
+
+    NNCF_AUX_CONFIG_KEY = "NNCF_AUX_CONFIG"
+
+    def state_dict(self, *args, **kwargs) -> Dict[Any, Any]:
+        sd = super().state_dict(*args, **kwargs)
+        assert self.NNCF_AUX_CONFIG_KEY not in sd
+        sd[kwargs["prefix"] + self.NNCF_AUX_CONFIG_KEY] = serialize_transformations(
+            self.get_applied_transformation_layout()
+        )
+        return sd
 
 
 class NNCFNetworkMeta(type):
