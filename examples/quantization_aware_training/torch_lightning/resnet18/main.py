@@ -54,6 +54,8 @@ class NNCFQuantizationAwareTraining(QuantizationAwareTraining):
             return torch.unsqueeze(input_[0][0], 0)
 
         self._transform_fn = transform_fn
+        self._state = None
+        self._input_shape = None
 
     def setup(self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: Optional[str] = None) -> None:
         """Call when fit or test begins.
@@ -69,18 +71,12 @@ class NNCFQuantizationAwareTraining(QuantizationAwareTraining):
         nncf_dataset = nncf.Dataset(trainer.datamodule.val_dataloader(), self._transform_fn)
         pl_module.model = nncf.quantize(pl_module.model, calibration_dataset=nncf_dataset, subset_size=1)
 
-    def on_save_checkpoint(
-        self, trainer: pl.Trainer, pl_module: pl.LightningModule, checkpoint: Dict[str, Any]
-    ) -> None:
-        if "callbacks" not in checkpoint:
-            checkpoint["callbacks"] = dict()
-        checkpoint["callbacks"][self.state_key] = dict()
-        callback_ckpt = checkpoint["callbacks"][self.state_key]
-
-        callback_ckpt["transformations_state"] = pl_module.model.nncf.transformations_config()
-
+        self._state = pl_module.model.nncf.transformations_config()
         example_input = self._transform_fn(next(iter(trainer.datamodule.val_dataloader())))
-        callback_ckpt["input_shape"] = example_input.shape
+        self._input_shape = tuple(example_input.shape)
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {"state": self._state, "input_shape": self._input_shape}
 
     def _load_before_model(self, model: pl.LightningModule, state_dict: Dict[str, Any]) -> None:
         """Special hook that gets called by the CheckpointConnector *before* the model gets loaded."""
@@ -116,13 +112,10 @@ class NNCFQuantizationAwareTraining(QuantizationAwareTraining):
     def on_predict_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         return
 
-    def state_dict(self) -> Dict[str, Any]:
-        return {}
-
 
 def load_transformation_from_state_dict(model: pl.LightningModule, state_dict: Dict[str, Any]) -> None:
     input_shape = state_dict["input_shape"]
-    transformation_config = state_dict["transformations_state"]
+    transformation_config = state_dict["state"]
 
     transformed_model = nncf.torch.from_config(deepcopy(model.model), transformation_config, torch.ones(input_shape))
     model.model = transformed_model
