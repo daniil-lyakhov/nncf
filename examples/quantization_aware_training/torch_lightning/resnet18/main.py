@@ -30,12 +30,7 @@ from pytorch_lightning.loggers import CSVLogger
 from torch.optim.lr_scheduler import StepLR
 from torchmetrics.functional import accuracy
 
-from nncf.common.factory import ModelTransformerFactory
-from nncf.torch.dynamic_graph.io_handling import FillerInputElement
-from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
-from nncf.torch.graph.transformations.serialization import load_transformations
-from nncf.torch.graph.transformations.serialization import serialize_transformations
-from nncf.torch.nncf_network import NNCFNetwork
+import nncf
 
 seed_everything(7)
 
@@ -82,12 +77,10 @@ class NNCFQuantizationAwareTraining(QuantizationAwareTraining):
         checkpoint["callbacks"][self.state_key] = dict()
         callback_ckpt = checkpoint["callbacks"][self.state_key]
 
-        nncf_transformations = pl_module.model.nncf.get_applied_transformation_layout()
-        callback_ckpt["NNCF_TRANSFORMATIONS_STATE"] = serialize_transformations(nncf_transformations)
+        callback_ckpt["transformations_state"] = pl_module.model.nncf.transformations_config()
 
         example_input = self._transform_fn(next(iter(trainer.datamodule.val_dataloader())))
-        input_info = FillerInputInfo([FillerInputElement(shape=example_input.shape)])
-        callback_ckpt["NNCF_INPUT_INFO"] = input_info.get_state()
+        callback_ckpt["input_shape"] = example_input.shape
 
     def _load_before_model(self, model: pl.LightningModule, state_dict: Dict[str, Any]) -> None:
         """Special hook that gets called by the CheckpointConnector *before* the model gets loaded."""
@@ -128,15 +121,10 @@ class NNCFQuantizationAwareTraining(QuantizationAwareTraining):
 
 
 def load_transformation_from_state_dict(model: pl.LightningModule, state_dict: Dict[str, Any]) -> None:
-    transformations_layout = load_transformations(state_dict["NNCF_TRANSFORMATIONS_STATE"])
-    input_info = FillerInputInfo.from_state(state_dict["NNCF_INPUT_INFO"])
+    input_shape = state_dict["input_shape"]
+    transformation_config = state_dict["transformations_state"]
 
-    torch_model = model.model
-    nncf_network = NNCFNetwork(deepcopy(torch_model), input_info=input_info)
-    model_transformer = ModelTransformerFactory.create(nncf_network)
-    transformed_model = model_transformer.transform(transformations_layout)
-    transformed_model.nncf.disable_dynamic_graph_building()
-
+    transformed_model = nncf.torch.from_config(deepcopy(model.model), transformation_config, torch.ones(input_shape))
     model.model = transformed_model
 
 

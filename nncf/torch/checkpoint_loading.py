@@ -8,9 +8,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
+import os
 import re
+from copy import deepcopy
 from enum import Enum
-from typing import Dict, List, Set, Tuple
+from pathlib import Path
+from typing import Dict, List, Set, Tuple, Union
 
 import torch
 
@@ -433,3 +437,110 @@ class KeyMatcher:
         """
         num_matched_params = len(self._new_dict)
         self._processed_keys.handle_problematic(self._is_resume, num_matched_params == self._num_params_to_load)
+
+
+NNCF_TRANSFORMATIONS_KEY = "NNCF_TRANSFORMATIONS_STATE"
+
+
+def _get_input_info(nncf_network):
+    from nncf.torch.dynamic_graph.io_handling import FillerInputElement
+    from nncf.torch.dynamic_graph.io_handling import FillerInputInfo
+
+    args, kwargs = nncf_network.nncf._input_info.get_forward_inputs()
+    elems = []
+
+    def type_to_str(type_):
+        return "float" if type_.is_floating_point else "long"
+
+    for arg in args:
+        elems.append(FillerInputElement(shape=list(arg.shape), type_str=type_to_str(arg.dtype)))
+    for k, v in kwargs.items():
+        elems.append(FillerInputElement(shape=list(v.shape), keyword=k, type_str=type_to_str(v.dtype)))
+    return FillerInputInfo(elems)
+
+
+STATE_DICT_FILE_NAME = "state_dict.pt"
+NNCF_AUX_CONFIG_FILE_NAME = "nncf_aux_config.json"
+
+
+def save_checkpoint(nncf_network, path: Union[Path, str]):
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+    state_dict = nncf_network.state_dict()
+    torch.save(state_dict, path / STATE_DICT_FILE_NAME)
+
+    nncf_state = get_aux_config(nncf_network)
+    with open(path / NNCF_AUX_CONFIG_FILE_NAME, "w") as f:
+        json.dump(nncf_state, f)
+
+
+def load_from_checkpoint(model: torch.nn.Module, path: Union[Path, str], example_input):
+    from nncf.torch.dynamic_graph.io_handling import ExampleInputInfo
+    from nncf.torch.graph.transformations.serialization import load_transformations
+
+    input_info = ExampleInputInfo.from_example_input(example_input)
+
+    path = Path(path)
+    with open(path / NNCF_AUX_CONFIG_FILE_NAME, "r") as f:
+        nncf_state = json.load(f)
+
+    transformations = load_transformations(nncf_state["TRANSFORMATION_STATE"])
+    transformed_model = transform_model(model, transformations, input_info)
+
+    state_dict = torch.load(path / STATE_DICT_FILE_NAME)
+    transformed_model.load_state_dict(state_dict)
+    return transformed_model
+
+
+def transform_model(model, transformations, input_info):
+    from nncf.common.factory import ModelTransformerFactory
+    from nncf.torch.nncf_network import NNCFNetwork
+
+    nncf_network = NNCFNetwork(deepcopy(model), input_info=input_info)
+    model_transformer = ModelTransformerFactory.create(nncf_network)
+    transformed_model = model_transformer.transform(transformations)
+
+    transformed_model.nncf.disable_dynamic_graph_building()
+    return transformed_model
+
+
+def get_aux_config(nncf_network: torch.nn.Module):
+    from nncf.torch.graph.transformations.serialization import serialize_transformations
+
+    transformations = nncf_network.nncf.get_applied_transformation_layout()
+    return {
+        "TRANSFORMATION_STATE": serialize_transformations(transformations),
+    }
+
+
+SERIALIZED_TRANSFORMATIONS_PATH = "serialized_transformations.json"
+
+
+def save_aux(nncf_network, path: Union[Path, str]):
+    nncf_state = get_aux_config(nncf_network)
+    with open(os.path.join(path, SERIALIZED_TRANSFORMATIONS_PATH), "w") as out:
+        json.dump(nncf_state, out)
+
+
+def from_config(model: torch.nn.Module, path, example_input) -> torch.nn.Module:
+    from nncf.torch.dynamic_graph.io_handling import ExampleInputInfo
+    from nncf.torch.graph.transformations.serialization import load_transformations
+
+    if isinstance(path, dict):
+        nncf_state = path
+    else:
+        with open(os.path.join(path, SERIALIZED_TRANSFORMATIONS_PATH), "r") as out:
+            nncf_state = json.load(out)
+
+    input_info = ExampleInputInfo.from_example_input(example_input)
+    transformations = load_transformations(nncf_state["TRANSFORMATION_STATE"])
+    transformed_model = transform_model(model, transformations, input_info)
+    return transformed_model
+
+
+def load_state_dict(model, state_dict, example_input):
+    serialized_transformations = {"TRANSFORMATION_STATE": state_dict.pop("_nncf.NNCF_AUX_CONFIG")}
+    transformed_model = from_config(model, serialized_transformations, example_input)
+    transformed_model.load_state_dict(state_dict)
+    return transformed_model
