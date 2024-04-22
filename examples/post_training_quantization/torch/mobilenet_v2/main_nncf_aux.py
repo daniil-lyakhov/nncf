@@ -151,8 +151,7 @@ torch_quantized_model = nncf.quantize(torch_model, calibration_dataset, subset_s
 state_dict = torch_quantized_model.state_dict()
 del torch_quantized_model
 example_input = torch.ones((128, 3, 224, 224)).cuda()
-torch_quantized_model = nncf.torch.wrap_model(torch_model, example_input)
-torch_quantized_model.load_state_dict(state_dict)
+torch_quantized_model = nncf.torch.load_state_dict(torch_model, state_dict, example_input)
 
 ###############################################################################
 # Benchmark performance, calculate compression rate and validate accuracy

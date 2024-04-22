@@ -231,8 +231,8 @@ class NNCFNetworkInterface(torch.nn.Module):
     def _load_state_dict_nncf_pre_hook(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
     ):
-        breakpoint()
-        aux_config = state_dict[prefix + self.NNCF_AUX_CONFIG_KEY]
+        return
+        aux_config = state_dict.pop(prefix + self.NNCF_AUX_CONFIG_KEY)
 
         transformation_layout = load_transformations(aux_config)
         from nncf.torch.model_transformer import PTModelTransformer
@@ -242,10 +242,11 @@ class NNCFNetworkInterface(torch.nn.Module):
         class DummyModule(torch.nn.Module):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
-                self.nncf = nncf_interface
+                self.add_module("nncf", nncf_interface)
 
         # device = get_model_device(self._model_ref)
-        transformer = PTModelTransformer(DummyModule())
+        device = get_model_device(self._model_ref)
+        transformer = PTModelTransformer(self._model_ref, device)
         transformer.transform(transformation_layout)
 
     def __init__(

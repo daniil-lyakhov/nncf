@@ -45,11 +45,10 @@ class PTModelTransformer(ModelTransformer):
     Applies transformations upon PyTorch model.
     """
 
-    def __init__(self, model: NNCFNetwork):
+    def __init__(self, model: NNCFNetwork, device=None):
         super().__init__(model)
 
-        device = None
-        if not is_multidevice(model):
+        if device is None and not is_multidevice(model):
             device = get_model_device(model)
 
         self._command_transformation_ordered_pairs = [

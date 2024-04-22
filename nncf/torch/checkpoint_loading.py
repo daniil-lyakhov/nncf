@@ -537,3 +537,10 @@ def from_config(model: torch.nn.Module, path, example_input) -> torch.nn.Module:
     transformations = load_transformations(nncf_state["TRANSFORMATION_STATE"])
     transformed_model = transform_model(model, transformations, input_info)
     return transformed_model
+
+
+def load_state_dict(model, state_dict, example_input):
+    serialized_transformations = {"TRANSFORMATION_STATE": state_dict.pop("_nncf.NNCF_AUX_CONFIG")}
+    transformed_model = from_config(model, serialized_transformations, example_input)
+    transformed_model.load_state_dict(state_dict)
+    return transformed_model

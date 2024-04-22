@@ -68,6 +68,7 @@ from nncf.torch.dynamic_graph.patch_pytorch import patch_torch_operators
 from nncf.torch.extensions import force_build_cpu_extensions, force_build_cuda_extensions
 
 from nncf.torch.checkpoint_loading import load_from_checkpoint
+from nncf.torch.checkpoint_loading import load_state_dict
 from nncf.torch.checkpoint_loading import save_checkpoint
 from nncf.torch.checkpoint_loading import get_aux_config
 from nncf.torch.checkpoint_loading import save_aux
