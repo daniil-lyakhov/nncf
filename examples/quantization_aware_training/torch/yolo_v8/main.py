@@ -25,10 +25,10 @@ import nncf
 from nncf.torch import load_from_aux
 from nncf.torch.model_creation import is_wrapped_model
 
-# CHECKPOINT_PATH = "yolov8n.pt"
+CHECKPOINT_PATH = "yolov8n.pt"
 # CHECKPOINT_PATH = "path/to/saved/ckpt"
 # CHECKPOINT_PATH = "path/to/saved/ckpt"
-CHECKPOINT_PATH = "/home/dlyakhov/Projects/ultralytics/runs/detect/train92/weights/best.pt"
+# CHECKPOINT_PATH = "/home/dlyakhov/Projects/ultralytics/runs/detect/train92/weights/best.pt"
 
 
 class MyTrainer(DetectionTrainer):
@@ -58,8 +58,9 @@ class MyTrainer(DetectionTrainer):
         if self.nncf_dataloader is None:
 
             def transform_fn(x):
-                x = self.preprocess_batch(x)
-                return x["img"], None
+                # return self.preprocess_batch(x)
+                # return (self.preprocess_batch(x),)
+                return x["img"].cuda().float()
 
             train_loader = self.get_dataloader(self.trainset, batch_size=1, rank=RANK, mode="train")
             self.nncf_dataloader = nncf.Dataset(train_loader, transform_fn)
@@ -69,7 +70,8 @@ class MyTrainer(DetectionTrainer):
         calibration_dataset = self.get_nncf_dataset()
         # TODO figure out why inputs are being quantized. Do conv.pre_hook instead of input.post_hook
         ignored_scope = nncf.IgnoredScope(
-            names=["DetectionModel/Sequential[model]/Conv[0]/NNCFConv2d[conv]/conv2d_0"], patterns=[".*/Detect.*"]
+            # names=["DetectionModel/Sequential[model]/Conv[0]/NNCFConv2d[conv]/conv2d_0"],
+            patterns=[".*/Detect.*"]
         )
         self.model = nncf.quantize(self.model.to(self.device), calibration_dataset, ignored_scope=ignored_scope)
 

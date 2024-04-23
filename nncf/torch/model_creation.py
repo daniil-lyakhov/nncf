@@ -329,9 +329,18 @@ def wrap_model(
 
     input_info = ExampleInputInfo.from_example_input(example_input)
 
+    def wrap_inputs_fn(args, kwargs):
+        if isinstance(args[0], dict):
+            return args, kwargs
+        args = (args[0],) + args[1:]
+        return args, kwargs
+
     with training_mode_switcher(model, is_training=False):
         nncf_network = NNCFNetwork(
-            model, input_info=input_info, replace_modules=not trace_parameters, trace_parameters=trace_parameters
+            model,
+            input_info=input_info,
+            replace_modules=not trace_parameters,
+            trace_parameters=trace_parameters,  # wrap_inputs_fn=wrap_inputs_fn
         )
         nncf_network.nncf.get_tracing_context().disable_trace_dynamic_graph()
 
