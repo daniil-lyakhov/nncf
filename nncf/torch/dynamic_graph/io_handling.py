@@ -358,10 +358,6 @@ class InputInfoWrapManager:
 
             if potential_tensor is not None:
                 if not isinstance(potential_tensor, torch.Tensor):
-                    nncf_logger.warning(
-                        f'Original model forward parameter "{param_name}" expected to be a tensor,'
-                        f" but {type(potential_tensor)} recieved."
-                    )
                     continue
                 bound_model_params.arguments[param_name] = nncf_model_input(potential_tensor)
             else:

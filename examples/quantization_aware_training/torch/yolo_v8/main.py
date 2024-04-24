@@ -11,9 +11,12 @@
 
 from copy import deepcopy
 from datetime import datetime
+from typing import Optional
 
 import torch
+from ultralytics import YOLO
 from ultralytics.models.yolo.detect import DetectionTrainer
+from ultralytics.models.yolo.detect import DetectionValidator
 from ultralytics.utils import DEFAULT_CFG
 from ultralytics.utils import LOGGER
 from ultralytics.utils import RANK
@@ -22,6 +25,7 @@ from ultralytics.utils.torch_utils import de_parallel
 from ultralytics.utils.torch_utils import strip_optimizer
 
 import nncf
+from nncf import IgnoredScope
 from nncf.torch import load_from_aux
 from nncf.torch.model_creation import is_wrapped_model
 
@@ -31,9 +35,10 @@ CHECKPOINT_PATH = "yolov8n.pt"
 # CHECKPOINT_PATH = "/home/dlyakhov/Projects/ultralytics/runs/detect/train92/weights/best.pt"
 
 
-class MyTrainer(DetectionTrainer):
-    def __init__(self, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
+class QuantizationTrainer(DetectionTrainer):
+    def __init__(self, ignored_scope: Optional[IgnoredScope] = None, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
         super().__init__(cfg, overrides, _callbacks)
+        self._nncf_ignored_scope = IgnoredScope() if ignored_scope is None else ignored_scope
         self.nncf_dataloader = None
 
     def setup_model(self):
@@ -42,7 +47,7 @@ class MyTrainer(DetectionTrainer):
         if not is_wrapped_model(self.model):
             # Make copy of model to support `DetectionTrainer` save/load logic
             self.original_model = deepcopy(self.model)
-            if ckpt.get("NNCF_AUX_CONFIG"):
+            if ckpt is not None and ckpt.get("NNCF_AUX_CONFIG"):
                 self.resume_model_for_qat(ckpt)
             else:
                 self.prepare_model_for_qat()
@@ -58,22 +63,18 @@ class MyTrainer(DetectionTrainer):
         if self.nncf_dataloader is None:
 
             def transform_fn(x):
-                # return self.preprocess_batch(x)
-                # return (self.preprocess_batch(x),)
-                return x["img"].cuda().float()
+                x = self.preprocess_batch(x)
+                return x["img"]
 
-            train_loader = self.get_dataloader(self.trainset, batch_size=1, rank=RANK, mode="train")
+            train_loader = self.get_dataloader(self.testset, batch_size=1, rank=RANK, mode="train")
             self.nncf_dataloader = nncf.Dataset(train_loader, transform_fn)
         return self.nncf_dataloader
 
     def prepare_model_for_qat(self):
         calibration_dataset = self.get_nncf_dataset()
-        # TODO figure out why inputs are being quantized. Do conv.pre_hook instead of input.post_hook
-        ignored_scope = nncf.IgnoredScope(
-            # names=["DetectionModel/Sequential[model]/Conv[0]/NNCFConv2d[conv]/conv2d_0"],
-            patterns=[".*/Detect.*"]
+        self.model = nncf.quantize(
+            self.model.to(self.device), calibration_dataset, ignored_scope=self._nncf_ignored_scope
         )
-        self.model = nncf.quantize(self.model.to(self.device), calibration_dataset, ignored_scope=ignored_scope)
 
     def resume_model_for_qat(self, ckpt):
         example_input = next(iter(self.get_nncf_dataset().get_inference_data()))
@@ -131,10 +132,39 @@ class MyTrainer(DetectionTrainer):
             super().save_model()
 
 
+class YOLOINT8(YOLO):
+    def quantize(self, dataset):
+        pass
+        # args = self.overrides
+        # Get trainer with dataset
+        # utilize dataset to quantize the model
+
+    @property
+    def task_map(self):
+        map = super().task_map
+        return map
+        map["detect"]["trainer"] = QuantizationTrainer
+        return map
+
+
 def main():
-    args = dict(model=CHECKPOINT_PATH, data="coco8.yaml", epochs=3, mode="train", verbose=False)
-    nncf_trainer = MyTrainer(overrides=args)
-    nncf_trainer.train()
+    args = dict(model=CHECKPOINT_PATH, data="coco8.yaml", epochs=0, mode="train", verbose=False)
+    # model_args = dict(model=CHECKPOINT_PATH, data="coco8.yaml")
+    val_args = dict(model=CHECKPOINT_PATH, data="coco8.yaml")
+    # model = YOLOINT8()
+    model = YOLO()
+    # model.val(data="coco8.yaml")
+    model.train(data="coco8.yaml", epochs=3)
+    model.val(data="coco8.yaml")
+
+    if False:
+        validator = DetectionValidator(args=val_args)
+        validator()
+        nncf_trainer = QuantizationTrainer(overrides=args)
+        nncf_trainer._setup_train(world_size=1)
+        validator(trainer=nncf_trainer)
+        nncf_trainer.train()
+        nncf_trainer.validate()
 
 
 if __name__ == "__main__":
