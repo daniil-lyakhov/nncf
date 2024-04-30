@@ -20,6 +20,7 @@ import torch
 
 import nncf
 from nncf.common.deprecation import warning_deprecated
+from nncf.common.factory import ModelTransformerFactory
 from nncf.common.logging import nncf_logger
 from nncf.common.utils.api_marker import api
 
@@ -524,7 +525,7 @@ def save_aux(nncf_network, path: Union[Path, str]):
 
 
 def load_from_aux(model: torch.nn.Module, path, example_input) -> torch.nn.Module:
-    from nncf.torch.dynamic_graph.io_handling import ExampleInputInfo
+    from nncf.torch import wrap_model
     from nncf.torch.graph.transformations.serialization import load_transformations
 
     if isinstance(path, dict):
@@ -533,7 +534,11 @@ def load_from_aux(model: torch.nn.Module, path, example_input) -> torch.nn.Modul
         with open(os.path.join(path, SERIALIZED_TRANSFORMATIONS_PATH), "r") as out:
             nncf_state = json.load(out)
 
-    input_info = ExampleInputInfo.from_example_input(example_input)
     transformations = load_transformations(nncf_state["TRANSFORMATION_STATE"])
-    transformed_model = transform_model(model, transformations, input_info)
+
+    nncf_network = wrap_model(deepcopy(model), example_input=example_input)
+    model_transformer = ModelTransformerFactory.create(nncf_network)
+    transformed_model = model_transformer.transform(transformations)
+
+    transformed_model.nncf.disable_dynamic_graph_building()
     return transformed_model
