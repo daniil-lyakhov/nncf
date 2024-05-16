@@ -10,15 +10,19 @@
 # limitations under the License.
 
 import os
+import time
 import warnings
 from copy import deepcopy
+from typing import Dict
 
+import numpy as np
+import onnx
+import onnxruntime as rt
 import torch
 from common import QUANTIZED_CHECKPOINT_FILE_NAME
 from common import ROOT
 from common import get_data_loader
 from common import get_mobilenet_v2
-from common import run_benchmark
 from common import validate
 from torch.jit import TracerWarning
 
@@ -27,6 +31,44 @@ from nncf.common.utils.helpers import create_table
 
 warnings.filterwarnings("ignore", category=TracerWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
+
+
+class ONNXEngine:
+    """
+    Engine for ONNX backend using ONNXRuntime to infer the model.
+    """
+
+    def __init__(self, model, **rt_session_options):
+        self.input_names = set()
+        rt_session_options["providers"] = ["OpenVINOExecutionProvider"]
+        serialized_model = model.SerializeToString()
+        self.sess = rt.InferenceSession(serialized_model, **rt_session_options)
+
+        for inp in self.sess.get_inputs():
+            self.input_names.add(inp.name)
+
+    def infer(self, input_data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        """
+        Runs model on the provided input via ONNXRuntime InferenceSession.
+        Returns the dictionary of model outputs by node names.
+        :param input_data: inputs for the model
+        :return output_data: models outputs
+        """
+        self.sess.run([], {k: v for k, v in input_data.items() if k in self.input_names})
+
+
+def run_benchmark(path_to_model, shape, verbose):
+    onnx_model = onnx.load(path_to_model)
+    engine = ONNXEngine(onnx_model)
+    inputs = {name: np.ones(shape).astype(np.float32) for name in engine.input_names}
+    start = time.time()
+    for _ in range(10000):
+        engine.infer(inputs)
+    duration = time.time() - start
+    if verbose:
+        print(f"Inference took {duration} seconds.")
+    return duration
+
 
 ###############################################################################
 # Recover the quantized model, benchmark performance, calculate compression rate and validate accuracy
@@ -54,6 +96,7 @@ torch.onnx.export(torch_model, dummy_input, fp32_model_path)
 print(f"[2/8] Save FP32 model: {fp32_model_path}")
 
 int8_model_path = ROOT / "mobilenet_v2_int8.onnx"
+torch_quantized_model = nncf.strip(torch_quantized_model)
 torch.onnx.export(torch_quantized_model, dummy_input, int8_model_path)
 print(f"[3/8] Save INT8 model: {int8_model_path}")
 
