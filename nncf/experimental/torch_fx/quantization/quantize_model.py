@@ -13,6 +13,13 @@ from copy import deepcopy
 from typing import Optional
 
 import torch
+import torch.fx
+from torch.ao.quantization.pt2e.duplicate_dq_pass import DuplicateDQPass
+from torch.ao.quantization.pt2e.port_metadata_pass import PortNodeMetaForQDQ
+from torch.ao.quantization.pt2e.qat_utils import _fold_conv_bn_qat
+from torch.ao.quantization.pt2e.utils import _disallow_eval_train
+from torch.fx import GraphModule
+from torch.fx.passes.infra.pass_manager import PassManager
 
 import nncf
 from nncf.common.factory import NNCFGraphFactory
@@ -33,7 +40,7 @@ DEFAULT_RANGE_TYPE = "mean_min_max"
 
 
 def quantize_impl(
-    model: torch.nn.Module,
+    model: torch.fx.GraphModule,
     calibration_dataset: Dataset,
     mode: Optional[QuantizationMode] = None,
     preset: Optional[QuantizationPreset] = None,
@@ -54,6 +61,8 @@ def quantize_impl(
     if mode is not None:
         raise ValueError(f"mode={mode} is not supported")
 
+    original_graph_meta = model.meta
+
     copied_model = deepcopy(model)
     # copied_model = model
 
@@ -68,6 +77,20 @@ def quantize_impl(
     )
     nncf_graph = NNCFGraphFactory.create(copied_model)
     quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)
+
+    # Magic. Without this call compiled model
+    # is not preformant
+    model = GraphModule(model, model.graph)
+
+    model = _fold_conv_bn_qat(model)
+    pm = PassManager([DuplicateDQPass()])
+
+    model = pm(model).graph_module
+    pm = PassManager([PortNodeMetaForQDQ()])
+    model = pm(model).graph_module
+
+    model.meta.update(original_graph_meta)
+    model = _disallow_eval_train(model)
 
     return quantized_model
 

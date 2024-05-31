@@ -147,24 +147,21 @@ class FXModelTransformer(ModelTransformer):
                 return node
 
     @staticmethod
-    def _get_target_node_and_ctx(graph: torch.fx.Graph, target_point: PTTargetPoint):
+    def _get_target_node(graph: torch.fx.Graph, target_point: PTTargetPoint):
         target_type = target_point.target_type
         target_node = FXModelTransformer._get_grah_node_by_name(graph, target_point.target_node_name)
-        if target_type == TargetType.OPERATOR_PRE_HOOK:
-            ctx = graph.inserting_before(target_node)
-        elif target_type == TargetType.OPERATOR_POST_HOOK:
-            ctx = graph.inserting_after(target_node)
-        elif target_type == TargetType.OPERATION_WITH_WEIGHTS:
+        if target_type in [TargetType.OPERATOR_PRE_HOOK, TargetType.OPERATION_WITH_WEIGHTS]:
             target_node = target_node.all_input_nodes[target_point.input_port_id]
-            ctx = graph.inserting_after(target_node)
+        elif target_type == TargetType.OPERATOR_POST_HOOK:
+            pass
         else:
             raise RuntimeError(f"Unsupported target type: {target_type} for target_point: {target_point}")
-        return target_node, ctx
+        return target_node
 
     @staticmethod
     def _create_call_module_node(graph: torch.fx.Graph, target_point: PTTargetPoint, module_name: str):
-        target_node, ctx = FXModelTransformer._get_target_node_and_ctx(graph, target_point)
-        with ctx:
+        target_node = FXModelTransformer._get_target_node(graph, target_point)
+        with graph.inserting_after(target_node):
             graph.create_node("call_module", module_name, (target_node,), {}, name=module_name + "_graph_node")
 
     @staticmethod

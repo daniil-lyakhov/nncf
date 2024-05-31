@@ -1,4 +1,3 @@
-
 # Copyright (c) 2024 Intel Corporation
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +17,7 @@ from nncf.torch.graph.operator_metatypes import PTOperatorMetatype
 
 # If a metatype is not in this list, then it is considered to be QuantizationTrait.NON_QUANTIZABLE.
 
-DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT: Dict[QuantizationTrait, List[PTOperatorMetatype]] = {
+DEFAULT_FX_QUANT_TRAIT_TO_OP_DICT: Dict[QuantizationTrait, List[PTOperatorMetatype]] = {
     QuantizationTrait.INPUTS_QUANTIZABLE: [
         operator_metatypes.PTConv2dMetatype,
         operator_metatypes.PTModuleConv2dMetatype,
@@ -36,7 +35,7 @@ DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT: Dict[QuantizationTrait, List[PTOperatorMetaty
         operator_metatypes.PTModuleLinearMetatype,
         operator_metatypes.PTLayerNormMetatype,
         operator_metatypes.PTModuleLayerNormMetatype,
-        #operator_metatypes.PTAddMetatype,
+        # operator_metatypes.PTAddMetatype,
         operator_metatypes.PTMulMetatype,
         operator_metatypes.PTDivMetatype,
         operator_metatypes.PTMatMulMetatype,

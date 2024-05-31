@@ -27,8 +27,9 @@ from nncf.common.quantization.structs import QuantizerConfig
 from nncf.experimental.common.tensor_statistics.collectors import AGGREGATORS_MAP
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
 from nncf.experimental.torch_fx.model_transformer import FXApplyTransformationCommand
-from nncf.experimental.torch_fx.quantization.default_quantization import DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT
-from nncf.experimental.torch_fx.transformations import fake_quantize_insertion_tranformation_builder
+from nncf.experimental.torch_fx.quantization.default_quantization import DEFAULT_FX_QUANT_TRAIT_TO_OP_DICT
+from nncf.experimental.torch_fx.transformations import fake_quantize_insertion_tranformation_builder  # noqa
+from nncf.experimental.torch_fx.transformations import qdq_insertion_tranformation_builder
 from nncf.parameters import ModelType
 from nncf.parameters import TargetDevice
 from nncf.quantization.advanced_parameters import StatisticsType
@@ -117,7 +118,7 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
 
     @property
     def quant_trait_op_dict(self) -> Dict[int, OperatorMetatype]:
-        return DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT
+        return DEFAULT_FX_QUANT_TRAIT_TO_OP_DICT
 
     @staticmethod
     def get_start_nodes_for_activation_path_tracing(nncf_graph: PTNNCFGraph) -> List[NNCFNode]:
@@ -213,7 +214,9 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
 
     @staticmethod
     def get_weight_name(nncf_graph: NNCFGraph, target_point: PTTargetPoint) -> str:
-        return nncf_graph.get_node_by_name(target_point.target_node_name).layer_name
+        weighted_node = nncf_graph.get_node_by_name(target_point.target_node_name)
+        weight = nncf_graph.get_previous_nodes(weighted_node)[target_point.input_port_id]
+        return weight.node_name
 
     @staticmethod
     def should_quantize_weight(weight_name: str, quantized_weight_names: Set[str]) -> bool:
@@ -297,7 +300,8 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
         quantizer = FXMinMaxAlgoBackend._create_quantizer(
             quantizer_config, scale_shape, parameters, target_point.target_type
         )
-        transformation = fake_quantize_insertion_tranformation_builder(quantizer, [target_point])
+        # transformation = fake_quantize_insertion_tranformation_builder(quantizer, [target_point])
+        transformation = qdq_insertion_tranformation_builder(quantizer, [target_point])
         return FXApplyTransformationCommand(transformation)
 
     @staticmethod
@@ -315,7 +319,8 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
             quantizer_config, scale_shape, parameters, target_points[0].target_type
         )
 
-        transformation = fake_quantize_insertion_tranformation_builder(quantizer, target_points)
+        # transformation = fake_quantize_insertion_tranformation_builder(quantizer, target_points)
+        transformation = qdq_insertion_tranformation_builder(quantizer, target_points)
         return [FXApplyTransformationCommand(transformation)]
 
     @staticmethod

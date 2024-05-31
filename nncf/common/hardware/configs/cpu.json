@@ -65,13 +65,6 @@
             }
         },
         {
-            "type": "Add",
-            "quantization": {
-                "activations": "q8_a",
-                "weights": ["q8_w_sym", "q8_w_asym"]
-            }
-        },
-        {
             "type": "Multiply",
             "quantization": {
                 "activations": "q8_a",
