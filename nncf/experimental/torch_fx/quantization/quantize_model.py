@@ -78,19 +78,23 @@ def quantize_impl(
     nncf_graph = NNCFGraphFactory.create(copied_model)
     quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)
 
+    from nncf.experimental.torch_fx.nncf_graph_builder import GraphConverter
+
+    GraphConverter.merge_conv_and_bias(quantized_model)
+
     # Magic. Without this call compiled model
     # is not preformant
-    model = GraphModule(model, model.graph)
+    quantized_model = GraphModule(quantized_model, quantized_model.graph)
 
-    model = _fold_conv_bn_qat(model)
+    quantized_model = _fold_conv_bn_qat(quantized_model)
     pm = PassManager([DuplicateDQPass()])
 
-    model = pm(model).graph_module
+    quantized_model = pm(quantized_model).graph_module
     pm = PassManager([PortNodeMetaForQDQ()])
-    model = pm(model).graph_module
+    quantized_model = pm(quantized_model).graph_module
 
-    model.meta.update(original_graph_meta)
-    model = _disallow_eval_train(model)
+    quantized_model.meta.update(original_graph_meta)
+    quantized_model = _disallow_eval_train(quantized_model)
 
     return quantized_model
 

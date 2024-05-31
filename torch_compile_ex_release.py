@@ -44,7 +44,7 @@ def get_exported_model_from_nn_module(module, example_inputs):
         return capture_pre_autograd_graph(module, example_inputs)
 
 
-NNCF_IMPL = True
+NNCF_IMPL = False
 
 
 def get_qsetup(exported_model, example_inputs):
@@ -79,8 +79,6 @@ def get_qsetup(exported_model, example_inputs):
 
 
 def quantize(model, example_inputs):
-    exported_model = get_exported_model_from_nn_module(model, example_inputs)
-
     if NNCF_IMPL:
         # Use NNCF here on exported model
         # to create a quantized model which is compatible with
@@ -97,19 +95,18 @@ def quantize(model, example_inputs):
         import nncf
 
         calibration_dataset = nncf.Dataset(example_inputs)
+        exported_model = get_exported_model_from_nn_module(model, example_inputs)
         quantized_model = nncf.quantize(exported_model, calibration_dataset)
         g = FxGraphDrawer(quantized_model, "resnet18_quantized_native_nncf")
         g.get_dot_graph().write_svg("resnet18_quantized_native_nncf.svg")
         return quantized_model
 
     else:
-
-        g = FxGraphDrawer(exported_model, "resnet18")
-        g.get_dot_graph().write_svg("resnet18_compiled.svg")
-        nncf_graph = GraphConverter.create_nncf_graph(exported_model)
-        del nncf_graph
+        # g = FxGraphDrawer(exported_model, "resnet18")
+        # g.get_dot_graph().write_svg("resnet18_compiled.svg")
 
         # MOCK NNCF QUANTIZATION
+        exported_model = get_exported_model_from_nn_module(model, example_inputs)
         qsetup = get_qsetup(exported_model, example_inputs)
         exported_model = get_exported_model_from_nn_module(model, example_inputs)
         exported_model = insert_qdq_to_model(exported_model, qsetup)
@@ -166,13 +163,13 @@ def main(model_name, num_iters):
 
     converted_model = quantize(copy.deepcopy(model), example_inputs)
 
-    print("original model execution time: ", measure_time(model, example_inputs, num_iters))
+    # print("original model execution time: ", measure_time(model, example_inputs, num_iters))
 
-    native_optimized_model_fp32 = torch.compile(model)
-    print(
-        "Torch Inductor FP32 model execution time: ",
-        measure_time(native_optimized_model_fp32, example_inputs, num_iters),
-    )
+    # native_optimized_model_fp32 = torch.compile(model)
+    # print(
+    #    "Torch Inductor FP32 model execution time: ",
+    #    measure_time(native_optimized_model_fp32, example_inputs, num_iters),
+    # )
 
     native_optimized_model_int8 = torch.compile(converted_model)
     print(

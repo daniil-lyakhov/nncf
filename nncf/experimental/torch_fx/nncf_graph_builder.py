@@ -77,7 +77,7 @@ class GraphConverter:
         return node_type, node_metatype
 
     @staticmethod
-    def _separate_conv_and_bias(model: torch.fx.GraphModule):
+    def separate_conv_and_bias(model: torch.fx.GraphModule):
         """
         Separates one joined conv+bias node to two nodes: conv and bias.
         Needed as nncf does not expect joined conv
@@ -123,6 +123,40 @@ class GraphConverter:
         model.recompile()
 
     @staticmethod
+    def merge_conv_and_bias(model: torch.fx.GraphModule):
+        """
+        Separates one joined conv+bias node to two nodes: conv and bias.
+        Needed as nncf does not expect joined conv
+        """
+        add_node_targets = (torch.ops.aten.add_.Tensor,)
+        for n in model.graph.nodes:
+            if not _is_conv(n):
+                continue
+            if len(n.args) > 2 and n.args[2] is not None:
+                continue
+            bias_node = next(iter(n.users))
+            if len(n.users) > 1 or bias_node.target not in add_node_targets:
+                continue
+            conv_node = n
+            const_node = None
+            for node in bias_node.all_input_nodes:
+                if node is not conv_node:
+                    const_node = node
+                    break
+            assert const_node is not None
+            bias_value = _get_tensor_constant_from_node(const_node, model).squeeze()
+            with model.graph.inserting_before(conv_node):
+                new_bias_node = create_getattr_from_value(model, model.graph, const_node.name + "_", bias_value)
+            args = list(conv_node.args)
+            args[2] = new_bias_node
+            conv_node.args = tuple(args)
+            for user in list(bias_node.users):
+                user.replace_input_with(bias_node, conv_node)
+
+        model.graph.eliminate_dead_code()
+        model.recompile()
+
+    @staticmethod
     def create_nncf_graph(model: torch.fx.GraphModule) -> NNCFGraph:
         """
         Creates NNCFGraph from GraphModule.
@@ -136,7 +170,7 @@ class GraphConverter:
         _fuse_conv_bn_(model)
         # BN fuses to conv bias, conv+bias joined op
         # needs to be splited for nncf
-        GraphConverter._separate_conv_and_bias(model)
+        GraphConverter.separate_conv_and_bias(model)
 
         nncf_graph = PTNNCFGraph()
 
