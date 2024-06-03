@@ -24,6 +24,7 @@ from torch.fx.passes.infra.pass_manager import PassManager
 import nncf
 from nncf.common.factory import NNCFGraphFactory
 from nncf.common.quantization.structs import QuantizationPreset
+from nncf.common.quantization.structs import QuantizationScheme
 from nncf.data import Dataset
 from nncf.parameters import CompressWeightsMode
 from nncf.parameters import ModelType
@@ -32,6 +33,7 @@ from nncf.parameters import SensitivityMetric
 from nncf.parameters import TargetDevice
 from nncf.quantization.advanced_parameters import AdvancedCompressionParameters
 from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
+from nncf.quantization.advanced_parameters import QuantizationParameters
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
 from nncf.quantization.algorithms.weight_compression.algorithm import WeightCompression
 from nncf.scopes import IgnoredScope
@@ -65,6 +67,17 @@ def quantize_impl(
 
     copied_model = deepcopy(model)
     # copied_model = model
+
+    if advanced_parameters is None:
+        advanced_parameters = AdvancedQuantizationParameters()
+    # torch.fx supports only assymetric activations quantization
+    # force to use only this type of quantization
+    activations_quantization_params = advanced_parameters.activations_quantization_params
+    if activations_quantization_params is None:
+        activations_quantization_params = QuantizationParameters()
+
+    activations_quantization_params.mode = QuantizationScheme.ASYMMETRIC
+    advanced_parameters.activations_quantization_params = activations_quantization_params
 
     quantization_algorithm = PostTrainingQuantization(
         preset=preset,

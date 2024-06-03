@@ -108,11 +108,8 @@ def insert_one_qdq(
 
     # Quantized functions accepts only uint8 as an input
     if target_point.target_type != TargetType.OPERATION_WITH_WEIGHTS and qparams["_dtype_"] == torch.int8:
-        qparams["_zero_point_"] = qparams["_zero_point_"] - qparams["_quant_min_"]
-        quants_len = qparams["_quant_max_"] - qparams["_quant_min_"]
-        qparams["_quant_min_"] = 0
-        qparams["_quant_max_"] = quants_len
-        qparams["_dtype_"] = torch.uint8
+        raise RuntimeError("Wrong parameters: activations should always be uint8")
+
     # TODO: map FakeQuantizePramaeters to qparams for quantize/dequantize
     # 2. replace activation_post_process node with quantize and dequantize
     graph = model.graph
