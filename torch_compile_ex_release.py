@@ -44,7 +44,7 @@ def get_exported_model_from_nn_module(module, example_inputs):
         return capture_pre_autograd_graph(module, example_inputs)
 
 
-NNCF_IMPL = False
+NNCF_IMPL = True
 
 
 def get_qsetup(exported_model, example_inputs):
@@ -163,13 +163,13 @@ def main(model_name, num_iters):
 
     converted_model = quantize(copy.deepcopy(model), example_inputs)
 
-    # print("original model execution time: ", measure_time(model, example_inputs, num_iters))
+    print("original model execution time: ", measure_time(model, example_inputs, num_iters))
 
-    # native_optimized_model_fp32 = torch.compile(model)
-    # print(
-    #    "Torch Inductor FP32 model execution time: ",
-    #    measure_time(native_optimized_model_fp32, example_inputs, num_iters),
-    # )
+    native_optimized_model_fp32 = torch.compile(model)
+    print(
+        "Torch Inductor FP32 model execution time: ",
+        measure_time(native_optimized_model_fp32, example_inputs, num_iters),
+    )
 
     native_optimized_model_int8 = torch.compile(converted_model)
     print(

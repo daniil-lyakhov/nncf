@@ -16,12 +16,14 @@ os.environ["TORCHINDUCTOR_FREEZING"] = "1"
 
 import re
 import subprocess
+import time
 import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import List, Tuple
 
 import openvino as ov
+import openvino.torch  # noqa
 import torch
 import torch.ao.quantization.quantizer.x86_inductor_quantizer as xiq
 import torch.nn as nn
@@ -37,6 +39,7 @@ from torch._export import capture_pre_autograd_graph
 from torch.ao.quantization.quantize_pt2e import convert_pt2e
 from torch.ao.quantization.quantize_pt2e import prepare_pt2e
 from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
+from torch.fx.passes.graph_drawer import FxGraphDrawer
 from torch.jit import TracerWarning
 
 import nncf
@@ -61,6 +64,18 @@ CHECKPOINT_URL = (
 )
 DATASET_URL = "http://cs231n.stanford.edu/tiny-imagenet-200.zip"
 DATASET_PATH = "~/.cache/nncf/datasets"
+
+
+def measure_time(model, example_inputs, num_iters):
+    with torch.no_grad():
+        model(*example_inputs)
+        total_time = 0
+        for i in range(0, num_iters):
+            start_time = time.time()
+            model(*example_inputs)
+            total_time += time.time() - start_time
+        average_time = (total_time / num_iters) * 1000
+    return average_time
 
 
 def download_dataset() -> Path:
@@ -264,7 +279,7 @@ def main():
 
     with torch.no_grad():
         example_inputs = (torch.ones((1, 3, IMAGE_SIZE, IMAGE_SIZE)),)
-        exported_model = capture_pre_autograd_graph(model, example_inputs)
+        exported_model = capture_pre_autograd_graph(model.eval(), example_inputs)
 
     NNCF_TORCH_FX = False
 
@@ -277,15 +292,50 @@ def main():
 
         from tqdm import tqdm
 
-        for data in tqdm(islice(quantization_dataset.get_inference_data(), 3)):
+        for data in tqdm(islice(quantization_dataset.get_inference_data(), 300)):
             prepared_model(data)
         quantized_model = convert_pt2e(prepared_model)
+
+        g = FxGraphDrawer(quantized_model, "acc_resnet18_int8_native")
+        g.get_dot_graph().write_svg("acc_resnet18_int8_native.svg")
     else:
         quantized_model = nncf.quantize(exported_model, quantization_dataset)
+        g = FxGraphDrawer(quantized_model, "acc_resnet18_int8_nncf")
+        g.get_dot_graph().write_svg("acc_resnet18_int8_nncf.svg")
 
-    quantized_model = torch.compile(quantized_model)
-    acc1_int8_init = validate(val_loader, quantized_model, device)
+    # quantized_model = torch.compile(quantized_model)
+    # acc1_int8_init = validate(val_loader, quantized_model, device)
+    acc1_int8_init = validate(val_loader, torch.compile(quantized_model), device)
     print(f"Accuracy@1 of initialized INT8 model: {acc1_int8_init:.3f}")
+
+    num_iters = 100
+
+    print("original model execution time: ", measure_time(model, example_inputs, num_iters))
+    native_optimized_model_fp32 = torch.compile(exported_model)
+    print(
+        "Torch Inductor FP32 model execution time: ",
+        measure_time(native_optimized_model_fp32, example_inputs, num_iters),
+    )
+    native_optimized_model_int8 = torch.compile(quantized_model)
+    print(
+        "Torch Inductor INT8 model execution time: ",
+        measure_time(native_optimized_model_int8, example_inputs, num_iters),
+    )
+
+    ov_optimized_model_fp32 = torch.compile(exported_model, backend="openvino")
+    print(
+        "Torch.compile OpenVINO FP32 model execution time: ",
+        measure_time(ov_optimized_model_fp32, example_inputs, num_iters),
+    )
+
+    ov_optimized_model_int8 = torch.compile(
+        quantized_model, backend="openvino", options={"model_caching": True, "cache_dir": "./model_cache"}
+    )
+    print(
+        "Torch.compile OpenVINO INT8 model execution time: ",
+        measure_time(ov_optimized_model_int8, example_inputs, num_iters),
+    )
+
     return
     ###############################################################################
     # Step 3: Fine tune quantized model
