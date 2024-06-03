@@ -17,9 +17,6 @@ from typing import Callable, List, Optional, Union
 
 import torch
 import torch.fx
-
-# from torch import Tensor
-# from torch import nn
 from torch.ao.quantization.fx.utils import create_getattr_from_value
 from torch.ao.quantization.pt2e.duplicate_dq_pass import DuplicateDQPass
 from torch.ao.quantization.pt2e.port_metadata_pass import PortNodeMetaForQDQ
@@ -28,6 +25,7 @@ from torch.ao.quantization.pt2e.utils import _disallow_eval_train
 from torch.ao.quantization.pt2e.utils import _fuse_conv_bn_
 from torch.fx import GraphModule
 from torch.fx.passes.infra.pass_manager import PassManager
+from torch.fx.passes.split_utils import split_by_tags
 
 from nncf.common.graph.model_transformer import ModelTransformer
 
@@ -37,6 +35,10 @@ from nncf.common.graph.transformations.commands import Command
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.commands import TransformationPriority
 from nncf.common.graph.transformations.commands import TransformationType
+
+# from torch import Tensor
+# from torch import nn
+from nncf.torch.graph.transformations.commands import PTModelExtractionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
 
 # from nncf.torch.graph.transformations.commands import PTTargetPoint
@@ -80,6 +82,8 @@ class FXModelTransformer(ModelTransformer):
     Applies transformations upon Torch FX model.
     """
 
+    # TODO: manage priorities of transformations
+
     def __init__(self, model: torch.fx.GraphModule):
         super().__init__(model)
 
@@ -87,6 +91,7 @@ class FXModelTransformer(ModelTransformer):
             # TODO: Move the module insertion command to a transformation
             (FXApplyTransformationCommand, self._apply_transformation),
             (FXModuleInsertionCommand, self._apply_module_insertion),
+            (PTModelExtractionCommand, self._apply_model_extraction),
         ]
 
     def transform(self, transformation_layout: PTTransformationLayout) -> torch.fx.GraphModule:
@@ -106,6 +111,34 @@ class FXModelTransformer(ModelTransformer):
         # model.graph.eliminate_dead_code()
         model.recompile()
         return model
+
+    @staticmethod
+    def _apply_model_extraction(
+        model: torch.fx.GraphModule,
+        transformations: List[PTModelExtractionCommand],
+    ) -> torch.fx.GraphModule:
+        transformation = transformations[-1]
+        assert len(transformation.input_node_names) == 1
+        assert transformation.input_node_names == transformation.output_node_names
+        node_name = transformation.input_node_names[0]
+
+        tags = ["before", "extracted", "after"]
+        i = 0
+        for node in model.graph.nodes:
+            if node.name == node_name:
+                node.tag = tags[1]
+                weights = [node.all_input_nodes[1]]
+                while weights:
+                    w_node = weights.pop()
+                    assert w_node.tag in tags[0:2]
+                    w_node.tag = tags[1]
+                    weights.extend(w_node.all_input_nodes)
+                i = 2
+                continue
+            node.tag = tags[i]
+
+        splitted_gm = split_by_tags(model, tags)
+        return splitted_gm.extracted
 
     @staticmethod
     def _apply_module_insertion(
@@ -141,15 +174,16 @@ class FXModelTransformer(ModelTransformer):
         return model
 
     @staticmethod
-    def _get_grah_node_by_name(graph, name):
+    def get_graph_node_by_name(graph, name):
         for node in graph.nodes:
             if node.name == name:
                 return node
+        raise RuntimeError(f"Node with name {name} is not found")
 
     @staticmethod
     def _get_target_node(graph: torch.fx.Graph, target_point: PTTargetPoint):
         target_type = target_point.target_type
-        target_node = FXModelTransformer._get_grah_node_by_name(graph, target_point.target_node_name)
+        target_node = FXModelTransformer.get_graph_node_by_name(graph, target_point.target_node_name)
         if target_type in [TargetType.OPERATOR_PRE_HOOK, TargetType.OPERATION_WITH_WEIGHTS]:
             target_node = target_node.all_input_nodes[target_point.input_port_id]
         elif target_type == TargetType.OPERATOR_POST_HOOK:

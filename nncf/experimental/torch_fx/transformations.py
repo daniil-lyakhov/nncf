@@ -16,6 +16,7 @@ import torch.fx
 from torch.ao.quantization.fx.utils import create_getattr_from_value
 from torch.quantization.fake_quantize import FakeQuantize
 
+from nncf.common.graph.graph import NNCFNode
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.experimental.torch_fx.model_transformer import FXModelTransformer
 from nncf.torch.graph.transformations.commands import PTTargetPoint
@@ -46,23 +47,20 @@ def fake_quantize_insertion_tranformation_builder(quantizer: FakeQuantize, targe
     return fake_quantize_insertion_transformation
 
 
-def _set_module_to_the_graph_module(
-    model: torch.fx.GraphModule, module_to_insert: torch.nn.Module, target_points: List[PTTargetPoint]
-) -> str:
-    """
-    Sets given module to the given torch.fx.GraphModule with unique name.
-    """
-    module_to_insert = module_to_insert
-    module_name_in_model = (
-        ";".join(
-            "_".join((tp.target_node_name, str(tp.input_port_id), str(tp.target_type.value))) for tp in target_points
-        )
-        + "_"
-        + str(id(module_to_insert))
-    )
-    assert not hasattr(model, module_name_in_model)
-    setattr(model, module_name_in_model, module_to_insert)
-    return module_name_in_model
+def bias_update_transformation_builder(node: NNCFNode, value: torch.Tensor):
+    def bias_update_transformation(model: torch.fx.GraphModule):
+        graph = model.graph
+        target_node_name = node.node_name
+        graph_node = FXModelTransformer.get_graph_node_by_name(graph, target_node_name)
+        bias_node = next(iter(graph_node.users))
+        with graph.inserting_before(bias_node):
+            new_constant = create_getattr_from_value(model, graph, target_node_name + "_shifted_bias", value)
+        args = list(bias_node.args)
+        args[1] = new_constant
+        bias_node.args = tuple(args)
+        graph.eliminate_dead_code()
+
+    return bias_update_transformation
 
 
 def qdq_insertion_tranformation_builder(quantizer: FakeQuantize, target_points: List[PTTargetPoint]):
@@ -150,3 +148,22 @@ def insert_one_qdq(
 
     for user, dq_node in user_dq_nodes:
         user.replace_input_with(target_node, dq_node)
+
+
+def _set_module_to_the_graph_module(
+    model: torch.fx.GraphModule, module_to_insert: torch.nn.Module, target_points: List[PTTargetPoint]
+) -> str:
+    """
+    Sets given module to the given torch.fx.GraphModule with unique name.
+    """
+    module_to_insert = module_to_insert
+    module_name_in_model = (
+        ";".join(
+            "_".join((tp.target_node_name, str(tp.input_port_id), str(tp.target_type.value))) for tp in target_points
+        )
+        + "_"
+        + str(id(module_to_insert))
+    )
+    assert not hasattr(model, module_name_in_model)
+    setattr(model, module_name_in_model, module_to_insert)
+    return module_name_in_model
