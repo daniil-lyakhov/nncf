@@ -16,6 +16,7 @@ from typing import Any, Dict, Tuple
 import numpy as np
 import openvino as ov
 import torch
+from torch._export import capture_pre_autograd_graph
 from tqdm import tqdm
 from ultralytics.cfg import get_cfg
 from ultralytics.data.converter import coco80_to_coco91_class
@@ -104,7 +105,9 @@ def prepare_openvino_model(model: YOLO, model_name: str) -> Tuple[ov.Model, Path
     return ov.Core().read_model(ir_model_path), ir_model_path
 
 
-def quantize(model: ov.Model, data_loader: torch.utils.data.DataLoader, validator: Validator) -> ov.Model:
+def quantize(
+    model: ov.Model, data_loader: torch.utils.data.DataLoader, validator: Validator, original_model
+) -> ov.Model:
     def transform_fn(data_item: Dict):
         """
         Quantization transform function. Extracts and preprocess input data from dataloader
@@ -147,10 +150,17 @@ def main():
     validator, data_loader = prepare_validation(model, args)
 
     # Convert to OpenVINO model
+
+    example_inputs = torch.ones((1, 3, 640, 640))
+    # model.model = torch.compile(model.model)
+    # fx_model = model.export(format="torchscript")
+    with torch.no_grad():
+        model.model.eval()
+        capture_pre_autograd_graph(model.model, (example_inputs,))
     ov_model, ov_model_path = prepare_openvino_model(model, MODEL_NAME)
 
     # Quantize mode in OpenVINO representation
-    quantized_model = quantize(ov_model, data_loader, validator)
+    quantized_model = quantize(ov_model, data_loader, validator, model)
     quantized_model_path = Path(f"{ROOT}/{MODEL_NAME}_openvino_model/{MODEL_NAME}_quantized.xml")
     ov.save_model(quantized_model, str(quantized_model_path), compress_to_fp16=False)
 
