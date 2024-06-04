@@ -26,6 +26,7 @@ from anomalib.data.utils import download
 from anomalib.deploy import ExportType
 from anomalib.engine import Engine
 from anomalib.models import Stfpm
+from torch._export import capture_pre_autograd_graph
 
 import nncf
 
@@ -124,6 +125,10 @@ def main():
 
     # Quantize the inference model using Post-Training Quantization
     inference_model = model.model
+
+    example_input = torch.ones((1, 3, 255, 255))
+    with torch.no_grad():
+        capture_pre_autograd_graph(inference_model, example_input)
     quantized_inference_model = nncf.quantize(model=inference_model, calibration_dataset=calibration_dataset)
 
     # Deepcopy the original model and set the quantized inference model
