@@ -1,16 +1,26 @@
+# Copyright (c) 2024 Intel Corporation
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#      http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import copy
 import re
 import subprocess
 import time
 import warnings
-from pathlib import Path
 from itertools import islice
-from typing import Type
+from pathlib import Path
 
 import numpy as np
 import openvino as ov
-import openvino.torch
+import openvino.torch  # noqa
 import pandas as pd
 import torch
 import torch.ao.quantization.quantizer.x86_inductor_quantizer as xiq
@@ -20,14 +30,16 @@ from torch._export import capture_pre_autograd_graph
 from torch.ao.quantization.quantize_pt2e import convert_pt2e
 from torch.ao.quantization.quantize_pt2e import prepare_pt2e
 from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
+from torch.fx.passes.graph_drawer import FxGraphDrawer
 from torch.jit import TracerWarning
 from torchvision import datasets
-from torch.fx.passes.graph_drawer import FxGraphDrawer
-from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers import AutoImageProcessor
+from transformers import AutoModelForImageClassification
 
 import nncf
-from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.logging.track_progress import track
+from nncf.common.quantization.structs import QuantizationPreset  # noqa
+from nncf.parameters import ModelType
 from nncf.torch.dynamic_graph.patch_pytorch import disable_patching
 
 warnings.filterwarnings("ignore", category=TracerWarning)
@@ -36,6 +48,8 @@ warnings.filterwarnings("ignore", category=UserWarning)
 DATASET_IMAGENET = "/home/dlyakhov/datasets/imagenet/val"
 
 hf_models = ()
+
+
 def hf_model_builder(model_id: str):
     def build(weights):
         processor = AutoImageProcessor.from_pretrained(model_id)
@@ -51,12 +65,13 @@ def hf_model_builder(model_id: str):
                 processed_input = processor(x, return_tensors="pt")
                 return model(processed_input)
 
-        #return ModelWithProcessing(processor, model)
+        # return ModelWithProcessing(processor, model)
         return model
 
     class DummyWeights:
         def transforms(self):
             return models.ResNet18_Weights.DEFAULT.transforms()
+
         @property
         def meta(self):
             return {}
@@ -64,23 +79,19 @@ def hf_model_builder(model_id: str):
     return build, DummyWeights()
 
 
-
 MODELS_DICT = {
+    "swin_v2_s": (models.swin_v2_s, models.Swin_V2_S_Weights.DEFAULT),
     "resnet18": (models.resnet18, models.ResNet18_Weights.DEFAULT),
     "resnet50": (models.resnet50, models.ResNet50_Weights.DEFAULT),
     "mobilenet_v2": (models.mobilenet_v2, models.MobileNet_V2_Weights.DEFAULT),
     "mobilenet_v3_small": (models.mobilenet_v3_small, models.MobileNet_V3_Small_Weights.DEFAULT),
     "mobilenet_v3_large": (models.mobilenet_v3_large, models.MobileNet_V3_Large_Weights.DEFAULT),
-    #"densenet161": (models.densenet161, models.DenseNet161_Weights.DEFAULT),
+    # "densenet161": (models.densenet161, models.DenseNet161_Weights.DEFAULT),
     "vgg16": (models.vgg16, models.VGG16_Weights.DEFAULT),
-    "mobilenet_v3_large":(
-        models.mobilenet_v3_large,
-        models.MobileNet_V3_Large_Weights.DEFAULT,
-    ),
     "efficientnet_b7": (models.efficientnet_b7, models.EfficientNet_B7_Weights.DEFAULT),
     "inception_v3": (models.inception_v3, models.Inception_V3_Weights.DEFAULT),
     "regnet_x_32gf": (models.regnet_x_32gf, models.RegNet_X_32GF_Weights.DEFAULT),
-    #"google/vit-base-patch16-224": hf_model_builder("google/vit-base-patch16-224"),
+    # "google/vit-base-patch16-224": hf_model_builder("google/vit-base-patch16-224"),
     # "convnext_large": (models.convnext_large, models.ConvNeXt_Large_Weights.DEFAULT),
     # "convnext_small": (models.convnext_small, models.ConvNeXt_Small_Weights.DEFAULT),
 }
@@ -96,6 +107,7 @@ def measure_time(model, example_inputs, num_iters=1000):
             total_time += time.time() - start_time
         average_time = (total_time / num_iters) * 1000
     return average_time
+
 
 def measure_time_ov(model, example_inputs, num_iters=1000):
     ie = ov.Core()
@@ -120,6 +132,7 @@ def quantize(model, example_inputs, calibration_dataset, subset_size=300):
 
     prepared_model = prepare_pt2e(exported_model, quantizer)
     from tqdm import tqdm
+
     for inp, _ in islice(tqdm(calibration_dataset), subset_size):
         prepared_model(inp)
     converted_model = convert_pt2e(prepared_model)
@@ -195,7 +208,10 @@ def nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_l
         def transform(x):
             return x[0]
 
-        quant_fx_model = nncf.quantize(exported_model, nncf.Dataset(val_loader, transform_func=transform),)
+        quant_fx_model = nncf.quantize(
+            exported_model,
+            nncf.Dataset(val_loader, transform_func=transform),
+        )
         quant_compile_model = torch.compile(quant_fx_model, backend="openvino")
 
         acc1_quant_model = validate(quant_compile_model, val_loader)
@@ -212,7 +228,6 @@ def nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_l
         ov_quant_model = ov.convert_model(exported_model, example_input=example_input)
         quant_file_path = output_dir / "quant.xml"
         ov.save_model(ov_quant_model, quant_file_path)
-
 
         fps = run_benchmark(quant_file_path, shape_input)
         print(f"fps: {fps}")
@@ -257,16 +272,19 @@ def nncf_ov_2_ov_quantization(ov_fp32_model, val_loader, output_dir, result, sha
     def transform(x):
         return np.array(x[0])
 
-    #from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
-    #advanced_params = AdvancedQuantizationParameters()
+    # from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
+    # advanced_params = AdvancedQuantizationParameters()
 
     from copy import deepcopy
+
     fast_bias_correction = True
-    nncf_ov_int8_model = nncf.quantize(deepcopy(ov_fp32_model),
-                                  nncf.Dataset(val_loader, transform_func=transform),
-                                  fast_bias_correction=fast_bias_correction,
-                                  preset=QuantizationPreset.PERFORMANCE
-                                  )
+    nncf_ov_int8_model = nncf.quantize(
+        deepcopy(ov_fp32_model),
+        nncf.Dataset(val_loader, transform_func=transform),
+        fast_bias_correction=fast_bias_correction,
+        model_type=ModelType.TRANSFORMER,
+        # preset=QuantizationPreset.MIXED,
+    )
     acc1_nncf_ov = validate_ov(nncf_ov_int8_model, val_loader)
     result["acc1_nncf_ov"] = acc1_nncf_ov
     for precision, model in (("int8", nncf_ov_int8_model), ("fp32", ov_fp32_model)):
@@ -279,6 +297,7 @@ def nncf_ov_2_ov_quantization(ov_fp32_model, val_loader, output_dir, result, sha
         latency = measure_time_ov(model, next(iter(val_loader))[0], num_iters=10_000)
         print(f"latency_{precision}: {latency}")
         result[f"ov_latency_nncf_ov_{precision}"] = latency
+
 
 def process_model(model_name: str):
 
@@ -316,22 +335,23 @@ def process_model(model_name: str):
     ov_fp32_file_path = output_dir / "fp32.xml"
     ov.save_model(ov_fp32_model, ov_fp32_file_path)
     result["fps_fp32_openvino"] = run_benchmark(ov_fp32_file_path, shape_input)
+    print(f"fps_fp32_openvino {result['fps_fp32_openvino']}")
 
     del fp32_pt_model
     ##############################################################
     # Process PT Quantize
     ##############################################################
-    #fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
+    # fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
 
     ##############################################################
     # Process NNCF FX Quantize
     ##############################################################
-    #nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
+    # nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
 
     ##############################################################
     # Process NNCF Quantize by PT
     ##############################################################
-    #nncf_pt_2_ov_quantization(pt_model, val_loader, example_input, output_dir, result, shape_input)
+    # nncf_pt_2_ov_quantization(pt_model, val_loader, example_input, output_dir, result, shape_input)
 
     ##############################################################
     # Process NNCF Quantize by OV
