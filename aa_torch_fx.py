@@ -213,6 +213,7 @@ def torch_ao_sq_quantization(pt_model, example_input, output_dir, result, val_lo
     torch._inductor.config.force_fuse_int_mm_with_mul = True
 
     # plug in your model
+    # model = torch.compile(pt_model)
     model = pt_model
 
     # convert linear modules to smoothquant
@@ -224,8 +225,10 @@ def torch_ao_sq_quantization(pt_model, example_input, output_dir, result, val_lo
 
     # Calibrate the model
     model.train()
-    for batch in calibration_loader:
-        inputs = batch
+    from tqdm import tqdm
+
+    for batch in tqdm(islice(calibration_loader, 300)):
+        inputs = batch[0]
         model(inputs)
 
     # set it to inference mode
