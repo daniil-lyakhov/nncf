@@ -32,6 +32,7 @@ from torch.ao.quantization.quantize_pt2e import prepare_pt2e
 from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
 from torch.fx.passes.graph_drawer import FxGraphDrawer
 from torch.jit import TracerWarning
+from torchao.utils import benchmark_model as ao_benchmark_model
 from torchvision import datasets
 from transformers import AutoImageProcessor
 from transformers import AutoModelForImageClassification
@@ -80,6 +81,9 @@ def hf_model_builder(model_id: str):
 
 
 MODELS_DICT = {
+    "vit_h_14": (models.vit_h_14, models.ViT_H_14_Weights.DEFAULT),
+    "vit_b_16": (models.vit_b_16, models.ViT_B_16_Weights.DEFAULT),
+    "swin_v2_t": (models.swin_v2_t, models.Swin_V2_T_Weights.DEFAULT),
     "swin_v2_s": (models.swin_v2_s, models.Swin_V2_S_Weights.DEFAULT),
     "resnet18": (models.resnet18, models.ResNet18_Weights.DEFAULT),
     "resnet50": (models.resnet50, models.ResNet50_Weights.DEFAULT),
@@ -200,6 +204,44 @@ def run_benchmark(model_path: Path, shape) -> float:
     return float(match.group(1))
 
 
+def torch_ao_sq_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input):
+    import torch
+    from torchao.quantization.smoothquant import smooth_fq_linear_to_inference
+    from torchao.quantization.smoothquant import swap_linear_with_smooth_fq_linear
+
+    # Fuse the int8*int8 -> int32 matmul and subsequent mul op avoiding materialization of the int32 intermediary tensor
+    torch._inductor.config.force_fuse_int_mm_with_mul = True
+
+    # plug in your model
+    model = pt_model
+
+    # convert linear modules to smoothquant
+    # linear module in calibration mode
+    swap_linear_with_smooth_fq_linear(model)
+
+    # Create a data loader for calibration
+    calibration_loader = val_loader
+
+    # Calibrate the model
+    model.train()
+    for batch in calibration_loader:
+        inputs = batch
+        model(inputs)
+
+    # set it to inference mode
+    smooth_fq_linear_to_inference(model)
+
+    # compile the model to improve performance
+    model = torch.compile(model, mode="max-autotune")
+    acc1_quant_model = validate(model, val_loader)
+    print(f"torch ao metric acc@1: {acc1_quant_model}")
+    result["torch_ao_quant_model_acc"] = acc1_quant_model
+
+    latency = ao_benchmark_model(model, 20, example_input)
+    print(f"torch ao latency: {latency}")
+    result["torch_ao_quant_model_latency"] = latency
+
+
 def nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input):
     with disable_patching():
         with torch.no_grad():
@@ -272,31 +314,37 @@ def nncf_ov_2_ov_quantization(ov_fp32_model, val_loader, output_dir, result, sha
     def transform(x):
         return np.array(x[0])
 
-    # from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
-    # advanced_params = AdvancedQuantizationParameters()
+    from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
+    from nncf.quantization.advanced_parameters import AdvancedSmoothQuantParameters
 
-    from copy import deepcopy
+    advanced_params = AdvancedQuantizationParameters()
+    # for sq_param in [-1, 0.15, 0.5, 0.75]:
+    for sq_param in [0.95]:
+        advanced_params.smooth_quant_alphas = AdvancedSmoothQuantParameters(matmul=sq_param)
 
-    fast_bias_correction = True
-    nncf_ov_int8_model = nncf.quantize(
-        deepcopy(ov_fp32_model),
-        nncf.Dataset(val_loader, transform_func=transform),
-        fast_bias_correction=fast_bias_correction,
-        model_type=ModelType.TRANSFORMER,
-        # preset=QuantizationPreset.MIXED,
-    )
-    acc1_nncf_ov = validate_ov(nncf_ov_int8_model, val_loader)
-    result["acc1_nncf_ov"] = acc1_nncf_ov
-    for precision, model in (("int8", nncf_ov_int8_model), ("fp32", ov_fp32_model)):
-        nncf_ov_file_path = output_dir / f"nncf_ov_{precision}.xml"
-        ov.save_model(model, nncf_ov_file_path)
-        fps = run_benchmark(nncf_ov_file_path, shape_input)
-        print(f"fps_{precision}: {fps}")
-        result[f"ov_fps_nncf_ov_{precision}"] = fps
+        from copy import deepcopy
 
-        latency = measure_time_ov(model, next(iter(val_loader))[0], num_iters=10_000)
-        print(f"latency_{precision}: {latency}")
-        result[f"ov_latency_nncf_ov_{precision}"] = latency
+        fast_bias_correction = True
+        nncf_ov_int8_model = nncf.quantize(
+            deepcopy(ov_fp32_model),
+            nncf.Dataset(val_loader, transform_func=transform),
+            fast_bias_correction=fast_bias_correction,
+            model_type=ModelType.TRANSFORMER,
+            preset=QuantizationPreset.MIXED,
+            advanced_parameters=advanced_params,
+        )
+        acc1_nncf_ov = validate_ov(nncf_ov_int8_model, val_loader)
+        result[f"acc1_nncf_ov_{sq_param}"] = acc1_nncf_ov
+        for precision, model in (("int8", nncf_ov_int8_model), ("fp32", ov_fp32_model)):
+            nncf_ov_file_path = output_dir / f"nncf_ov_{precision}.xml"
+            ov.save_model(model, nncf_ov_file_path)
+            fps = run_benchmark(nncf_ov_file_path, shape_input)
+            print(f"fps_{precision}: {fps} {sq_param}")
+            result[f"ov_fps_nncf_ov_{precision}_{sq_param}"] = fps
+
+            latency = measure_time_ov(model, next(iter(val_loader))[0], num_iters=10_000)
+            print(f"latency_{precision}: {latency}")
+            result[f"ov_latency_nncf_ov_{precision}_{sq_param}"] = latency
 
 
 def process_model(model_name: str):
@@ -331,13 +379,20 @@ def process_model(model_name: str):
     # orig_infer_acc1 = validate(fp32_pt_model, val_loader)
     result["acc1_fp32_openvino"] = orig_infer_acc1
 
+    fp32_pt_model = torch.export.export(fp32_pt_model, (example_input,))
     ov_fp32_model = ov.convert_model(fp32_pt_model, example_input=example_input)
+    ov_fp32_file_path = None
     ov_fp32_file_path = output_dir / "fp32.xml"
     ov.save_model(ov_fp32_model, ov_fp32_file_path)
     result["fps_fp32_openvino"] = run_benchmark(ov_fp32_file_path, shape_input)
     print(f"fps_fp32_openvino {result['fps_fp32_openvino']}")
 
     del fp32_pt_model
+    ##############################################################
+    # Process Torch AO Quantize with SQ
+    ##############################################################
+    torch_ao_sq_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
+
     ##############################################################
     # Process PT Quantize
     ##############################################################
@@ -356,7 +411,7 @@ def process_model(model_name: str):
     ##############################################################
     # Process NNCF Quantize by OV
     ##############################################################
-    nncf_ov_2_ov_quantization(ov_fp32_model, val_loader, output_dir, result, shape_input)
+    # nncf_ov_2_ov_quantization(ov_fp32_model, val_loader, output_dir, result, shape_input)
 
     print(result)
     return result
