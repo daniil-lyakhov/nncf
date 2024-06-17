@@ -58,7 +58,6 @@ class GraphConverter:
             node_metatype = om.PTConstNoopMetatype
         elif node.op in ("call_function",):
             if hasattr(node.target, "overloadpacket"):
-                torch.nn.BatchNorm2d
                 node_type = str(node.target.overloadpacket).split(".")[1]
             elif node.target.__name__ == "getitem":
                 node_type = "__getitem__"
@@ -66,6 +65,8 @@ class GraphConverter:
                 # TODO: get correct nodes types from this nodes as well
                 node_type = str(node.target)
             node_metatype = PT_OPERATOR_METATYPES.get_operator_metatype_by_op_name(node_type)
+            # if node_metatype is UnknownMetatype:
+            #    breakpoint()
             # TODO: add layer attrs and support subtypes
             # if node_metatype.get_subtypes():
             #    subtype = node_metatype.determine_subtype(
@@ -208,10 +209,10 @@ class GraphConverter:
         for source_node in model.graph.nodes:
 
             source_nncf_node = nncf_graph.get_node_by_name(source_node.name)
-            for dist_node in source_node.users:
+            for idx, dist_node in enumerate(source_node.users):
                 dist_node_id = nncf_graph.get_node_by_name(dist_node.name).node_id
                 input_port_id, output_port_id, tensor_shape = GraphConverter.get_edge_params(
-                    model, source_node, source_nncf_node, dist_node
+                    model, source_node, source_nncf_node, dist_node, idx
                 )
 
                 nncf_graph.add_edge_between_nncf_nodes(
@@ -226,14 +227,19 @@ class GraphConverter:
         return nncf_graph
 
     @staticmethod
-    def get_edge_params(model, source_node: torch.fx.Node, source_nncf_node: NNCFNode, dist_node: torch.fx.Node):
-        # TODO: support cat
+    def get_edge_params(
+        model, source_node: torch.fx.Node, source_nncf_node: NNCFNode, dist_node: torch.fx.Node, output_idx: int
+    ):
         output_port_id = 0
         if source_node.op in ("get_attr",):
             tensor_shape = tuple(getattr(model, source_node.target).shape)
         elif "val" in source_node.meta:
             if source_nncf_node.metatype is om.PTBatchNormMetatype:
                 tensor = source_node.meta["val"][0]
+            elif source_nncf_node.metatype is om.PTSplitMetatype:
+                tensor = source_node.meta["val"][output_idx]
+                # Assume every split outputs corresponds to an unique output_port_id
+                output_port_id = output_idx
             else:
                 tensor = source_node.meta["val"]
             tensor_shape = tuple(tensor.shape)

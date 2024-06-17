@@ -528,7 +528,7 @@ class PTGELUMetatype(PTOperatorMetatype):
 @PT_OPERATOR_METATYPES.register()
 class PTSILUMetatype(PTOperatorMetatype):
     name = "SiluOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["silu"]}
+    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["silu"], NamespaceTarget.ATEN: ["silu_"]}
 
 
 @PT_OPERATOR_METATYPES.register()
@@ -871,6 +871,7 @@ class PTSplitMetatype(PTOperatorMetatype):
         NamespaceTarget.TORCH_NN_FUNCTIONAL: [],
         NamespaceTarget.TORCH_TENSOR: ["split", "chunk", "unbind"],
         NamespaceTarget.TORCH: ["split", "chunk", "unbind"],
+        NamespaceTarget.ATEN: ["split_with_sizes"],
     }
     hw_config_names = [HWConfigOpName.SPLIT, HWConfigOpName.CHUNK]
 
@@ -1036,7 +1037,10 @@ class PTSqrtMetatype(PTOperatorMetatype):
 @PT_OPERATOR_METATYPES.register()
 class PTInterpolateMetatype(PTOperatorMetatype):
     name = "InterpolateOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["interpolate"]}
+    module_to_function_names = {
+        NamespaceTarget.TORCH_NN_FUNCTIONAL: ["interpolate"],
+        NamespaceTarget.ATEN: ["upsample_nearest2d", "upsample_nearest_exact2d"],
+    }
     hw_config_names = [HWConfigOpName.INTERPOLATE]
     num_expected_input_edges = 1
 

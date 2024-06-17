@@ -43,6 +43,7 @@ from nncf.torch.graph.graph import PTTargetPoint
 from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.hardware.config import PTHWConfig
 from nncf.torch.nncf_network import NNCFNetwork
+from nncf.torch.quantization.default_quantization import DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT
 from nncf.torch.quantization.layers import QUANTIZATION_MODULES
 from nncf.torch.quantization.layers import AsymmetricQuantizer
 from nncf.torch.quantization.layers import BaseQuantizer
@@ -118,6 +119,7 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
 
     @property
     def quant_trait_op_dict(self) -> Dict[int, OperatorMetatype]:
+        return DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT
         return DEFAULT_FX_QUANT_TRAIT_TO_OP_DICT
 
     @staticmethod
@@ -320,8 +322,11 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
         )
 
         # transformation = fake_quantize_insertion_tranformation_builder(quantizer, target_points)
-        transformation = qdq_insertion_tranformation_builder(quantizer, target_points)
-        return [FXApplyTransformationCommand(transformation)]
+        transformations = []
+        for tp in target_points:
+            transformation = qdq_insertion_tranformation_builder(quantizer, [tp])
+            transformations.append(FXApplyTransformationCommand(transformation))
+        return transformations
 
     @staticmethod
     def get_ignored_metatypes(model_type: ModelType, device: TargetDevice) -> List[OperatorMetatype]:
