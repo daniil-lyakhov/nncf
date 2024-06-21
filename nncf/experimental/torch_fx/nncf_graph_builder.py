@@ -9,6 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from itertools import chain
 from typing import Tuple
 
@@ -124,6 +125,125 @@ class GraphConverter:
         model.recompile()
 
     @staticmethod
+    def _is_linear(n: torch.fx.Node):
+        return n.op == "call_function" and n.target in [torch.ops.aten.linear.default]
+
+    @staticmethod
+    def separate_linear_and_bias(model: torch.fx.GraphModule):
+        """
+        Separates one joined linear+bias node to two nodes: conv and bias.
+        Needed as nncf does not expect joined conv
+        """
+        add_node_target = torch.ops.aten.add_.Tensor
+        for n in model.graph.nodes:
+            if not GraphConverter._is_linear(n):
+                continue
+            if len(n.args) < 3 or n.args[2] is None:
+                continue
+            linear_node = n
+            linear_bias_node = linear_node.args[2]
+            conv_bias_value = _get_tensor_constant_from_node(linear_bias_node, model)
+            args = list(n.args)
+            args[2] = None
+            linear_node.args = tuple(args)
+            with model.graph.inserting_after(linear_node):
+                new_linear_bias_node = create_getattr_from_value(
+                    model,
+                    model.graph,
+                    linear_bias_node.name + "_",
+                    conv_bias_value,
+                )
+            with model.graph.inserting_after(new_linear_bias_node):
+                add_node = model.graph.create_node(
+                    "call_function", add_node_target, (linear_node, new_linear_bias_node), {}
+                )
+            for user in list(linear_node.users):
+                if user is add_node:
+                    continue
+                user.replace_input_with(linear_node, add_node)
+
+            if "val" in linear_node.meta:
+                add_node.meta["val"] = linear_node.meta["val"]
+        model.graph.eliminate_dead_code()
+        model.recompile()
+
+    @staticmethod
+    def _is_scaled_dot_product_attention(n: torch.fx.Node):
+        return n.op == "call_function" and n.target in [torch.ops.aten.scaled_dot_product_attention.default]
+
+    @staticmethod
+    def _unfold_sdp(model: torch.fx.GraphModule, node: torch.fx.Node):
+        transpose_target = torch.ops.aten.transpose.int
+        matmul_target = torch.ops.aten.matmul.default
+        mul_target = torch.ops.aten.multiply.Scalar
+        softmax_target = torch.ops.aten.softmax.int
+
+        query, key, value = node.args
+        q, k, v = (n.meta["val"] for n in node.args)
+        n = query.meta["val"].shape[-1]
+        scale_factor = 1 / math.sqrt(n)
+
+        with model.graph.inserting_before(node):
+            k_transposed = model.graph.create_node("call_function", transpose_target, (key, -2, -1), {})
+            k = k.transpose(-2, -1)
+            k_transposed.meta["val"] = torch.clone(k)
+
+            sa = model.graph.create_node("call_function", matmul_target, (query, k_transposed), {})
+            attn_value = q @ k
+            sa.meta["val"] = torch.clone(attn_value)
+
+            # scale_factor_node = create_getattr_from_value(
+            #    model,
+            #    model.graph,
+            #    sa.name + "_scale_mul_value",
+            #    torch.tensor(scale_factor).float(),
+            # )
+
+            # sa_scaled = model.graph.create_node("call_function", mul_target, (sa, scale_factor_node), {})
+            sa_scaled = model.graph.create_node("call_function", mul_target, (sa, float(scale_factor)), {})
+            sa_scaled.meta["val"] = torch.clone(attn_value)
+
+            softmax = model.graph.create_node("call_function", softmax_target, (sa_scaled, -1), {})
+            softmax.meta["val"] = torch.clone(attn_value)
+
+            result = model.graph.create_node("call_function", matmul_target, (softmax, value), {})
+            r = attn_value @ v
+            result.meta["val"] = torch.clone(r)
+
+        for user in list(node.users):
+            user.replace_input_with(node, result)
+        model.graph.eliminate_dead_code()
+
+    @staticmethod
+    def unfold_scaled_dot_product_attention(model: torch.fx.GraphModule):
+        for n in model.graph.nodes:
+            if not GraphConverter._is_scaled_dot_product_attention(n):
+                continue
+            args = n.args
+            if len(args) > 3:
+                raise NotImplementedError(
+                    f"Unfolding of scaled dot product attention node {n}"
+                    " with more than 3 inputs is not implemented yet"
+                )
+            GraphConverter._unfold_sdp(model, n)
+        model.graph.eliminate_dead_code()
+        model.recompile()
+
+    @staticmethod
+    def view_to_reshape(model: torch.fx.GraphModule):
+        for n in model.graph.nodes:
+            if not (n.op == "call_function" and n.target in [torch.ops.aten.view.default]):
+                continue
+            with model.graph.inserting_after(n):
+                reshape = model.graph.create_node("call_function", torch.ops.aten.reshape.default, tuple(n.args), {})
+
+            for user in list(n.users):
+                user.replace_input_with(n, reshape)
+
+        model.graph.eliminate_dead_code()
+        model.recompile()
+
+    @staticmethod
     def merge_conv_and_bias(model: torch.fx.GraphModule):
         """
         Separates one joined conv+bias node to two nodes: conv and bias.
@@ -171,7 +291,11 @@ class GraphConverter:
         _fuse_conv_bn_(model)
         # BN fuses to conv bias, conv+bias joined op
         # needs to be splited for nncf
+        GraphConverter.separate_linear_and_bias(model)
         GraphConverter.separate_conv_and_bias(model)
+        GraphConverter.unfold_scaled_dot_product_attention(model)
+        GraphConverter.view_to_reshape(model)
+        breakpoint()
 
         nncf_graph = PTNNCFGraph()
 

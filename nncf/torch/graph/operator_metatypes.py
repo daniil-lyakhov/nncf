@@ -834,8 +834,15 @@ class PTGatherMetatype(PTOperatorMetatype):
     name = "GatherOp"
     module_to_function_names = {
         NamespaceTarget.TORCH_TENSOR: ["index_select", "__getitem__"],
-        NamespaceTarget.TORCH: ["gather", "index_select", "where"],
+        NamespaceTarget.TORCH: ["gather", "index_select", "select", "where"],
+        NamespaceTarget.ATEN: ["slice"],
     }
+
+
+@PT_OPERATOR_METATYPES.register()
+class PTScaledDotProductAttention(PTOperatorMetatype):
+    name = "scaled_dot_product_attention"
+    module_to_function_names = {NamespaceTarget.ATEN: ["scaled_dot_product_attention"]}
 
 
 @PT_OPERATOR_METATYPES.register()
@@ -849,7 +856,7 @@ class PTReshapeMetatype(PTOperatorMetatype):
     name = "ReshapeOp"
     module_to_function_names = {
         NamespaceTarget.TORCH_TENSOR: ["reshape", "view", "flatten", "unsqueeze"],
-        NamespaceTarget.TORCH: ["flatten", "unsqueeze"],
+        NamespaceTarget.TORCH: ["flatten", "unflatten", "unsqueeze"],
     }
     hw_config_names = [HWConfigOpName.RESHAPE, HWConfigOpName.UNSQUEEZE, HWConfigOpName.FLATTEN]
 

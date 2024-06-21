@@ -152,9 +152,8 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
         return PTMinMaxTensorStatistic(min_values=min_values, max_values=max_values)
 
     @staticmethod
-    def get_target_point_shape(nncf_graph: NNCFGraph, node: NNCFNode, target_point: PTTargetPoint) -> Tuple[int, ...]:
-        # TODO: support concat layer
-        return nncf_graph.get_output_edges(node)[0].tensor_shape
+    def get_target_point_shape(nncf_graph: PTNNCFGraph, node: NNCFNode, target_point: PTTargetPoint) -> Tuple[int, ...]:
+        return nncf_graph.get_input_shape_for_insertion_point(target_point)
 
     @staticmethod
     def get_weight_quantization_axes(node: NNCFNode, target_point: PTTargetPoint) -> Tuple[int]:
