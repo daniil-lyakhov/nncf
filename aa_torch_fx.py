@@ -401,6 +401,13 @@ def process_model(model_name: str):
     # torch_ao_sq_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
 
     ##############################################################
+    # with torch.no_grad():
+    #    exported_model = capture_pre_autograd_graph(pt_model, (example_input,))
+    #    latency_fx = measure_time(torch.compile(exported_model), (example_input,))
+    # print(f"latency: {latency_fx}")
+    #############################################################
+
+    ##############################################################
     # Process PT Quantize
     ##############################################################
     fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
