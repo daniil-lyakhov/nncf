@@ -236,6 +236,7 @@ class GraphConverter:
                 continue
             with model.graph.inserting_after(n):
                 reshape = model.graph.create_node("call_function", torch.ops.aten.reshape.default, tuple(n.args), {})
+                reshape.meta = n.meta
 
             for user in list(n.users):
                 user.replace_input_with(n, reshape)
@@ -295,7 +296,7 @@ class GraphConverter:
         GraphConverter.separate_conv_and_bias(model)
         GraphConverter.unfold_scaled_dot_product_attention(model)
         GraphConverter.view_to_reshape(model)
-        breakpoint()
+        # breakpoint()
 
         nncf_graph = PTNNCFGraph()
 

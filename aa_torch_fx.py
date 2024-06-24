@@ -403,12 +403,12 @@ def process_model(model_name: str):
     ##############################################################
     # Process PT Quantize
     ##############################################################
-    # fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
+    fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
 
     ##############################################################
     # Process NNCF FX Quantize
     ##############################################################
-    nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
+    # nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
 
     ##############################################################
     # Process NNCF Quantize by PT

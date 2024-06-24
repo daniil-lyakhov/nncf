@@ -371,5 +371,24 @@ def main():
     return fp_stats["metrics/mAP50-95(B)"], q_stats["metrics/mAP50-95(B)"], fp_model_perf, quantized_model_perf
 
 
+def check_export_not_strict():
+    model = YOLO(f"{ROOT}/{MODEL_NAME}.pt")
+
+    # Prepare validation dataset and helper
+    validator, data_loader = prepare_validation_new(model, "coco128.yaml")
+
+    batch = next(iter(data_loader))
+    batch = validator.preprocess(batch)
+
+    model.model(batch["img"])
+    ex_model = torch.export.export(model.model, args=(batch["img"],), strict=False)
+    ex_model = capture_pre_autograd_graph(ex_model.module(), args=(batch["img"],))
+
+    fp_stats, total_images, total_objects = validate_fx(ex_model, tqdm(data_loader), validator)
+    print("Floating-point ex strict=False")
+    print_statistics(fp_stats, total_images, total_objects)
+
+
 if __name__ == "__main__":
-    main()
+    check_export_not_strict()
+    # main()
