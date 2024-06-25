@@ -11,7 +11,7 @@
 
 import pytest
 
-from nncf.quantization.algorithms.min_max.torch_backend import FXMinMaxAlgoBackend
+from nncf.quantization.algorithms.min_max.torch_backend import PTMinMaxAlgoBackend
 from tests.post_training.test_templates.models import NNCFGraphToTest
 from tests.post_training.test_templates.models import NNCFGraphToTestDepthwiseConv
 from tests.post_training.test_templates.models import NNCFGraphToTestSumAggregation
@@ -23,7 +23,7 @@ from tests.torch.ptq.helpers import get_sum_aggregation_nncf_graph
 
 class TestQuantizerConfig(TemplateTestQuantizerConfig):
     def get_algo_backend(self):
-        return FXMinMaxAlgoBackend()
+        return PTMinMaxAlgoBackend()
 
     @pytest.fixture
     def single_conv_nncf_graph(self) -> NNCFGraphToTest:
