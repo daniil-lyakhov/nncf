@@ -27,8 +27,6 @@ from nncf.common.quantization.structs import QuantizerConfig
 from nncf.experimental.common.tensor_statistics.collectors import AGGREGATORS_MAP
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
 from nncf.experimental.torch_fx.model_transformer import FXApplyTransformationCommand
-from nncf.experimental.torch_fx.quantization.default_quantization import DEFAULT_FX_QUANT_TRAIT_TO_OP_DICT
-from nncf.experimental.torch_fx.transformations import fake_quantize_insertion_tranformation_builder  # noqa
 from nncf.experimental.torch_fx.transformations import qdq_insertion_tranformation_builder
 from nncf.parameters import ModelType
 from nncf.parameters import TargetDevice
@@ -120,7 +118,6 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
     @property
     def quant_trait_op_dict(self) -> Dict[int, OperatorMetatype]:
         return DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT
-        return DEFAULT_FX_QUANT_TRAIT_TO_OP_DICT
 
     @staticmethod
     def get_start_nodes_for_activation_path_tracing(nncf_graph: PTNNCFGraph) -> List[NNCFNode]:
@@ -301,7 +298,6 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
         quantizer = FXMinMaxAlgoBackend._create_quantizer(
             quantizer_config, scale_shape, parameters, target_point.target_type
         )
-        # transformation = fake_quantize_insertion_tranformation_builder(quantizer, [target_point])
         transformation = qdq_insertion_tranformation_builder(quantizer, [target_point])
         return FXApplyTransformationCommand(transformation)
 
@@ -320,7 +316,6 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
             quantizer_config, scale_shape, parameters, target_points[0].target_type
         )
 
-        # transformation = fake_quantize_insertion_tranformation_builder(quantizer, target_points)
         transformations = []
         for tp in target_points:
             transformation = qdq_insertion_tranformation_builder(quantizer, [tp])
@@ -365,7 +360,4 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
         for node in nncf_graph.get_all_nodes():
             if node.metatype in [om.PTConv1dMetatype, om.PTConv2dMetatype, om.PTConv3dMetatype, om.PTLinearMetatype]:
                 retval.add(node)
-            # if node.metatype is om.PTConstNoopMetatype:
-            #    for node in nncf_graph.get_next_nodes(node):
-            #        retval.add(node)
         return list(retval)

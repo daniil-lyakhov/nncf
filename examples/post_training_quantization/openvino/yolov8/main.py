@@ -18,7 +18,7 @@ import subprocess
 import time
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import openvino as ov
@@ -29,13 +29,10 @@ from torch.export import Dim  # noqa
 from torch.fx.passes.graph_drawer import FxGraphDrawer
 from tqdm import tqdm
 from ultralytics.cfg import get_cfg
-from ultralytics.data.converter import coco80_to_coco91_class
 from ultralytics.data.utils import check_det_dataset
 from ultralytics.engine.validator import BaseValidator as Validator
 from ultralytics.models.yolo import YOLO
-from ultralytics.utils import DATASETS_DIR
 from ultralytics.utils import DEFAULT_CFG
-from ultralytics.utils.metrics import ConfusionMatrix
 from ultralytics.utils.torch_utils import de_parallel
 
 import nncf
@@ -55,15 +52,18 @@ def measure_time(model, example_inputs, num_iters=500):
     return average_time
 
 
-def validate_fx_ult_method(model: ov.Model) -> Tuple[Dict, int, int]:
-    """
-    Uses .val ultralitics method instead of a dataloader loop.
-    For some reason this shows better metrics on torch.compiled models
-    """
-    yolo = YOLO(f"{ROOT}/{MODEL_NAME}.pt")
-    yolo.model = model
-    result = yolo.val(data="coco128.yaml", batch=1, rect=False)
-    return result.results_dict
+def measure_time_ov(model, example_inputs, num_iters=1000):
+    ie = ov.Core()
+    compiled_model = ie.compile_model(model, "CPU")
+    infer_request = compiled_model.create_infer_request()
+    infer_request.infer(example_inputs)
+    total_time = 0
+    for i in range(0, num_iters):
+        start_time = time.time()
+        infer_request.infer(example_inputs)
+        total_time += time.time() - start_time
+    average_time = (total_time / num_iters) * 1000
+    return average_time
 
 
 def validate_fx(
@@ -100,10 +100,10 @@ def print_statistics_short(stats: np.ndarray) -> None:
 def validate_ov(
     model: ov.Model, data_loader: torch.utils.data.DataLoader, validator: Validator, num_samples: int = None
 ) -> Tuple[Dict, int, int]:
-    validator.seen = 0
-    validator.jdict = []
-    validator.stats = []
-    validator.confusion_matrix = ConfusionMatrix(nc=validator.nc)
+    # validator.seen = 0
+    # validator.jdict = []
+    # validator.stats = []
+    # validator.confusion_matrix = ConfusionMatrix(nc=validator.nc)
     model.reshape({0: [1, 3, -1, -1]})
     compiled_model = ov.compile_model(model)
     output_layer = compiled_model.output(0)
@@ -131,7 +131,7 @@ def print_statistics(stats: np.ndarray, total_images: int, total_objects: int) -
     print(pf % ("all", total_images, total_objects, mp, mr, map50, mean_ap))
 
 
-def prepare_validation_new(model: YOLO, data: str) -> Tuple[Validator, torch.utils.data.DataLoader]:
+def prepare_validation(model: YOLO, data: str) -> Tuple[Validator, torch.utils.data.DataLoader]:
     # custom = {"rect": True, "batch": 1}  # method defaults
     # rect: false forces to resize all input pictures to one size
     custom = {"rect": False, "batch": 1}  # method defaults
@@ -144,25 +144,6 @@ def prepare_validation_new(model: YOLO, data: str) -> Tuple[Validator, torch.uti
     validator.init_metrics(de_parallel(model))
 
     data_loader = validator.get_dataloader(validator.data.get(validator.args.split), validator.args.batch)
-
-    return validator, data_loader
-
-
-def prepare_validation(model: YOLO, args: Any) -> Tuple[Validator, torch.utils.data.DataLoader]:
-    validator = model.smart_load("validator")(args)
-    validator.data = check_det_dataset(args.data)
-    dataset = validator.data["val"]
-    print(f"{dataset}")
-
-    data_loader = validator.get_dataloader(f"{DATASETS_DIR}/coco128", 1)
-
-    validator = model.smart_load("validator")(args)
-
-    validator.is_coco = True
-    validator.class_map = coco80_to_coco91_class()
-    validator.names = model.model.names
-    validator.metrics.names = validator.names
-    validator.nc = model.model.model[-1].nc
 
     return validator, data_loader
 
@@ -221,7 +202,7 @@ def quantize(
     return quantized_model
 
 
-NNCF_QUANTIZATION = True
+NNCF_QUANTIZATION = False
 
 
 def quantize_impl(exported_model, val_loader, validator):
@@ -290,25 +271,24 @@ def main():
     # args.data = "coco128.yaml"
     # Prepare validation dataset and helper
 
-    validator, data_loader = prepare_validation_new(model, "coco128.yaml")
+    validator, data_loader = prepare_validation(model, "coco128.yaml")
 
     # Convert to OpenVINO model
-    if TORCH_FX:
-        batch = next(iter(data_loader))
-        batch = validator.preprocess(batch)
+    batch = next(iter(data_loader))
+    batch = validator.preprocess(batch)
 
+    if TORCH_FX:
         fp_stats, total_images, total_objects = validate_fx(model.model, tqdm(data_loader), validator)
         print("Floating-point Torch model validation results:")
         print_statistics(fp_stats, total_images, total_objects)
 
-        fp32_compiled_model = torch.compile(model.model, backend="openvino")
+        if NNCF_QUANTIZATION:
+            fp32_compiled_model = torch.compile(model.model, backend="openvino")
+        else:
+            fp32_compiled_model = torch.compile(model.model)
         fp32_stats, total_images, total_objects = validate_fx(fp32_compiled_model, tqdm(data_loader), validator)
         print("FP32 FX model validation results:")
         print_statistics(fp32_stats, total_images, total_objects)
-
-        # result = validate_fx_ult_method(fp32_compiled_model)
-        # print("FX FP32 model .val validation")
-        # print_statistics_short(result)
 
         print("Start quantization...")
         # Rebuild model to reset ultralitics cache
@@ -322,10 +302,6 @@ def main():
                 model.model, args=(batch["img"],), dynamic_shapes=dynamic_shapes
             )
             quantized_model = quantize_impl(deepcopy(exported_model), data_loader, validator)
-
-        # result = validate_fx_ult_method(quantized_model)
-        # print("FX INT8 model .val validation")
-        # print_statistics_short(result)
 
         int8_stats, total_images, total_objects = validate_fx(quantized_model, tqdm(data_loader), validator)
         print("INT8 FX model validation results:")
@@ -360,22 +336,32 @@ def main():
     print("Quantized model validation results:")
     print_statistics(q_stats, total_images, total_objects)
 
-    # Benchmark performance of FP32 model
-    fp_model_perf = benchmark_performance(ov_model_path, args)
-    print(f"Floating-point model performance: {fp_model_perf} FPS")
+    fps = True
+    latency = True
+    fp_model_perf = -1
+    quantized_model_perf = -1
+    if fps:
+        # Benchmark performance of FP32 model
+        fp_model_perf = benchmark_performance(ov_model_path, args)
+        print(f"Floating-point model performance: {fp_model_perf} FPS")
 
-    # Benchmark performance of quantized model
-    quantized_model_perf = benchmark_performance(quantized_model_path, args)
-    print(f"Quantized model performance: {quantized_model_perf} FPS")
+        # Benchmark performance of quantized model
+        quantized_model_perf = benchmark_performance(quantized_model_path, args)
+        print(f"Quantized model performance: {quantized_model_perf} FPS")
+    if latency:
+        fp_model_latency = measure_time_ov(ov_model, batch["img"])
+        print(f"FP32 OV model latency: {fp_model_latency}")
+        int8_model_latency = measure_time_ov(quantized_model, batch["img"])
+        print(f"INT8 OV model latency: {int8_model_latency}")
 
     return fp_stats["metrics/mAP50-95(B)"], q_stats["metrics/mAP50-95(B)"], fp_model_perf, quantized_model_perf
 
 
-def check_export_not_strict():
+def main_export_not_strict():
     model = YOLO(f"{ROOT}/{MODEL_NAME}.pt")
 
     # Prepare validation dataset and helper
-    validator, data_loader = prepare_validation_new(model, "coco128.yaml")
+    validator, data_loader = prepare_validation(model, "coco128.yaml")
 
     batch = next(iter(data_loader))
     batch = validator.preprocess(batch)
@@ -383,12 +369,19 @@ def check_export_not_strict():
     model.model(batch["img"])
     ex_model = torch.export.export(model.model, args=(batch["img"],), strict=False)
     ex_model = capture_pre_autograd_graph(ex_model.module(), args=(batch["img"],))
+    ex_model = torch.compile(ex_model)
 
     fp_stats, total_images, total_objects = validate_fx(ex_model, tqdm(data_loader), validator)
     print("Floating-point ex strict=False")
     print_statistics(fp_stats, total_images, total_objects)
 
+    quantized_model = quantize_impl(deepcopy(ex_model), data_loader, validator)
+    int8_stats, total_images, total_objects = validate_fx(quantized_model, tqdm(data_loader), validator)
+    print("Int8 ex strict=False")
+    print_statistics(int8_stats, total_images, total_objects)
+    # No quantized were inserted, metrics are OK
+
 
 if __name__ == "__main__":
-    check_export_not_strict()
-    # main()
+    # main_export_not_strict()
+    main()

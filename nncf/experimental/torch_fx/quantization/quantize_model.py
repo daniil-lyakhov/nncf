@@ -26,16 +26,13 @@ from nncf.common.factory import NNCFGraphFactory
 from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.quantization.structs import QuantizationScheme
 from nncf.data import Dataset
-from nncf.parameters import CompressWeightsMode
+from nncf.experimental.torch_fx.transformations import merge_conv_and_bias
 from nncf.parameters import ModelType
 from nncf.parameters import QuantizationMode
-from nncf.parameters import SensitivityMetric
 from nncf.parameters import TargetDevice
-from nncf.quantization.advanced_parameters import AdvancedCompressionParameters
 from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
 from nncf.quantization.advanced_parameters import QuantizationParameters
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
-from nncf.quantization.algorithms.weight_compression.algorithm import WeightCompression
 from nncf.scopes import IgnoredScope
 
 DEFAULT_RANGE_TYPE = "mean_min_max"
@@ -66,7 +63,6 @@ def quantize_impl(
     original_graph_meta = model.meta
 
     copied_model = deepcopy(model)
-    # copied_model = model
 
     if advanced_parameters is None:
         advanced_parameters = AdvancedQuantizationParameters()
@@ -90,10 +86,7 @@ def quantize_impl(
     )
     nncf_graph = NNCFGraphFactory.create(copied_model)
     quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)
-
-    from nncf.experimental.torch_fx.nncf_graph_builder import GraphConverter
-
-    GraphConverter.merge_conv_and_bias(quantized_model)
+    merge_conv_and_bias(quantized_model)
 
     # Magic. Without this call compiled model
     # is not preformant
@@ -110,37 +103,3 @@ def quantize_impl(
     quantized_model = _disallow_eval_train(quantized_model)
 
     return quantized_model
-
-
-def compress_weights_impl(
-    model: torch.nn.Module,
-    dataset: Dataset,
-    mode: CompressWeightsMode,
-    ratio: float,
-    group_size: int,
-    ignored_scope: IgnoredScope,
-    all_layers: bool,
-    sensitivity_metric: SensitivityMetric,
-    awq: bool,
-    subset_size: int,
-    scale_estimation: bool,
-    advanced_parameters: Optional[AdvancedCompressionParameters] = None,
-) -> torch.nn.Module:
-    """
-    Implementation of the `compress_weights()` method for the PyTorch backend.
-    """
-
-    compression_algorithm = WeightCompression(
-        mode,
-        ratio,
-        group_size,
-        ignored_scope,
-        all_layers,
-        sensitivity_metric,
-        awq,
-        subset_size,
-        scale_estimation,
-        advanced_parameters,
-    )
-    graph = NNCFGraphFactory.create(model)
-    return compression_algorithm.apply(model, graph, dataset=dataset)

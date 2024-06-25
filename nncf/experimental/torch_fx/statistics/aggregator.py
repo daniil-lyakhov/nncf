@@ -48,13 +48,6 @@ class TensorCollectorModule(torch.nn.Module):
         return x
 
 
-def get_statistic_fn_builder(collector: TensorCollector):
-    def fn(*args, **kwargs):
-        return TensorCollectorModule(collector)
-
-    return fn
-
-
 class FXStatisticsAggregator(StatisticsAggregator):
     HOOKS_GROUP_NAME = "statistics_hooks"
 
