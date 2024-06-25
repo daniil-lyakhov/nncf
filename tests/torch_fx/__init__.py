@@ -8,15 +8,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
-import numpy as np
-import torch
-
-from nncf.tensor import Tensor
-from tests.common.experimental.test_statistic_collector import TemplateTestStatisticCollector
-
-
-class TestPTStatisticCollector(TemplateTestStatisticCollector):
-    def get_nncf_tensor(self, value: np.ndarray) -> Tensor:
-        return Tensor(torch.tensor(value))
