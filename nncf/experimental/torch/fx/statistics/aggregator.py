@@ -37,7 +37,7 @@ class TensorCollectorModule(torch.nn.Module):
         super().__init__()
         self._collector = collector
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Register inputs hook function.
 
@@ -93,7 +93,7 @@ class FXStatisticsAggregator(StatisticsAggregator):
     def _get_merged_statistic_points(
         statistic_points: StatisticPointsContainer, model: TModel, graph: NNCFGraph
     ) -> StatisticPointsContainer:
-        # TODO: mirgate to experimental statistic collector and use common merging algorithm
+        # TODO(dlyakhov): mirgate to experimental statistic collector and use common merging algorithm
         return statistic_points
 
     @staticmethod

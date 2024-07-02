@@ -103,14 +103,10 @@ class EngineFactory:
             from nncf.openvino.engine import OVNativeEngine
 
             return OVNativeEngine(model)
-        if model_backend == BackendType.TORCH:
+        if model_backend in (BackendType.TORCH, BackendType.TORCH_FX):
             from nncf.torch.engine import PTEngine
 
             return PTEngine(model)
-        if model_backend == BackendType.TORCH_FX:
-            from nncf.experimental.torch.fx.engine import FXEngine
-
-            return FXEngine(model)
         raise nncf.UnsupportedBackendError(
             "Cannot create backend-specific engine because {} is not supported!".format(model_backend.value)
         )

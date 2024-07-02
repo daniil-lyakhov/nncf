@@ -396,7 +396,7 @@ def unfold_scaled_dot_product_attention(model: torch.fx.GraphModule):
         args = n.args
         if len(args) > 3:
             raise NotImplementedError(
-                f"Unfolding of scaled dot product attention node {n}" " with more than 3 inputs is not implemented yet"
+                f"Unfolding of scaled dot product attention node {n} with more than 3 inputs is not implemented yet"
             )
         _unfold_sdp(model, n)
     model.graph.eliminate_dead_code()

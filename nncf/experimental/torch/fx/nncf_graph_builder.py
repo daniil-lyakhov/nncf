@@ -9,7 +9,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from itertools import chain
 from typing import Tuple
 
 import torch.fx
@@ -26,19 +25,8 @@ from nncf.torch.graph.operator_metatypes import PT_OPERATOR_METATYPES
 
 class GraphConverter:
     """
-    Builds the NNCFGraph from an OpenVINO model.
+    Builds the NNCFGraph from an torch.fx.GraphModule instance.
     """
-
-    @staticmethod
-    def _get_leaf_node(module: torch.nn.Module, node: torch.fx.Node) -> torch.nn.Module:
-        py_obj = module
-        assert isinstance(node.target, str)
-        atoms = node.target.split(".")
-        for atom in atoms:
-            if not hasattr(py_obj, atom):
-                raise RuntimeError(str(py_obj) + " does not have attribute " + atom + "!")
-            py_obj = getattr(py_obj, atom)
-        return py_obj
 
     @staticmethod
     def _get_node_type_and_metatype(node: torch.fx.Node) -> Tuple[str, om.OperatorMetatype]:
@@ -57,7 +45,7 @@ class GraphConverter:
             elif node.target.__name__ == "getitem":
                 node_type = "__getitem__"
             else:
-                # TODO: get correct nodes types from this nodes as well
+                # TODO(dlyakhov): get correct nodes types from this nodes as well
                 node_type = str(node.target)
             node_metatype = PT_OPERATOR_METATYPES.get_operator_metatype_by_op_name(node_type)
         else:
@@ -81,36 +69,15 @@ class GraphConverter:
         nncf_graph = PTNNCFGraph()
 
         for source_node in model.graph.nodes:
-
             node_type, node_metatype = GraphConverter._get_node_type_and_metatype(source_node)
 
-            nncf_node = nncf_graph.add_nncf_node(
+            nncf_graph.add_nncf_node(
                 node_name=source_node.name,
                 node_type=node_type,
-                node_metatype=node_metatype,  # layer_attributes,
+                node_metatype=node_metatype,
             )
 
-            def get_module_params_or_buffers():
-                for pname, ptensor in chain(leaf_module.named_parameters(), leaf_module.named_buffers()):
-                    pname1 = source_node.name + "." + pname
-                    nncf_param_node = nncf_graph.add_nncf_node(
-                        pname1,
-                        "parameter" if isinstance(ptensor, torch.nn.Parameter) else "buffer",
-                        om.PTConstNoopMetatype,
-                    )
-                    # TODO: Use valid tensor_shape, input_port_id, output_port_id
-                    nncf_graph.add_edge_between_nncf_nodes(
-                        nncf_param_node, nncf_node, tensor_shape=[1, 1, 1, 1], input_port_id=0, output_port_id=0
-                    )
-
-            if source_node.op == "call_module":
-                leaf_module = GraphConverter._get_leaf_node(model, source_node)
-
-                if not isinstance(leaf_module, torch.fx.GraphModule):
-                    get_module_params_or_buffers()
-
         for source_node in model.graph.nodes:
-
             source_nncf_node = nncf_graph.get_node_by_name(source_node.name)
             for idx, dist_node in enumerate(source_node.users):
                 dist_node_id = nncf_graph.get_node_by_name(dist_node.name).node_id
@@ -147,10 +114,8 @@ class GraphConverter:
                 tensor = source_node.meta["val"]
             tensor_shape = tuple(tensor.shape)
         else:
-            nncf_logger.info(
-                f"Edge shape between {source_node.name} and {dist_node.name} is unknown. Using [1,1,1,1] instead."
-            )
-            tensor_shape = [1, 1, 1, 1]
+            nncf_logger.info(f"Edge shape between {source_node.name} and {dist_node.name} is unknown.")
+            tensor_shape = None
 
         input_port_id = dist_node.all_input_nodes.index(source_node)
         return input_port_id, output_port_id, tensor_shape

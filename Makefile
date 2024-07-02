@@ -154,7 +154,6 @@ test-torch-cuda:
 
 test-torch-nightly:
 	pytest ${COVERAGE_ARGS} tests/torch -m nightly --junitxml ${JUNITXML_PATH} $(DATA_ARG)
-	test-torch-fx
 
 test-torch-weekly:
 	pytest ${COVERAGE_ARGS} tests/torch -m weekly \
@@ -178,13 +177,6 @@ test-examples-torch:
 
 test-models-hub-torch:
 	pytest tests/torch/models_hub_test --junitxml ${JUNITXML_PATH}
-
-###############################################################################
-# TorchFX backend
-install-torch-fx-test:
-	pip install -U pip
-	pip install -e .
-	pip install -r tests/torch/fx/requirements.txt
 
 ###############################################################################
 # Common part

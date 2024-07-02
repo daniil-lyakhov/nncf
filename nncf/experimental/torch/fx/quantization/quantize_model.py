@@ -76,8 +76,7 @@ def quantize_impl(
 
     if advanced_parameters is None:
         advanced_parameters = AdvancedQuantizationParameters()
-    # torch.fx supports only assymetric activations quantization
-    # force to use only this type of quantization
+    # Default quantization mode is assymmetric
     activations_quantization_params = advanced_parameters.activations_quantization_params
     if activations_quantization_params is None:
         activations_quantization_params = QuantizationParameters()
@@ -95,12 +94,12 @@ def quantize_impl(
         advanced_parameters=advanced_parameters,
     )
 
-    _fuse_conv_bn_(model)
+    _fuse_conv_bn_(copied_model)
     # BN fuses to conv bias, conv+bias joined op
     # needs to be splited for nncf
-    separate_linear_and_bias(model)
-    separate_conv_and_bias(model)
-    view_to_reshape(model)
+    separate_linear_and_bias(copied_model)
+    separate_conv_and_bias(copied_model)
+    view_to_reshape(copied_model)
 
     nncf_graph = NNCFGraphFactory.create(copied_model)
     quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)
