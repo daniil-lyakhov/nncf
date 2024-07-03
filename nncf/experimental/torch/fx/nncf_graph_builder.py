@@ -14,7 +14,6 @@ from typing import Tuple
 import torch.fx
 
 import nncf.torch.graph.operator_metatypes as om
-from nncf.common.graph import NNCFGraph
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.layer_attributes import Dtype
 from nncf.common.graph.operator_metatypes import UnknownMetatype
@@ -30,6 +29,12 @@ class GraphConverter:
 
     @staticmethod
     def _get_node_type_and_metatype(node: torch.fx.Node) -> Tuple[str, om.OperatorMetatype]:
+        """
+        Retrieves node's type and metatype.
+
+        :param node: Given node.
+        :return: Node's type and metatype.
+        """
         if node.op == "placeholder":
             node_type = "input"
             node_metatype = om.PTInputNoopMetatype
@@ -56,7 +61,7 @@ class GraphConverter:
         return node_type, node_metatype
 
     @staticmethod
-    def create_nncf_graph(model: torch.fx.GraphModule) -> NNCFGraph:
+    def create_nncf_graph(model: torch.fx.GraphModule) -> PTNNCFGraph:
         """
         Creates NNCFGraph from GraphModule.
         All nodes from model which have valid metatype are added to NNCFGraph.
@@ -98,8 +103,23 @@ class GraphConverter:
 
     @staticmethod
     def get_edge_params(
-        model, source_node: torch.fx.Node, source_nncf_node: NNCFNode, dist_node: torch.fx.Node, output_idx: int
-    ):
+        model: torch.fx.GraphModule,
+        source_node: torch.fx.Node,
+        source_nncf_node: NNCFNode,
+        dist_node: torch.fx.Node,
+        output_idx: int,
+    ) -> Tuple[int, int, Tuple[int, ...]]:
+        """
+        Retrieves edge params from the given source_node and dist_node pair.
+
+        :param model: A torch.fx.GraphModule instance.
+        :param source_node: Source node in format of torch.fx.Node.
+        :param source_nncf_node: Source node in format of NNCFNode.
+        :param dist_node: Distance node in format of torch.fx.Node.
+        :param output_idx: Output indes of the source_node.
+        :return: Tuple of edge parameters: edge input port id, edge output port id and
+            edge tensor shape.
+        """
         output_port_id = 0
         if source_node.op in ("get_attr",):
             tensor_shape = tuple(getattr(model, source_node.target).shape)
