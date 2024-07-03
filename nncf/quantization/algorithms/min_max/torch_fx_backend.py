@@ -41,6 +41,7 @@ from nncf.torch.graph.graph import PTNNCFGraph
 from nncf.torch.graph.graph import PTTargetPoint
 from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
 from nncf.torch.hardware.config import PTHWConfig
+from nncf.torch.model_graph_manager import get_weight_tensor_port_ids
 from nncf.torch.nncf_network import NNCFNetwork
 from nncf.torch.quantization.default_quantization import DEFAULT_PT_QUANT_TRAIT_TO_OP_DICT
 from nncf.torch.quantization.layers import QUANTIZATION_MODULES
@@ -142,7 +143,7 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
         return nncf_graph.get_input_shape_for_insertion_point(target_point)
 
     @staticmethod
-    def get_weight_quantization_axes(node: NNCFNode, target_point: PTTargetPoint) -> Tuple[int]:
+    def get_weight_quantization_axes(node: NNCFNode, target_point: PTTargetPoint, ndims: int) -> Tuple[int]:
         # TODO: support transpose conv and other cases
         return (0,)
 
@@ -195,8 +196,8 @@ class FXMinMaxAlgoBackend(MinMaxAlgoBackend):
         return collector
 
     @staticmethod
-    def get_weight_tensor_port_ids(node: NNCFNode) -> List[Optional[int]]:
-        return node.metatype.weight_port_ids
+    def get_weight_tensor_port_ids(node: NNCFNode, graph: NNCFGraph) -> List[Optional[int]]:
+        return get_weight_tensor_port_ids(node, graph)
 
     @staticmethod
     def get_weight_name(nncf_graph: NNCFGraph, target_point: PTTargetPoint) -> str:
