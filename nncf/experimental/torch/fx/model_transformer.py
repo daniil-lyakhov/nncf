@@ -10,8 +10,6 @@
 # limitations under the License.
 
 from collections import defaultdict
-
-# from functools import partial
 from typing import Callable, List, Union
 
 import torch
@@ -63,9 +61,9 @@ class FXModelTransformer(ModelTransformer):
             if transformations:
                 model = transformation_fn(model, transformations)
 
-        # Do not eliminate dead code as
-        # the dead code is computing statistics :)
-        # model.graph.eliminate_dead_code()
+        # Do not use model.graph.eliminate_dead_code()
+        # because the computational statistics code
+        # is interpolated as dead code.
         model.recompile()
         return model
 

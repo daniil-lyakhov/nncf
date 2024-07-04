@@ -94,11 +94,21 @@ def quantize_impl(
         advanced_parameters=advanced_parameters,
     )
 
+    # BatchNorm operations have 3 output ports,
+    # to make it easier for alorithms to work
+    # with the target graph BatchNorm operations
+    # are being fused
     _fuse_conv_bn_(copied_model)
-    # BN fuses to conv bias, conv+bias joined op
-    # needs to be splited for nncf
+
+    # To make it easier for bias correction algorithms,
+    # biases are being separated by the followng calls.
     separate_linear_and_bias(copied_model)
     separate_conv_and_bias(copied_model)
+
+    # View requires at least one dimension spans
+    # across two contiguous subspaces and reshape is not.
+    # To prevent error during statistics collection
+    # all view operation are translated to reshape.
     view_to_reshape(copied_model)
 
     nncf_graph = NNCFGraphFactory.create(copied_model)

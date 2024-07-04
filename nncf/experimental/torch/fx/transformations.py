@@ -140,7 +140,7 @@ def insert_one_qdq_before_node(model: torch.fx.GraphModule, target_node: torch.f
     # 1. extract information for inserting q/dq node from activation_post_process
     node_type = "call_function"
     quantize_op: Optional[Callable] = None
-    # scale, zero_point = activation_post_process.calculate_qparams()  # type: ignore[attr-defined, operator]
+
     dtype = torch.int8 if quantizer.quant_min < 0 else torch.uint8
     if quantizer.is_per_channel:
         qparams = {
