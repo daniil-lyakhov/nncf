@@ -1100,6 +1100,7 @@ class PTScaledDotProductAttentionMetatype(PTOperatorMetatype):
     hw_config_names = [HWConfigOpName.SCALED_DOT_PRODUCT_ATTENTION]
     target_input_ports = [0, 1]
 
+
 @PT_OPERATOR_METATYPES.register()
 class PTEmptyMetatype(PTOperatorMetatype):
     name = "EmptyOP"
