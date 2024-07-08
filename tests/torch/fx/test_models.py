@@ -76,7 +76,6 @@ def getNodeType(node: torch.fx.node) -> str:
 def isNodeMetatype(node_type: str) -> bool:
     op_type = PT_OPERATOR_METATYPES.get_operator_metatype_by_op_name(node_type)
     if op_type is UnknownMetatype:
-        print(node_type)
         return False
     return True
 
