@@ -171,9 +171,10 @@ class GraphPattern:
         assert second_graph.in_degree(first_node_second_graph) == 0
 
         # Special case when first node is ANY_PATTERN_NODE_TYPE or NON_PATTERN_NODE_TYPE
-        if (
-            GraphPattern.ANY_PATTERN_NODE_TYPE in second_graph.nodes[first_node_second_graph][GraphPattern.TYPE_ATTR]
-            or GraphPattern.NON_PATTERN_NODE_TYPE in second_graph.nodes[first_node_second_graph][GraphPattern.TYPE_ATTR]
+        if GraphPattern.ANY_PATTERN_NODE_TYPE in second_graph.nodes[first_node_second_graph].get(
+            GraphPattern.TYPE_ATTR, []
+        ) or GraphPattern.NON_PATTERN_NODE_TYPE in second_graph.nodes[first_node_second_graph].get(
+            GraphPattern.TYPE_ATTR, []
         ):
             successors = self_graph.successors(first_node_second_graph)
             new_edges = list(it.product([last_node_first_graph], successors))
@@ -233,8 +234,9 @@ class GraphPattern:
             self._graph.add_edges_from(remapped_edges)
 
     def add_node(self, **attrs: Dict[str, Any]) -> int:
-        if GraphPattern.TYPE_ATTR in attrs and not isinstance(attrs[GraphPattern.TYPE_ATTR], list):
-            attrs[GraphPattern.TYPE_ATTR] = cast(Any, [attrs[GraphPattern.TYPE_ATTR]])
+        for attr in [GraphPattern.TYPE_ATTR, GraphPattern.METATYPE_ATTR]:
+            if attr in attrs and not isinstance(attrs[attr], list):
+                attrs[attr] = cast(Any, [attrs[attr]])
         self._graph.add_node(self._node_counter, **attrs)
         self._node_counter += 1
         return self._node_counter - 1
@@ -253,16 +255,20 @@ class GraphPattern:
 
 
 def merge_two_types_of_operations(first_op: Dict[str, Any], second_op: Dict[str, Any], label: str) -> Dict[str, Any]:
-    res = dict()
-    any_attr = False
-    for attr in [GraphPattern.TYPE_ATTR, GraphPattern.TYPE_ATTR]:
+    ret_val = dict()
+    type_attrs = [GraphPattern.TYPE_ATTR, GraphPattern.METATYPE_ATTR]
+    for attr in type_attrs:
         if attr in first_op and attr in second_op:
-            res[attr] = first_op[attr]
-            res[attr].extend(second_op[attr])
-            any_attr = True
-    if not any_attr:
-        raise nncf.InternalError("Incorrect dicts of operations")
-    return res
+            ret_val[attr] = first_op[attr] + second_op[attr]
+
+    attrs_in_res = [attr in ret_val for attr in type_attrs]
+    if all(attrs_in_res):
+        raise nncf.InternalError("Both metatypes and types are used during pattern merging.")
+
+    if any(attrs_in_res):
+        ret_val[GraphPattern.LABEL_ATTR] = label
+        return ret_val
+    raise nncf.InternalError("Incorrect dicts of operations")
 
 
 @dataclass
