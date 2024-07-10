@@ -31,7 +31,6 @@ from nncf.data import Dataset
 from nncf.experimental.torch.fx.transformations import merge_conv_and_bias
 from nncf.experimental.torch.fx.transformations import separate_conv_and_bias
 from nncf.experimental.torch.fx.transformations import separate_linear_and_bias
-from nncf.experimental.torch.fx.transformations import view_to_reshape
 from nncf.parameters import ModelType
 from nncf.parameters import QuantizationMode
 from nncf.parameters import TargetDevice
@@ -104,12 +103,6 @@ def quantize_impl(
     # biases are being separated by the followng calls.
     separate_linear_and_bias(copied_model)
     separate_conv_and_bias(copied_model)
-
-    # View requires at least one dimension spans
-    # across two contiguous subspaces and reshape is not.
-    # To prevent error during statistics collection
-    # all view operation are translated to reshape.
-    view_to_reshape(copied_model)
 
     nncf_graph = NNCFGraphFactory.create(copied_model)
     quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)

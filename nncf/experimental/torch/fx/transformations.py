@@ -316,26 +316,6 @@ def separate_linear_and_bias(model: torch.fx.GraphModule):
     model.recompile()
 
 
-def view_to_reshape(model: torch.fx.GraphModule):
-    """
-    Replaces all instances of view to a reshape call.
-
-    :param model: Target model.
-    """
-    for n in model.graph.nodes:
-        if not (n.op == "call_function" and n.target in [torch.ops.aten.view.default]):
-            continue
-        with model.graph.inserting_after(n):
-            reshape = model.graph.create_node("call_function", torch.ops.aten.reshape.default, tuple(n.args), {})
-            reshape.meta = n.meta
-
-        for user in list(n.users):
-            user.replace_input_with(n, reshape)
-
-    model.graph.eliminate_dead_code()
-    model.recompile()
-
-
 def separate_conv_and_bias(model: torch.fx.GraphModule):
     """
     Separates one joined conv+bias node to two nodes: conv and bias.
