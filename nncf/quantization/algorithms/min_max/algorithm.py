@@ -616,7 +616,6 @@ class MinMaxQuantization(Algorithm):
         scope_overrides = self._get_scope_overrides(inference_nncf_graph)
 
         ip_graph = InsertionPointGraph(inference_nncf_graph)
-        breakpoint()
         ip_graph = ip_graph.get_ip_graph_with_merged_hw_optimized_operations(hw_patterns)
         post_processing_types = self._backend_entity.post_processing_metatypes
         metatypes_to_ignore = self._backend_entity.get_ignored_metatypes(self._model_type, self._target_device)
