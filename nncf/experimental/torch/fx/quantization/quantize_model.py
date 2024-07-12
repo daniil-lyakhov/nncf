@@ -93,6 +93,7 @@ def quantize_impl(
         advanced_parameters=advanced_parameters,
     )
 
+    # TODO(dlyakhov) Do not transform model before and after the quantization.
     # BatchNorm operations have 3 output ports,
     # to make it easier for alorithms to work
     # with the target graph BatchNorm operations

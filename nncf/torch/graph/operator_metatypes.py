@@ -756,21 +756,21 @@ class PTAdaptiveMaxPool3dMetatype(PTOperatorMetatype):
 
 class PTMaxPool1dMetatype(PTOperatorMetatype):
     name = "MaxPool1DOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["max_pool1d"]}
+    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["max_pool1d", "max_pool1d_with_indices"]}
     hw_config_names = [HWConfigOpName.MAXPOOL]
 
 
 @PT_OPERATOR_METATYPES.register()
 class PTMaxPool2dMetatype(PTOperatorMetatype):
     name = "MaxPool2DOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["max_pool2d"]}
+    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["max_pool2d", "max_pool2d_with_indices"]}
     hw_config_names = [HWConfigOpName.MAXPOOL]
 
 
 @PT_OPERATOR_METATYPES.register()
 class PTMaxPool3dMetatype(PTOperatorMetatype):
     name = "MaxPool3DOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["max_pool3d"]}
+    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["max_pool3d", "max_pool3d_with_indices"]}
     hw_config_names = [HWConfigOpName.MAXPOOL]
 
 
@@ -847,7 +847,7 @@ class PTGatherMetatype(PTOperatorMetatype):
     module_to_function_names = {
         NamespaceTarget.TORCH_TENSOR: ["index_select", "__getitem__"],
         NamespaceTarget.TORCH: ["gather", "index_select", "select", "where"],
-        NamespaceTarget.ATEN: ["slice"],
+        NamespaceTarget.ATEN: ["slice", "_unsafe_index"],
     }
 
 
@@ -938,7 +938,7 @@ class PTEmbeddingBagMetatype(PTOperatorMetatype):
 @PT_OPERATOR_METATYPES.register()
 class PTSoftmaxMetatype(PTOperatorMetatype):
     name = "SoftmaxOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["softmax"]}
+    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["softmax"], NamespaceTarget.ATEN: ["_softmax"]}
 
 
 @PT_OPERATOR_METATYPES.register()

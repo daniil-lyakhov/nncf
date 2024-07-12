@@ -13,6 +13,7 @@ from typing import Tuple
 
 import torch.fx
 
+import nncf
 import nncf.torch.graph.operator_metatypes as om
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.layer_attributes import Dtype
@@ -21,11 +22,21 @@ from nncf.common.logging import nncf_logger
 from nncf.torch.graph.graph import PTNNCFGraph
 from nncf.torch.graph.operator_metatypes import PT_OPERATOR_METATYPES
 
+TYPES_WITH_SUBTYPES = ["convolution"]
+
 
 class GraphConverter:
     """
     Builds the NNCFGraph from an torch.fx.GraphModule instance.
     """
+
+    @staticmethod
+    def _get_subtype(node, node_type):
+        if node_type in ("convolution",):
+            dims = len(node.args[3])
+            metatypes_map = {1: "conv1d", 2: "conv2d", 3: "conv3d"}
+            return metatypes_map[dims]
+        return node_type
 
     @staticmethod
     def _get_node_type_and_metatype(node: torch.fx.Node) -> Tuple[str, om.OperatorMetatype]:
@@ -47,6 +58,7 @@ class GraphConverter:
         elif node.op in ("call_function",):
             if hasattr(node.target, "overloadpacket"):
                 node_type = str(node.target.overloadpacket).split(".")[1]
+                node_type = GraphConverter._get_subtype(node, node_type)
             elif node.target.__name__ == "getitem":
                 node_type = "__getitem__"
             else:
@@ -124,7 +136,12 @@ class GraphConverter:
         if source_node.op in ("get_attr",):
             tensor_shape = tuple(getattr(model, source_node.target).shape)
         elif "val" in source_node.meta:
-            if source_nncf_node.metatype is om.PTBatchNormMetatype:
+            if source_nncf_node.metatype in (
+                om.PTBatchNormMetatype,
+                om.PTMaxPool1dMetatype,
+                om.PTMaxPool2dMetatype,
+                om.PTMaxPool3dMetatype,
+            ):
                 tensor = source_node.meta["val"][0]
             elif source_nncf_node.metatype is om.PTSplitMetatype:
                 tensor = source_node.meta["val"][output_idx]
@@ -132,6 +149,8 @@ class GraphConverter:
                 output_port_id = output_idx
             else:
                 tensor = source_node.meta["val"]
+            if not isinstance(tensor, torch.Tensor):
+                raise nncf.InternalError(f"Output for node {source_node} expected to be tensor, {tensor} instead.")
             tensor_shape = tuple(tensor.shape)
         else:
             nncf_logger.info(f"Edge shape between {source_node.name} and {dist_node.name} is unknown.")
