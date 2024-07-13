@@ -24,6 +24,7 @@ import numpy as np
 import openvino as ov
 import openvino.torch  # noqa
 import torch
+from openvino.frontend.pytorch.torchdynamo.compile import openvino_compile  # noqa
 from torch._export import capture_pre_autograd_graph
 from torch.export import Dim  # noqa
 from torch.fx.passes.graph_drawer import FxGraphDrawer
@@ -373,16 +374,22 @@ def main_export_not_strict():
 
     g = FxGraphDrawer(ex_model, "yolo_compiled_not_strict")
     g.get_dot_graph().write_svg("yolo_compiled_not_strict.svg")
-    fp_stats, total_images, total_objects = validate_fx(ex_model, tqdm(data_loader), validator)
-    print("Floating-point ex strict=False")
-    print_statistics(fp_stats, total_images, total_objects)
+
+    # fp_stats, total_images, total_objects = validate_fx(ex_model, tqdm(data_loader), validator)
+    # print("Floating-point ex strict=False")
+    # print_statistics(fp_stats, total_images, total_objects)
 
     quantized_model = quantize_impl(deepcopy(ex_model), data_loader, validator)
 
     g = FxGraphDrawer(quantized_model, "yolo_int8_compiled_not_strict")
     g.get_dot_graph().write_svg("yolo_int8_compiled_not_strict.svg")
 
-    quantized_model = torch.compile(quantized_model, backend="openvino")
+    # quantized_model = openvino_compile(quantized_model, batch["img"])
+    quantized_model = torch.compile(
+        quantized_model,
+        backend="openvino",
+        options={"device": "CPU", "model_caching": True, "cache_dir": "./model_cache"},
+    )
     int8_stats, total_images, total_objects = validate_fx(quantized_model, tqdm(data_loader), validator)
     print("Int8 ex strict=False")
     print_statistics(int8_stats, total_images, total_objects)
