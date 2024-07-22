@@ -25,35 +25,6 @@ from nncf.torch.graph.transformations.commands import PTTargetPoint
 TransformationFNType = Callable[[torch.fx.GraphModule], None]
 
 
-def module_insertion_tranformation_builder(
-    module_to_insert: torch.nn.Module, target_points: List[PTTargetPoint]
-) -> TransformationFNType:
-    """
-    Returns transformation which inserts given module to a target model and calls given module
-    after each target points. For each target node all original ouputs are being replaced
-    by outputs of corresponded module call.
-
-    :param module_to_insert: Given torch.nn.Module to insert.
-    :param target_points: Target points to insert the target module.
-    :returns: Transformation which inserts given module to a target model and calls given module
-        after each target points. For each target node all original ouputs
-        are being replaced by outputs of corresponded module call.
-    """
-
-    def module_insertion_transformation(model: torch.fx.GraphModule):
-        module_attr_name = _set_module_to_the_graph_module(model, module_to_insert, target_points)
-        graph = model.graph
-        for target_point in target_points:
-            target_node = _get_target_node(graph, target_point)
-            new_node = _insert_call_module(graph, target_node, module_attr_name)
-            for user in list(target_node.users):
-                if user is new_node:
-                    continue
-                user.replace_input_with(target_node, new_node)
-
-    return module_insertion_transformation
-
-
 def leaf_module_insertion_transformation_builder(
     module_to_insert: torch.nn.Module, target_points: List[PTTargetPoint]
 ) -> TransformationFNType:
