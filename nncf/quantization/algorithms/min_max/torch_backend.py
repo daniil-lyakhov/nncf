@@ -71,7 +71,7 @@ class PTMinMaxAlgoBackend(MinMaxAlgoBackend):
 
     @property
     def shapeof_metatypes(self) -> List[OperatorMetatype]:
-        return []
+        return [om.PTNewZerosMetatype]
 
     @property
     def dropout_metatypes(self) -> List[OperatorMetatype]:

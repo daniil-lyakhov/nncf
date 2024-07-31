@@ -267,6 +267,7 @@ def nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_l
             nncf.Dataset(val_loader, transform_func=transform),
             model_type=ModelType.TRANSFORMER,
             advanced_parameters=params,
+            subset_size=1,
         )
         quant_compile_model = torch.compile(quant_fx_model, backend="openvino")
 
@@ -319,7 +320,7 @@ def nncf_pt_2_ov_quantization(pt_model, val_loader, example_input, output_dir, r
 
     nncf_model = nncf.quantize(copy.deepcopy(pt_model), nncf.Dataset(val_loader, transform_func=transform))
 
-    ov_nncf_model = ov.convert_model(nncf_model, example_input=example_input)
+    ov_nncf_model = ov.convert_model(nncf_model, example_input=example_input, input=shape_input)
     nncf_pt_file_path = output_dir / "nncf_pt.xml"
     ov.save_model(ov_nncf_model, nncf_pt_file_path)
     acc1_nncf_pt = validate_ov(ov_nncf_model, val_loader)
@@ -405,8 +406,8 @@ def process_model(model_name: str):
     ov_fp32_file_path = None
     ov_fp32_file_path = output_dir / "fp32.xml"
     ov.save_model(ov_fp32_model, ov_fp32_file_path)
-    result["fps_fp32_openvino"] = run_benchmark(ov_fp32_file_path, shape_input)
-    print(f"fps_fp32_openvino {result['fps_fp32_openvino']}")
+    # result["fps_fp32_openvino"] = run_benchmark(ov_fp32_file_path, shape_input)
+    # print(f"fps_fp32_openvino {result['fps_fp32_openvino']}")
 
     del fp32_pt_model
     ##############################################################
@@ -415,12 +416,12 @@ def process_model(model_name: str):
     # torch_ao_sq_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
 
     ##############################################################
-    with torch.no_grad():
-        # with disable_patching():
-        # exported_model = capture_pre_autograd_graph(pt_model, (example_input,))
-        latency_fx = measure_time(torch.compile(pt_model, backend="openvino"), (example_input,))
-    result["fp_32_fx_latency"] = latency_fx
-    print(f"latency: {latency_fx}")
+    # with torch.no_grad():
+    #    # with disable_patching():
+    #    # exported_model = capture_pre_autograd_graph(pt_model, (example_input,))
+    #    latency_fx = measure_time(torch.compile(pt_model, backend="openvino"), (example_input,))
+    # result["fp_32_fx_latency"] = latency_fx
+    # print(f"latency: {latency_fx}")
     #############################################################
 
     ##############################################################
@@ -431,12 +432,12 @@ def process_model(model_name: str):
     ##############################################################
     # Process NNCF FX Quantize
     ##############################################################
-    nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
+    # nncf_fx_2_ov_quantization(pt_model, example_input, output_dir, result, val_loader, shape_input)
 
     ##############################################################
     # Process NNCF Quantize by PT
     ##############################################################
-    # nncf_pt_2_ov_quantization(pt_model, val_loader, example_input, output_dir, result, shape_input)
+    nncf_pt_2_ov_quantization(pt_model, val_loader, example_input, output_dir, result, shape_input)
 
     ##############################################################
     # Process NNCF Quantize by OV

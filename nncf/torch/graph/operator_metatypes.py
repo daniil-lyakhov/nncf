@@ -1101,6 +1101,14 @@ class PTScaledDotProductAttentionMetatype(PTOperatorMetatype):
     target_input_ports = [0, 1]
 
 
+@PT_OPERATOR_METATYPES.register()
+class PTNewZerosMetatype(PTOperatorMetatype):
+    name = "NewZeros"
+    module_to_function_names = {
+        NamespaceTarget.TORCH_TENSOR: ["new_zeros"],
+    }
+
+
 def get_operator_metatypes() -> List[Type[OperatorMetatype]]:
     """
     Returns a list of the operator metatypes.
