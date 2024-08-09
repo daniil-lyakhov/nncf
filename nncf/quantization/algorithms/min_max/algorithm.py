@@ -754,6 +754,8 @@ class MinMaxQuantization(Algorithm):
         self._apply_model_type_pass(self._model_type, quantizer_setup, nncf_graph)
         self._apply_device_pass(self._target_device, quantizer_setup, inference_nncf_graph)
         self._unified_scale_groups = self._collect_unified_groups(quantizer_setup, nncf_graph)
+        # breakpoint()
+        # json.dump(quantizer_setup.get_state(), open("ov_qsetup.json", "w"))
         quantization_points = list(quantizer_setup.quantization_points.values())
         quantization_points = self._topological_sort_quantization_points(quantization_points, nncf_graph)
         for quantization_point in quantization_points:
@@ -993,6 +995,8 @@ class MinMaxQuantization(Algorithm):
         self._set_backend_entity(model)
         self._reset_cache()
         quantization_target_points, _ = self._get_quantization_target_points(model, graph)
+        # breakpoint()
+        # ![(k.__dict__,v.__dict__) for k, v in quantization_target_points.items() if v.mode == 'asymmetric']
         output = StatisticPointsContainer()
         for quantization_target_point, qconfig in quantization_target_points.items():
             nncf_logger.debug(

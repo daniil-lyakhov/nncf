@@ -88,10 +88,14 @@ def quantize_impl(
 
     # To make it easier for bias correction algorithms,
     # biases are being separated by the followng calls.
-    apply_quantization_transformations(copied_model)
+    disable_quantization = True
+    if not disable_quantization:
+        apply_quantization_transformations(copied_model)
 
-    nncf_graph = NNCFGraphFactory.create(copied_model)
-    quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)
+        nncf_graph = NNCFGraphFactory.create(copied_model)
+        quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)
+    else:
+        quantized_model = copied_model
 
     # Revert applied transformation to keep original model
     # bias configuration.
