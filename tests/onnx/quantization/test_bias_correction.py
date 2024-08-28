@@ -69,6 +69,10 @@ class TestONNXBCAlgorithm(TemplateTestBCAlgorithm):
         return remove_fq_from_inputs(model, graph)
 
     @staticmethod
+    def backend_supports_transpose_convs():
+        return False
+
+    @staticmethod
     def compare_nncf_graphs(model: onnx.ModelProto, ref_path: str) -> None:
         return compare_nncf_graph(model, ref_path)
 

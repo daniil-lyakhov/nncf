@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Tuple, TypeVar
 import pytest
 
 from nncf.common.factory import NNCFGraphFactory
+from nncf.common.graph.graph import NNCFGraph
 from nncf.data import Dataset
 from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
 from nncf.quantization.advanced_parameters import OverflowFix
@@ -22,9 +23,11 @@ from nncf.quantization.algorithms.bias_correction.algorithm import BiasCorrectio
 from nncf.quantization.algorithms.bias_correction.backend import BiasCorrectionAlgoBackend
 from nncf.quantization.algorithms.post_training.algorithm import PostTrainingQuantization
 from tests.post_training.test_templates.helpers import ConvTestModel
+from tests.post_training.test_templates.helpers import DepthwiseConvTestModel
 from tests.post_training.test_templates.helpers import MultipleConvTestModel
 from tests.post_training.test_templates.helpers import SplittedModel
 from tests.post_training.test_templates.helpers import StaticDatasetMock
+from tests.post_training.test_templates.helpers import TransposeConvTestModel
 
 TModel = TypeVar("TModel")
 TTensor = TypeVar("TTensor")
@@ -85,7 +88,11 @@ class TemplateTestBCAlgorithm:
         """
 
     @staticmethod
-    def map_references(ref_biases: Dict, model_cls: Any) -> Dict[str, List]:
+    def backend_supports_transpose_convs():
+        return True
+
+    @staticmethod
+    def map_references(ref_biases: Dict, model_cls: Any, graph: NNCFGraph) -> Dict[str, List]:
         """
         Returns backend-specific reference.
         """
@@ -139,9 +146,14 @@ class TemplateTestBCAlgorithm:
                 },
             ),
             (ConvTestModel, {"/conv/Conv": [0.11085186, 1.0017344]}),
-        ),
+            (DepthwiseConvTestModel, {"/conv/Conv": [0.1, 1.0, 2.0]}),
+            (TransposeConvTestModel, {"/conv/ConvTranspose": [0.1, 1.0, 2.0]}),
+        )[-2:],
     )
     def test_update_bias(self, model_cls, ref_biases, tmpdir):
+        if model_cls is TransposeConvTestModel and not self.backend_supports_transpose_convs():
+            pytest.skip("Backend does not support transpose convolutions.")
+
         model = self.backend_specific_model(model_cls(), tmpdir)
         dataset = Dataset(self.get_dataset(model_cls.INPUT_SIZE), self.get_transform_fn())
 
@@ -149,7 +161,7 @@ class TemplateTestBCAlgorithm:
         graph = NNCFGraphFactory.create(model)
         quantized_model = quantization_algorithm.apply(model, graph, dataset=dataset)
 
-        mapped_ref_biases = self.map_references(ref_biases, model_cls)
+        mapped_ref_biases = self.map_references(ref_biases, model_cls, graph)
         self.check_bias(quantized_model, mapped_ref_biases)
 
     def test__get_subgraph_data_for_node(self, quantized_test_model, layer_name, ref_data):

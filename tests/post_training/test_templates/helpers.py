@@ -82,6 +82,32 @@ class ConvTestModel(nn.Module):
         return self.conv(x)
 
 
+class TransposeConvTestModel(nn.Module):
+    INPUT_SIZE = [1, 3, 4, 4]
+
+    def __init__(self):
+        super().__init__()
+        self.conv = nn.ConvTranspose2d(3, 3, 1)
+        self.conv.weight.data = torch.Tensor([[-1.0, 0.0, 2.0], [-2.0, 1.0, 4.0], [5.0, 3.0, 6.0]]).view((3, 3, 1, 1))
+        self.conv.bias.data = torch.Tensor([0.1, 1.0, 2.0])
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class DepthwiseConvTestModel(ConvTestModel):
+    INPUT_SIZE = [1, 3, 4, 4]
+
+    def __init__(self):
+        super().__init__()
+        self.conv = nn.Conv2d(3, 3, 1, groups=3)
+        self.conv.weight.data = torch.Tensor([-1.0, 0.0, 2.0]).view((3, 1, 1, 1))
+        self.conv.bias.data = torch.Tensor([0.1, 1.0, 2.0])
+
+    def forward(self, x):
+        return self.conv(x)
+
+
 class ConvBNTestModel(nn.Module):
     INPUT_SIZE = [1, 1, 4, 4]
 

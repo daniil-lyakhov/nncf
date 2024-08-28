@@ -18,13 +18,16 @@ import pytest
 import torch.fx
 
 from nncf.common.factory import NNCFGraphFactory
+from nncf.common.graph.graph import NNCFGraph
 from nncf.experimental.torch.fx.model_utils import remove_fq_from_inputs
 from nncf.experimental.torch.fx.nncf_graph_builder import GraphConverter
 from nncf.experimental.torch.fx.node_utils import get_bias_value
 from nncf.quantization.algorithms.bias_correction.torch_fx_backend import FXBiasCorrectionAlgoBackend
 from tests.post_training.test_templates.helpers import ConvTestModel
+from tests.post_training.test_templates.helpers import DepthwiseConvTestModel
 from tests.post_training.test_templates.helpers import MultipleConvTestModel
 from tests.post_training.test_templates.helpers import SplittedModel
+from tests.post_training.test_templates.helpers import TransposeConvTestModel
 from tests.post_training.test_templates.test_bias_correction import TemplateTestBCAlgorithm
 from tests.torch.fx.helpers import get_torch_fx_model
 
@@ -55,9 +58,11 @@ class TestFXBCAlgorithm(TemplateTestBCAlgorithm):
         return transform_fn
 
     @staticmethod
-    def map_references(ref_biases: Dict, model_cls: Any) -> Dict[str, List]:
-        if model_cls is ConvTestModel:
+    def map_references(ref_biases: Dict, model_cls: Any, nncf_graph: NNCFGraph) -> Dict[str, List]:
+        if model_cls in [ConvTestModel, DepthwiseConvTestModel]:
             return {"conv2d": ref_biases["/conv/Conv"]}
+        elif model_cls is TransposeConvTestModel:
+            return {"conv_transpose2d": ref_biases["/conv/ConvTranspose"]}
         mapping = dict()
         for name, value in ref_biases.items():
             conv_idx = int(name[re.search(r"\d", name).start()])

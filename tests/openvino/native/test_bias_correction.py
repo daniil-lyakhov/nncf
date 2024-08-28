@@ -17,6 +17,8 @@ import pytest
 import torch
 
 from nncf.common.factory import NNCFGraphFactory
+from nncf.common.graph.graph import NNCFGraph
+from nncf.openvino.graph.metatypes.openvino_metatypes import OVConvolutionBackpropDataMetatype
 from nncf.openvino.graph.model_utils import remove_fq_from_inputs
 from nncf.openvino.graph.nncf_graph_builder import GraphConverter
 from nncf.openvino.graph.node_utils import get_bias_value
@@ -25,6 +27,7 @@ from tests.openvino.native.common import compare_nncf_graphs
 from tests.post_training.test_templates.helpers import ConvTestModel
 from tests.post_training.test_templates.helpers import MultipleConvTestModel
 from tests.post_training.test_templates.helpers import SplittedModel
+from tests.post_training.test_templates.helpers import TransposeConvTestModel
 from tests.post_training.test_templates.test_bias_correction import TemplateTestBCAlgorithm
 
 
@@ -57,7 +60,10 @@ class TestOVBCAlgorithm(TemplateTestBCAlgorithm):
         return transform_fn
 
     @staticmethod
-    def map_references(ref_biases: Dict, model_cls: Any) -> Dict[str, List]:
+    def map_references(ref_biases: Dict, model_cls: Any, graph: NNCFGraph) -> Dict[str, List]:
+        if model_cls is TransposeConvTestModel:
+            target_node = graph.get_nodes_by_metatypes([OVConvolutionBackpropDataMetatype])[0]
+            return {target_node.node_name: ref_biases["/conv/Conv"]}
         mapping = {f"{name}/WithoutBiases": val for name, val in ref_biases.items()}
         return mapping
 
