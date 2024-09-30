@@ -255,6 +255,9 @@ if __name__ == "__main__":
         for model_cls in (models.resnet18, models.mobilenet_v3_small, models.vit_b_16, models.swin_v2_s):
             print(f"{model_cls} check!")
             nncf_q_model = main(model_cls)
+            from nncf.experimental.torch.fx.constant_folding import constant_folding
+
+            constant_folding(nncf_q_model)
             pt_q_model = main_native(model_cls)
             print("benchmarking...")
             pt_compiled = torch.compile(model_cls())
