@@ -44,6 +44,7 @@ class BackendType(Enum):
     TORCH = "TORCH"
     CUDA_TORCH = "CUDA_TORCH"
     FX_TORCH = "FX_TORCH"
+    CUDA_FX_TORCH = "CUDA_FX_TORCH"
     ONNX = "ONNX"
     OV = "OV"
     OPTIMUM = "OPTIMUM"
@@ -52,6 +53,7 @@ class BackendType(Enum):
 NNCF_PTQ_BACKENDS = [BackendType.TORCH, BackendType.CUDA_TORCH, BackendType.ONNX, BackendType.OV]
 ALL_PTQ_BACKENDS = NNCF_PTQ_BACKENDS
 PT_BACKENDS = [BackendType.TORCH, BackendType.CUDA_TORCH]
+FX_BACKENDS = [BackendType.FX_TORCH, BackendType.CUDA_FX_TORCH]
 OV_BACKENDS = [BackendType.OV, BackendType.OPTIMUM]
 
 LIMIT_LENGTH_OF_STATUS = 120
@@ -407,11 +409,16 @@ class PTQTestPipeline(BaseTestPipeline):
             )
             self.path_compressed_ir = self.output_model_dir / "model.xml"
             ov.serialize(ov_model, self.path_compressed_ir)
-        elif self.backend == BackendType.FX_TORCH:
-            exported_model = torch.export.export(self.compressed_model, (self.dummy_tensor,))
+        elif self.backend in FX_BACKENDS:
+            exported_model = torch.export.export(self.compressed_model.cpu(), (self.dummy_tensor.cpu(),))
             ov_model = ov.convert_model(exported_model, example_input=self.dummy_tensor.cpu(), input=self.input_size)
             self.path_compressed_ir = self.output_model_dir / "model.xml"
             ov.serialize(ov_model, self.path_compressed_ir)
+
+            if BackendType.CUDA_FX_TORCH:
+                self.model = self.model.cuda()
+                self.dummy_tensor = self.dummy_tensor.cuda()
+
         elif self.backend == BackendType.ONNX:
             onnx_path = self.output_model_dir / "model.onnx"
             onnx.save(self.compressed_model, str(onnx_path))

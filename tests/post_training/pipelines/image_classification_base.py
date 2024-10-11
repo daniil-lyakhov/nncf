@@ -21,7 +21,7 @@ from torchvision import datasets
 import nncf
 from nncf.common.logging.track_progress import track
 from tests.post_training.pipelines.base import DEFAULT_VAL_THREADS
-from tests.post_training.pipelines.base import BackendType
+from tests.post_training.pipelines.base import FX_BACKENDS
 from tests.post_training.pipelines.base import PTQTestPipeline
 
 
@@ -76,7 +76,7 @@ class ImageClassificationBase(PTQTestPipeline):
     def _validate_torch_compile(
         self, val_loader: torch.utils.data.DataLoader, predictions: np.ndarray, references: np.ndarray
     ):
-        compiled_model = torch.compile(self.compressed_model, backend="openvino")
+        compiled_model = torch.compile(self.compressed_model.cpu(), backend="openvino")
         for i, (images, target) in enumerate(val_loader):
             # W/A for memory leaks when using torch DataLoader and OpenVINO
             pred = compiled_model(images)
@@ -95,7 +95,7 @@ class ImageClassificationBase(PTQTestPipeline):
         predictions = np.zeros((dataset_size))
         references = -1 * np.ones((dataset_size))
 
-        if self.validate_in_backend and self.backend == BackendType.FX_TORCH:
+        if self.validate_in_backend and self.backend in FX_BACKENDS:
             predictions, references = self._validate_torch_compile(val_loader, predictions, references)
         else:
             predictions, references = self._validate_ov(val_loader, predictions, references, dataset_size)
