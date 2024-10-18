@@ -753,6 +753,14 @@ class MinMaxQuantization(Algorithm):
         quantizer_setup = self._get_quantizer_setup(nncf_graph, inference_nncf_graph, hw_patterns, ignored_patterns)
         self._apply_model_type_pass(self._model_type, quantizer_setup, nncf_graph)
         self._apply_device_pass(self._target_device, quantizer_setup, inference_nncf_graph)
+        return self._fill_quantization_points_from_quantizer_setup(quantizer_setup, nncf_graph, model)
+
+    def _fill_quantization_points_from_quantizer_setup(
+        self, quantizer_setup: SingleConfigQuantizerSetup, nncf_graph: NNCFGraph, model: TModel
+    ) -> Tuple[OrderedDict[TargetPoint, QuantizerConfig], List[List[TargetPoint]]]:
+        self._init_cache()
+        if not hasattr(self, "_backend_entity"):
+            self._set_backend_entity(model)
         self._unified_scale_groups = self._collect_unified_groups(quantizer_setup, nncf_graph)
         quantization_points = list(quantizer_setup.quantization_points.values())
         quantization_points = self._topological_sort_quantization_points(quantization_points, nncf_graph)
@@ -991,7 +999,7 @@ class MinMaxQuantization(Algorithm):
 
     def get_statistic_points(self, model: TModel, graph: NNCFGraph) -> StatisticPointsContainer:
         self._set_backend_entity(model)
-        self._reset_cache()
+        # self._reset_cache()
         quantization_target_points, _ = self._get_quantization_target_points(model, graph)
         output = StatisticPointsContainer()
         for quantization_target_point, qconfig in quantization_target_points.items():
