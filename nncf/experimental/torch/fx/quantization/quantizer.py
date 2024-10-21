@@ -9,6 +9,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
+os.environ["TORCHINDUCTOR_FREEZING"] = "1"
 
 from collections import defaultdict
 from copy import deepcopy
@@ -48,6 +51,7 @@ from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.quantization.structs import QuantizationScheme
 from nncf.common.quantization.structs import QuantizerConfig
 from nncf.data import Dataset
+from nncf.experimental.torch.fx.constant_folding import constant_fold
 
 # from nncf.experimental.torch.fx.transformations import apply_quantization_transformations
 from nncf.experimental.torch.fx.transformations import fuse_conv_bn
@@ -61,7 +65,7 @@ from nncf.scopes import IgnoredScope
 from tests.torch.fx.helpers import visualize_fx_model
 
 
-def measure_time(model, example_inputs, num_iters=500):
+def measure_time(model, example_inputs, num_iters=3000):
     with torch.no_grad():
         model(*example_inputs)
         total_time = 0
@@ -191,7 +195,8 @@ def get_quantizer_config_from_anotated_model(anotated_model: torch.fx.GraphModul
             )
             qconfig = QuantizerConfig(mode=mode, signedness_to_force=signed, per_channel=per_channel)
             qps = []
-            if from_n.op == "get_attr":
+            # If input node is a constant and placed not at activations port (0)
+            if from_n.op == "get_attr" and to_n.args.index(from_n) != 0:
                 qip = WeightQuantizationInsertionPoint(to_n.name)
                 qp = SingleConfigQuantizationPoint(qip, qconfig, [x.name for x in to_nodes])
                 qps.append(qp)
@@ -227,7 +232,8 @@ def main(model_cls):
     quantizer.set_global(get_default_x86_inductor_quantization_config())
 
     nncf_quantizer_model = quantize_pt2e(exported_model, quantizer, calibration_dataset=nncf.Dataset([example_inputs]))
-    visualize_fx_model(nncf_quantizer_model, "nncf_quantizer_resnet.svg")
+
+    visualize_fx_model(nncf_quantizer_model, "nncf_quantizer_before_fold_resnet.svg")
     return nncf_quantizer_model
 
     # exported_model = capture_pre_autograd_graph(model.eval(), (example_inputs,))
@@ -253,11 +259,13 @@ def main_native(model_cls):
 if __name__ == "__main__":
     with nncf.torch.disable_patching():
         for model_cls in (models.resnet18, models.mobilenet_v3_small, models.vit_b_16, models.swin_v2_s):
+            # for model_cls in (models.mobilenet_v3_small,):
             print(f"{model_cls} check!")
             nncf_q_model = main(model_cls)
-            from nncf.experimental.torch.fx.constant_folding import constant_folding
 
-            constant_folding(nncf_q_model)
+            constant_fold(nncf_q_model)
+            visualize_fx_model(nncf_q_model, "nncf_quantizer_after_constant_fold_resnet.svg")
+
             pt_q_model = main_native(model_cls)
             print("benchmarking...")
             pt_compiled = torch.compile(model_cls())
