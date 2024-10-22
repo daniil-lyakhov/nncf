@@ -13,9 +13,7 @@ import os
 
 os.environ["TORCHINDUCTOR_FREEZING"] = "1"
 
-from collections import defaultdict
 from copy import deepcopy
-from itertools import chain
 from time import time
 from typing import Any, Optional
 
@@ -24,15 +22,10 @@ import torch.fx
 from torch._export import capture_pre_autograd_graph
 from torch.ao.quantization.pt2e.duplicate_dq_pass import DuplicateDQPass
 from torch.ao.quantization.pt2e.port_metadata_pass import PortNodeMetaForQDQ
-from torch.ao.quantization.pt2e.prepare import _get_edge_or_node_to_group_id
-from torch.ao.quantization.pt2e.prepare import _get_edge_or_node_to_qspec
-from torch.ao.quantization.pt2e.prepare import _get_obs_or_fq_map
 from torch.ao.quantization.pt2e.qat_utils import _fold_conv_bn_qat
 from torch.ao.quantization.pt2e.utils import _disallow_eval_train
 from torch.ao.quantization.quantize_pt2e import convert_pt2e
 from torch.ao.quantization.quantize_pt2e import prepare_pt2e
-from torch.ao.quantization.quantizer.quantizer import QuantizationSpec
-from torch.ao.quantization.quantizer.quantizer import SharedQuantizationSpec
 from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
 from torch.ao.quantization.quantizer.x86_inductor_quantizer import get_default_x86_inductor_quantization_config
 from torch.fx import GraphModule
@@ -43,15 +36,10 @@ import nncf
 import nncf.torch
 from nncf.common.factory import NNCFGraphFactory
 from nncf.common.logging import nncf_logger
-from nncf.common.quantization.quantizer_setup import ActivationQuantizationInsertionPoint
-from nncf.common.quantization.quantizer_setup import SingleConfigQuantizationPoint
-from nncf.common.quantization.quantizer_setup import SingleConfigQuantizerSetup
-from nncf.common.quantization.quantizer_setup import WeightQuantizationInsertionPoint
 from nncf.common.quantization.structs import QuantizationPreset
-from nncf.common.quantization.structs import QuantizationScheme
-from nncf.common.quantization.structs import QuantizerConfig
 from nncf.data import Dataset
 from nncf.experimental.torch.fx.constant_folding import constant_fold
+from nncf.experimental.torch.fx.quantization.fx_quantizer import NNCFFXQuantizer
 
 # from nncf.experimental.torch.fx.transformations import apply_quantization_transformations
 from nncf.experimental.torch.fx.transformations import fuse_conv_bn
@@ -115,6 +103,7 @@ def quantize_pt2e(
         model_type=model_type,
         ignored_scope=ignored_scope,
         advanced_parameters=advanced_parameters,
+        quantizer=NNCFFXQuantizer(quantizer),
     )
 
     # To make it easier for bias correction algorithms,
@@ -122,20 +111,7 @@ def quantize_pt2e(
     anotated_model = deepcopy(copied_model)
     fuse_conv_bn(anotated_model)
 
-    quantizer.transform_for_annotation(anotated_model)
-    quantizer.annotate(anotated_model)
-    quantizer.validate(anotated_model)
-
-    q_setup = get_quantizer_config_from_anotated_model(anotated_model)
-
-    # apply_quantization_transformations(copied_model)
-    fuse_conv_bn(copied_model)
     nncf_graph = NNCFGraphFactory.create(copied_model)
-    for algo in chain(*quantization_algorithm._pipeline.pipeline_steps):
-        if algo.__class__.__name__ != "MinMaxQuantization":
-            continue
-        algo._fill_quantization_points_from_quantizer_setup(q_setup, nncf_graph, copied_model)
-        break
     quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)
 
     # Revert applied transformation to keep original model
@@ -157,70 +133,6 @@ def quantize_pt2e(
     quantized_model = _disallow_eval_train(quantized_model)
 
     return quantized_model
-
-
-def get_quantizer_config_from_anotated_model(anotated_model: torch.fx.GraphModule) -> SingleConfigQuantizerSetup:
-    is_qat = False
-    edge_or_node_to_qspec = _get_edge_or_node_to_qspec(anotated_model)
-    edge_or_node_to_group_id = _get_edge_or_node_to_group_id(edge_or_node_to_qspec)
-    obs_or_fq_map = _get_obs_or_fq_map(edge_or_node_to_group_id, edge_or_node_to_qspec, is_qat)
-    if obs_or_fq_map:
-        pass
-
-    q_map = defaultdict(list)
-    for edge, qspec in edge_or_node_to_qspec.items():
-        if not isinstance(edge, tuple):
-            continue
-        from_n, to_n = edge
-        q_map[from_n].append(to_n)
-
-    q_setup = SingleConfigQuantizerSetup()
-    for from_n, to_nodes in q_map.items():
-        to_n = to_nodes[0]
-        qspec = edge_or_node_to_qspec[(from_n, to_n)]
-        if qspec is None:
-            continue
-        if isinstance(qspec, QuantizationSpec):
-            if qspec.qscheme in [torch.per_channel_affine, torch.per_channel_symmetric]:
-                per_channel = True
-            elif qspec.qscheme in [torch.per_tensor_affine, torch.per_tensor_symmetric]:
-                per_channel = False
-            else:
-                raise nncf.InternalError(f"Unknown qscheme: {qspec.qscheme}")
-            signed = qspec.dtype is torch.uint8
-            mode = (
-                QuantizationScheme.SYMMETRIC
-                if qspec.qscheme in [torch.per_channel_symmetric, torch.per_tensor_symmetric]
-                else QuantizationScheme.ASYMMETRIC
-            )
-            qconfig = QuantizerConfig(mode=mode, signedness_to_force=signed, per_channel=per_channel)
-            qps = []
-            # If input node is a constant and placed not at activations port (0)
-            if from_n.op == "get_attr" and to_n.args.index(from_n) != 0:
-                qip = WeightQuantizationInsertionPoint(to_n.name)
-                qp = SingleConfigQuantizationPoint(qip, qconfig, [x.name for x in to_nodes])
-                qps.append(qp)
-            else:
-                if len(from_n.users) == len(to_nodes):
-                    qip = ActivationQuantizationInsertionPoint(from_n.name)
-                    qp = SingleConfigQuantizationPoint(qip, qconfig, [x.name for x in to_nodes])
-                    qps.append(qp)
-                else:
-                    for to_n_ in to_nodes:
-                        input_port_id = to_n_.args.index(from_n)
-                        qip = ActivationQuantizationInsertionPoint(to_n_.name, input_port_id)
-                        qp = SingleConfigQuantizationPoint(qip, qconfig, [to_n_.name])
-                        qps.append(qp)
-
-            for qp in qps:
-                q_setup.add_independent_quantization_point(qp)
-
-        elif isinstance(qspec, SharedQuantizationSpec):
-            pass
-        else:
-            raise nncf.InternalError(f"Unknown torch.ao quantization spec: {qspec}")
-
-    return q_setup
 
 
 def main(model_cls):

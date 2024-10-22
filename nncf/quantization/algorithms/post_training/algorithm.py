@@ -22,6 +22,7 @@ from nncf.parameters import QuantizationMode
 from nncf.parameters import TargetDevice
 from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
 from nncf.quantization.algorithms.algorithm import Algorithm
+from nncf.quantization.algorithms.min_max.quantizer.quantizer import NNCFQuantizer
 from nncf.quantization.algorithms.post_training.pipeline import create_ptq_pipeline
 from nncf.scopes import IgnoredScope
 
@@ -47,6 +48,7 @@ class PostTrainingQuantization(Algorithm):
         model_type: Optional[ModelType] = None,
         ignored_scope: Optional[IgnoredScope] = None,
         advanced_parameters: Optional[AdvancedQuantizationParameters] = None,
+        quantizer: Optional[NNCFQuantizer] = None,
     ):
         """
         :param mode: Special quantization mode that specify different ways of the optimization.
@@ -80,6 +82,7 @@ class PostTrainingQuantization(Algorithm):
             model_type=model_type,
             ignored_scope=ignored_scope,
             advanced_parameters=advanced_parameters,
+            quantizer=quantizer,
         )
 
     @property
