@@ -514,6 +514,16 @@ class ConvolutionWithNotTensorBiasModel(torch.nn.Module):
         return nn.functional.conv2d(x, w)
 
 
+class ConvolutionWithSeveralOutputs(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = create_conv(1, 1, 1)
+
+    def forward(self, x):
+        x = self.conv(x)
+        return x, x + 2
+
+
 class ConvolutionWithAllConstantInputsModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -572,3 +582,23 @@ class LinearPTQParamsTestModel(nn.Module):
         x = self.relu(self.conv2(x))
         x = self.bn2(x)
         return x
+
+
+class ConstantFoldingTestModel(nn.Module):
+    INPUT_SIZE = (1, 3, 3, 3)
+
+    def __init__(self):
+        super().__init__()
+        self.linear_act = nn.Linear(3, 3)
+        self.linear_act.weight.data = 2 * torch.ones((3, 3))
+
+        self.linear_w = nn.Linear(3, 3)
+        self.linear_w.weight.data = 3 * torch.ones((3, 3))
+
+        self.param = nn.Parameter(4 * torch.ones((3, 3)))
+
+    def forward(self, x):
+        y = self.linear_w(self.param)
+        y += 10
+        x = self.linear_act(x)
+        return x + y

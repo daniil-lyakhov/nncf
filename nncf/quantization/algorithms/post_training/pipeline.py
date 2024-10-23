@@ -23,6 +23,8 @@ from nncf.quantization.algorithms.channel_alignment.algorithm import ChannelAlig
 from nncf.quantization.algorithms.fast_bias_correction.algorithm import FAST_BIAS_CORRECTION_THRESHOLD
 from nncf.quantization.algorithms.fast_bias_correction.algorithm import FastBiasCorrection
 from nncf.quantization.algorithms.min_max.algorithm import MinMaxQuantization
+from nncf.quantization.algorithms.min_max.quantizer.ov_quantizer import NNCFOVQuantizer
+from nncf.quantization.algorithms.min_max.quantizer.quantizer import NNCFQuantizer
 from nncf.quantization.algorithms.pipeline import Pipeline
 from nncf.quantization.algorithms.smooth_quant.algorithm import SmoothQuant
 from nncf.scopes import IgnoredScope
@@ -39,6 +41,7 @@ def create_ptq_pipeline(
     model_type: Optional[ModelType] = None,
     ignored_scope: Optional[IgnoredScope] = None,
     advanced_parameters: Optional[AdvancedQuantizationParameters] = None,
+    quantizer: Optional[NNCFQuantizer] = None,
 ) -> Pipeline:
     """
     Creates a post-training quantization pipeline.
@@ -104,9 +107,24 @@ def create_ptq_pipeline(
         pipeline_steps.append([ChannelAlignment(subset_size, advanced_parameters.inplace_statistics)])
 
     # Add the `MinMaxQuantization` algorithm as the third step of the pipeline.
+    # Use default OV quantizer in case it is not specified.
+    if quantizer is None:
+        quantizer = NNCFOVQuantizer(
+            mode=mode,
+            preset=preset,
+            target_device=target_device,
+            model_type=model_type,
+            ignored_scope=ignored_scope,
+            overflow_fix=advanced_parameters.overflow_fix,
+            quantize_outputs=advanced_parameters.quantize_outputs,
+            activations_quantization_params=advanced_parameters.activations_quantization_params,
+            weights_quantization_params=advanced_parameters.weights_quantization_params,
+            quantizer_propagation_rule=advanced_parameters.quantizer_propagation_rule,
+        )
     pipeline_steps.append(
         [
             MinMaxQuantization(
+                quantizer,
                 mode=mode,
                 preset=preset,
                 target_device=target_device,
