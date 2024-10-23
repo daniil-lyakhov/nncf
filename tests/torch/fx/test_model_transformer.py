@@ -9,6 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Tuple
@@ -29,13 +30,15 @@ from nncf.common.factory import NNCFGraphFactory
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
+from nncf.experimental.torch.fx.constant_folding import constant_fold
 from nncf.experimental.torch.fx.model_transformer import FXModelTransformer
 from nncf.experimental.torch.fx.nncf_graph_builder import GraphConverter
 from nncf.experimental.torch.fx.node_utils import get_graph_node_by_name
 from nncf.experimental.torch.fx.node_utils import get_tensor_constant_from_node
 from nncf.experimental.torch.fx.transformations import _set_new_node_meta
-from nncf.experimental.torch.fx.transformations import bias_update_transformation_builder
+from nncf.experimental.torch.fx.transformations import compress_post_quantize_transformation
 from nncf.experimental.torch.fx.transformations import constant_update_transformation_builder
+from nncf.experimental.torch.fx.transformations import fold_constant_except_qdq
 from nncf.experimental.torch.fx.transformations import leaf_module_insertion_transformation_builder
 from nncf.experimental.torch.fx.transformations import module_insertion_transformation_builder
 from nncf.experimental.torch.fx.transformations import node_removal_transformation_builder
@@ -46,10 +49,11 @@ from nncf.torch import disable_patching
 from nncf.torch.graph.operator_metatypes import CONST_NOOP_METATYPES
 from nncf.torch.graph.transformations.commands import PTModelExtractionCommand
 from nncf.torch.graph.transformations.commands import PTTargetPoint
-from tests.torch.fx.test_sanity import count_q_dq
 from tests.torch.test_compressed_graph import check_graph
+from tests.torch.test_models.synthetic import ConstantFoldingTestModel
 from tests.torch.test_models.synthetic import ConvolutionWithAllConstantInputsModel
 from tests.torch.test_models.synthetic import ConvolutionWithNotTensorBiasModel
+from tests.torch.test_models.synthetic import ConvolutionWithSeveralOutputs
 from tests.torch.test_models.synthetic import MultiBranchesConnectedModel
 
 
@@ -113,12 +117,82 @@ def _capture_model(model: torch.nn.Module, inputs: torch.Tensor) -> torch.fx.Gra
 @pytest.mark.parametrize("test_case", MODEL_EXTRACTION_CASES, ids=idfn)
 def test_model_extraction(test_case: ModelExtractionTestCase):
     captured_model = _capture_model(test_case.model(), torch.ones(test_case.input_shape))
+    _, nncf_graph = _extract_model(test_case, captured_model)
+    check_graph(nncf_graph, f"{get_test_id(test_case)}.dot", EXTRACTED_GRAPHS_DIR_NAME, extended=True)
 
+
+@pytest.mark.parametrize(
+    "test_case,tuple_output,ref_output",
+    (
+        (
+            ModelExtractionTestCase(
+                ConvolutionWithNotTensorBiasModel, (1, 1, 3, 3), PTModelExtractionCommand(["conv2d"], ["output"])
+            ),
+            False,
+            "(conv2d,)",
+        ),
+        (
+            ModelExtractionTestCase(
+                ConvolutionWithNotTensorBiasModel,
+                (1, 1, 3, 3),
+                PTModelExtractionCommand(["conv2d"], ["conv2d", "output", "conv2d"]),
+            ),
+            False,
+            "(conv2d, conv2d, conv2d)",
+        ),
+        (
+            ModelExtractionTestCase(
+                ConvolutionWithSeveralOutputs, (1, 1, 3, 3), PTModelExtractionCommand(["conv2d"], ["output"])
+            ),
+            False,
+            "([conv2d, add],)",
+        ),
+        (
+            ModelExtractionTestCase(
+                ConvolutionWithSeveralOutputs,
+                (1, 1, 3, 3),
+                PTModelExtractionCommand(["conv2d"], ["conv2d", "output", "conv2d"]),
+            ),
+            False,
+            "(conv2d, [conv2d, add], conv2d)",
+        ),
+        (
+            ModelExtractionTestCase(
+                ConvolutionWithNotTensorBiasModel, (1, 1, 3, 3), PTModelExtractionCommand(["conv2d"], ["output"])
+            ),
+            True,
+            "(conv2d,)",
+        ),
+        (
+            ModelExtractionTestCase(
+                ConvolutionWithNotTensorBiasModel,
+                (1, 1, 3, 3),
+                PTModelExtractionCommand(["conv2d"], ["conv2d", "output", "conv2d"]),
+            ),
+            True,
+            "(conv2d, conv2d, conv2d)",
+        ),
+    ),
+    ids=idfn,
+)
+def test_model_extraction_with_original_output(test_case: ModelExtractionTestCase, tuple_output: bool, ref_output: str):
+    captured_model = _capture_model(test_case.model(), torch.ones(test_case.input_shape))
+    if tuple_output:
+        output_node = [node for node in captured_model.graph.nodes if node.op == "output"][0]
+        output_node.args = (output_node.args[0][0],)
+        captured_model.recompile()
+    extracted_model, nncf_graph = _extract_model(test_case, captured_model)
+    check_graph(nncf_graph, f"{get_test_id(test_case)}.dot", EXTRACTED_GRAPHS_DIR_NAME, extended=True)
+
+    output_node = [node for node in extracted_model.graph.nodes if node.op == "output"][0]
+    assert str(output_node.args[0]) == ref_output
+
+
+def _extract_model(test_case: ModelExtractionTestCase, captured_model: torch.fx.GraphModule):
     layout = TransformationLayout()
     layout.register(test_case.command)
     extracted_model = FXModelTransformer(captured_model).transform(layout)
-    nncf_graph = GraphConverter.create_nncf_graph(extracted_model)
-    check_graph(nncf_graph, f"{get_test_id(test_case)}.dot", EXTRACTED_GRAPHS_DIR_NAME, extended=True)
+    return extracted_model, GraphConverter.create_nncf_graph(extracted_model)
 
 
 MultiBranchesConnectedModel_TARGET_POINTS = (
@@ -150,16 +224,14 @@ def test_model_insertion_transformation(leaf: bool):
     check_graph(nncf_graph, f"model_insertion{'_leaf' if leaf else ''}.dot", TRANSFORMED_GRAPH_DIR_NAME, extended=True)
 
 
-@pytest.mark.parametrize("bias", [True, False], ids=["bias", "constant"])
-def test_constant_update_transformation(bias: bool):
+def test_constant_update_transformation():
     model = MultiBranchesConnectedModel()
     captured_model = _capture_model(model, torch.ones((1, 3, 3, 3)))
     nncf_graph = GraphConverter.create_nncf_graph(captured_model)
-    target_node = nncf_graph.get_node_by_name("conv2d" if bias else "add_")
+    target_node = nncf_graph.get_node_by_name("add_")
 
-    builder = bias_update_transformation_builder if bias else constant_update_transformation_builder
     new_value = torch.tensor((42.0,))
-    transformation = builder(target_node, value=new_value, input_port_id=1)
+    transformation = constant_update_transformation_builder(target_node, value=new_value, input_port_id=1)
     transformation(captured_model)
 
     add_node = get_graph_node_by_name(captured_model.graph, "add_")
@@ -169,16 +241,14 @@ def test_constant_update_transformation(bias: bool):
     check_graph(transformed_nncf_graph, "constant_update.dot", TRANSFORMED_GRAPH_DIR_NAME, extended=True)
 
 
-@pytest.mark.parametrize("bias", [True, False], ids=["bias", "constant"])
-def test_constant_update_transformation_no_constant(bias: bool):
+def test_constant_update_transformation_no_constant():
     model = MultiBranchesConnectedModel()
     captured_model = _capture_model(model, torch.ones((1, 3, 3, 3)))
     nncf_graph = GraphConverter.create_nncf_graph(captured_model)
     target_node = nncf_graph.get_node_by_name("add")
 
-    builder = bias_update_transformation_builder if bias else constant_update_transformation_builder
     new_value = torch.tensor((42.0,))
-    transformation = builder(target_node, value=new_value, input_port_id=1)
+    transformation = constant_update_transformation_builder(target_node, value=new_value, input_port_id=1)
     with pytest.raises(nncf.InternalError):
         transformation(captured_model)
 
@@ -406,56 +476,90 @@ def get_shared_constant_nodes(nncf_graph: NNCFGraph):
     return shared_const_node_consumer_node
 
 
-def insert_qdq_add_nodes(model: torch.fx.GraphModule):
-    const_node = get_graph_node_by_name(model.graph, "_param_constant0")
-    quantize_op = torch.ops.quantized_decomposed.quantize_per_channel.default
-    dequantize_op = torch.ops.quantized_decomposed.dequantize_per_channel.default
-    add_op = torch.add
-    conv_node = get_graph_node_by_name(model.graph, "conv2d")
-    with model.graph.inserting_before(conv_node):
-        scale_node = create_getattr_from_value(
-            model,
-            model.graph,
-            "scale_node",
-            torch.ones(
-                [
-                    3,
-                ]
-            ),
-        )
-        zp_node = create_getattr_from_value(
-            model,
-            model.graph,
-            "weight_node",
-            torch.ones(
-                [
-                    3,
-                ]
-            ),
-        )
+def insert_qdq_nodes(
+    model: torch.fx.GraphModule,
+    correct_pattern: bool,
+    per_channel: bool,
+    node_name: str = "conv2d",
+    w_const_node_name: str = "_param_constant0",
+):
+    const_node = get_graph_node_by_name(model.graph, w_const_node_name)
+    if per_channel:
+        quantize_op = torch.ops.quantized_decomposed.quantize_per_channel.default
+        dequantize_op = torch.ops.quantized_decomposed.dequantize_per_channel.default
+    else:
+        quantize_op = torch.ops.quantized_decomposed.quantize_per_tensor.default
+        dequantize_op = torch.ops.quantized_decomposed.dequantize_per_tensor.default
+
+    conv_node = get_graph_node_by_name(model.graph, node_name)
+    if per_channel:
+        with model.graph.inserting_before(conv_node):
+            scale_node = create_getattr_from_value(
+                model,
+                model.graph,
+                "scale_node",
+                torch.ones(
+                    [
+                        3,
+                    ]
+                ),
+            )
+            zp_node = create_getattr_from_value(
+                model,
+                model.graph,
+                "weight_node",
+                torch.ones(
+                    [
+                        3,
+                    ]
+                ),
+            )
         qdq_args = (scale_node, zp_node, 0, -128, 127, torch.int8)
+    else:
+        qdq_args = (1.0, 1, -128, 127, torch.int8)
+    with model.graph.inserting_before(conv_node):
         q_node = model.graph.create_node("call_function", quantize_op, (const_node,) + qdq_args, {})
-        add_node = model.graph.create_node("call_function", add_op, (q_node, 0), {})
-        dq_node = model.graph.create_node("call_function", dequantize_op, (add_node,) + qdq_args, {})
-    _set_new_node_meta(q_node, (const_node,) + qdq_args, quantize_op, model)
-    _set_new_node_meta(add_node, (q_node, 0), add_op, model)
-    _set_new_node_meta(dq_node, (add_node,) + qdq_args, dequantize_op, model)
+        if not correct_pattern:
+            add_op = torch.ops.aten.add.Tensor
+            add_node = model.graph.create_node("call_function", add_op, (q_node, 0), {})
+            dq_node = model.graph.create_node("call_function", dequantize_op, (add_node,) + qdq_args, {})
+            _set_new_node_meta(q_node, (const_node,) + qdq_args, quantize_op, model)
+            _set_new_node_meta(add_node, (q_node, 0), add_op, model)
+            _set_new_node_meta(dq_node, (add_node,) + qdq_args, dequantize_op, model)
+        else:
+            dq_node = model.graph.create_node("call_function", dequantize_op, (q_node,) + qdq_args, {})
+            _set_new_node_meta(q_node, (const_node,) + qdq_args, quantize_op, model)
+            _set_new_node_meta(dq_node, (q_node,) + qdq_args, dequantize_op, model)
     conv_node.replace_input_with(const_node, dq_node)
+    model.graph.eliminate_dead_code()
+    model.recompile()
 
 
-def test_different_qdq_pattern():
+def test_compress_post_quantize_transformation(is_per_channel: bool):
     model = MultiBranchesConnectedModel()
     ex_input = torch.ones(1, 3, 224, 224)
-    captured_model = _capture_model(model, ex_input)
-    quantized_before_insertion = nncf.quantize(captured_model, nncf.Dataset([ex_input]))
-    q_before, dq_before = count_q_dq(quantized_before_insertion)
-    insert_qdq_add_nodes(captured_model)
-    quantized_after_insertion = nncf.quantize(captured_model, nncf.Dataset([ex_input]))
-    q_after, dq_after = count_q_dq(quantized_after_insertion)
-    assert q_before == 5
-    assert dq_before == 6
-    assert q_after == 6
-    assert dq_after == 7
+
+    model_with_correct_pattern = _capture_model(model, ex_input)
+    insert_qdq_nodes(model_with_correct_pattern, correct_pattern=True, per_channel=is_per_channel)
+    compress_post_quantize_transformation(model_with_correct_pattern)
+    graph_name = f"compress_post_quantize_{'ph' if is_per_channel else 'pt'}_valid.dot"
+    check_graph(
+        NNCFGraphFactory.create(model_with_correct_pattern),
+        graph_name,
+        TRANSFORMED_GRAPH_DIR_NAME,
+        extended=True,
+    )
+
+    model_with_incorrect_pattern = _capture_model(model, ex_input)
+    insert_qdq_nodes(model_with_incorrect_pattern, correct_pattern=False, per_channel=is_per_channel)
+    compress_post_quantize_transformation(model_with_incorrect_pattern)
+    graph_name = f"compress_post_quantize_{'ph' if is_per_channel else 'pt'}_invalid.dot"
+    check_graph(
+        NNCFGraphFactory.create(model_with_incorrect_pattern),
+        graph_name,
+        TRANSFORMED_GRAPH_DIR_NAME,
+        extended=True,
+    )
 
 
 def test_update_shared_constant():
@@ -478,3 +582,33 @@ def test_update_shared_constant():
     fx_node_to_check_const_value = get_tensor_constant_from_node(fx_node_to_check_const, captured_model)
 
     assert fx_node_to_check_const_value == torch.tensor([100])
+
+
+def test_constant_folding():
+    model = ConstantFoldingTestModel()
+    captured_model = _capture_model(model, torch.ones(model.INPUT_SIZE))
+    folded_model = deepcopy(captured_model)
+    constant_fold(folded_model)
+    ex_input = torch.ones(model.INPUT_SIZE)
+    assert torch.allclose(captured_model(ex_input), folded_model(ex_input))
+
+    nncf_graph = GraphConverter.create_nncf_graph(folded_model)
+    check_graph(nncf_graph, "folded_model.dot", TRANSFORMED_GRAPH_DIR_NAME, extended=True)
+
+
+def test_constant_folding_with_constraints(is_per_channel):
+    model = ConstantFoldingTestModel()
+    model_with_correct_pattern = _capture_model(model, torch.ones(model.INPUT_SIZE))
+
+    insert_qdq_nodes(
+        model_with_correct_pattern,
+        correct_pattern=True,
+        per_channel=is_per_channel,
+        node_name="linear_1",
+        w_const_node_name="_param_constant3",
+    )
+    fold_constant_except_qdq(model_with_correct_pattern)
+
+    nncf_graph = GraphConverter.create_nncf_graph(model_with_correct_pattern)
+    dot_file_name = f"folded_model_with_constraints_{'ph' if is_per_channel else 'pt'}.dot"
+    check_graph(nncf_graph, dot_file_name, TRANSFORMED_GRAPH_DIR_NAME, extended=True)
