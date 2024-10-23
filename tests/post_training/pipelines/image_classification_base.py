@@ -76,7 +76,8 @@ class ImageClassificationBase(PTQTestPipeline):
     def _validate_torch_compile(
         self, val_loader: torch.utils.data.DataLoader, predictions: np.ndarray, references: np.ndarray
     ):
-        compiled_model = torch.compile(self.compressed_model, backend="openvino")
+        # compiled_model = torch.compile(self.compressed_model, backend="openvino")
+        compiled_model = torch.compile(self.compressed_model)
         for i, (images, target) in enumerate(val_loader):
             # W/A for memory leaks when using torch DataLoader and OpenVINO
             pred = compiled_model(images)
@@ -104,3 +105,33 @@ class ImageClassificationBase(PTQTestPipeline):
 
         self.run_info.metric_name = "Acc@1"
         self.run_info.metric_value = acc_top1
+
+    def _compress_torch_native(self):
+        import os
+
+        os.environ["TORCHINDUCTOR_FREEZING"] = "1"
+
+        from torch.ao.quantization.quantize_pt2e import convert_pt2e
+        from torch.ao.quantization.quantize_pt2e import prepare_pt2e
+        from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
+        from torch.ao.quantization.quantizer.x86_inductor_quantizer import get_default_x86_inductor_quantization_config
+
+        quantizer = X86InductorQuantizer()
+        quantizer.set_global(get_default_x86_inductor_quantization_config())
+
+        prepared_model = prepare_pt2e(self.model, quantizer)
+        for data in self.calibration_dataset.get_inference_data():
+            prepared_model(data)
+        self.compressed_model = convert_pt2e(prepared_model)
+
+    def _compress_nncf_pt2e(self):
+        pass
+
+    def _compress(self):
+        """
+        Quantize self.model
+        """
+        if self.backend != BackendType.FX_TORCH:
+            super()._compress()
+
+        self._compress_torch_native()
