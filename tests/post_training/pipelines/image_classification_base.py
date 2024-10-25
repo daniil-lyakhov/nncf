@@ -96,7 +96,7 @@ class ImageClassificationBase(PTQTestPipeline):
         predictions = np.zeros((dataset_size))
         references = -1 * np.ones((dataset_size))
 
-        if self.validate_in_backend and self.backend == BackendType.FX_TORCH:
+        if self.backend == BackendType.FX_TORCH:
             predictions, references = self._validate_torch_compile(val_loader, predictions, references)
         else:
             predictions, references = self._validate_ov(val_loader, predictions, references, dataset_size)
@@ -125,7 +125,19 @@ class ImageClassificationBase(PTQTestPipeline):
         self.compressed_model = convert_pt2e(prepared_model)
 
     def _compress_nncf_pt2e(self):
-        pass
+        from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
+        from torch.ao.quantization.quantizer.x86_inductor_quantizer import get_default_x86_inductor_quantization_config
+
+        from nncf.experimental.torch.fx.constant_folding import constant_fold
+        from nncf.experimental.torch.fx.quantization.quantize_pt2e import quantize_pt2e
+
+        quantizer = X86InductorQuantizer()
+        quantizer.set_global(get_default_x86_inductor_quantization_config())
+        self.compression_params.pop("preset")
+        self.compressed_model = quantize_pt2e(
+            self.model, quantizer, self.calibration_dataset, **self.compression_params
+        )
+        constant_fold(self.compressed_model)
 
     def _compress(self):
         """
@@ -134,4 +146,5 @@ class ImageClassificationBase(PTQTestPipeline):
         if self.backend != BackendType.FX_TORCH:
             super()._compress()
 
-        self._compress_torch_native()
+        # self._compress_torch_native()
+        self._compress_nncf_pt2e()
