@@ -77,6 +77,13 @@ class ImageClassificationBase(PTQTestPipeline):
         self, val_loader: torch.utils.data.DataLoader, predictions: np.ndarray, references: np.ndarray
     ):
         # compiled_model = torch.compile(self.compressed_model, backend="openvino")
+        q_num = 0
+        for node in self.compressed_model.graph.nodes:
+            if ".quantize_per" in str(node.target):
+                q_num += 1
+
+        print(f"Qunatize ops num: {q_num}")
+
         compiled_model = torch.compile(self.compressed_model)
         for i, (images, target) in enumerate(val_loader):
             # W/A for memory leaks when using torch DataLoader and OpenVINO
@@ -111,6 +118,8 @@ class ImageClassificationBase(PTQTestPipeline):
 
         os.environ["TORCHINDUCTOR_FREEZING"] = "1"
 
+        from itertools import islice
+
         from torch.ao.quantization.quantize_pt2e import convert_pt2e
         from torch.ao.quantization.quantize_pt2e import prepare_pt2e
         from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
@@ -120,7 +129,8 @@ class ImageClassificationBase(PTQTestPipeline):
         quantizer.set_global(get_default_x86_inductor_quantization_config())
 
         prepared_model = prepare_pt2e(self.model, quantizer)
-        for data in self.calibration_dataset.get_inference_data():
+        subset_size = self.compression_params.get("subset_size", 300)
+        for data in islice(self.calibration_dataset.get_inference_data(), subset_size):
             prepared_model(data)
         self.compressed_model = convert_pt2e(prepared_model)
 
@@ -133,7 +143,8 @@ class ImageClassificationBase(PTQTestPipeline):
 
         quantizer = X86InductorQuantizer()
         quantizer.set_global(get_default_x86_inductor_quantization_config())
-        self.compression_params.pop("preset")
+        if "preset" in self.compression_params:
+            self.compression_params.pop("preset")
         self.compressed_model = quantize_pt2e(
             self.model, quantizer, self.calibration_dataset, **self.compression_params
         )
@@ -146,5 +157,5 @@ class ImageClassificationBase(PTQTestPipeline):
         if self.backend != BackendType.FX_TORCH:
             super()._compress()
 
-        # self._compress_torch_native()
-        self._compress_nncf_pt2e()
+        self._compress_torch_native()
+        # self._compress_nncf_pt2e()
