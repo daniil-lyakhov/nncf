@@ -135,20 +135,25 @@ class ImageClassificationBase(PTQTestPipeline):
         self.compressed_model = convert_pt2e(prepared_model)
 
     def _compress_nncf_pt2e(self):
+        calibration_dataset = 8
+
         from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
         from torch.ao.quantization.quantizer.x86_inductor_quantizer import get_default_x86_inductor_quantization_config
 
-        from nncf.experimental.torch.fx.constant_folding import constant_fold
         from nncf.experimental.torch.fx.quantization.quantize_pt2e import quantize_pt2e
+        from nncf.quantization.advanced_parameters import AdvancedSmoothQuantParameters
 
         quantizer = X86InductorQuantizer()
         quantizer.set_global(get_default_x86_inductor_quantization_config())
-        if "preset" in self.compression_params:
-            self.compression_params.pop("preset")
+
         self.compressed_model = quantize_pt2e(
-            self.model, quantizer, self.calibration_dataset, **self.compression_params
+            self.model,
+            calibration_dataset,
+            quantizer,
+            fast_bias_correction=False,
+            smooth_quant=True,
+            smooth_quant_params=AdvancedSmoothQuantParameters(matmul=0.15),
         )
-        constant_fold(self.compressed_model)
 
     def _compress(self):
         """

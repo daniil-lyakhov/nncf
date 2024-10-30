@@ -10,8 +10,15 @@
 # limitations under the License.
 
 
+import sys
 from collections import defaultdict
 from copy import deepcopy
+from dataclasses import dataclass
+from dataclasses import field
+from dataclasses import fields
+from dataclasses import is_dataclass
+from enum import Enum
+from typing import Any, Dict, Optional, Union
 
 import torch
 import torch.fx
@@ -24,13 +31,44 @@ from torch.ao.quantization.quantizer.quantizer import SharedQuantizationSpec
 
 import nncf
 from nncf.common.graph.graph import NNCFGraph
+from nncf.common.quantization.quantizer_propagation.structs import QuantizerPropagationRule
 from nncf.common.quantization.quantizer_setup import ActivationQuantizationInsertionPoint
 from nncf.common.quantization.quantizer_setup import SingleConfigQuantizationPoint
 from nncf.common.quantization.quantizer_setup import SingleConfigQuantizerSetup
 from nncf.common.quantization.quantizer_setup import WeightQuantizationInsertionPoint
 from nncf.common.quantization.structs import QuantizationScheme as QuantizationMode
 from nncf.common.quantization.structs import QuantizerConfig
+from nncf.common.utils.api_marker import api
 from nncf.experimental.common.quantization.algorithms.quantizer.quantizer import NNCFQuantizer
+from nncf.parameters import StrEnum
+from nncf.quantization.advanced_parameters import FP8QuantizationParameters
+from nncf.quantization.advanced_parameters import OverflowFix
+from nncf.quantization.advanced_parameters import QuantizationParameters
+from nncf.quantization.range_estimator import AggregatorType
+from nncf.quantization.range_estimator import RangeEstimatorParameters
+from nncf.quantization.range_estimator import StatisticsType
+
+
+class OpenVINOQuantizer(Quantizer):
+    def __init__(
+        self,
+        overflow_fix: OverflowFix = None,
+        activations_quantization_params: Union[QuantizationParameters, FP8QuantizationParameters] = None,
+        weights_quantization_params: Union[QuantizationParameters, FP8QuantizationParameters] = None,
+        quantizer_propagation_rule: QuantizerPropagationRule = QuantizerPropagationRule.MERGE_ALL_IN_ONE,
+        **kwargs,
+    ): ...
+
+    def transform_for_annotation(self, model: torch.fx.GraphModule) -> torch.fx.GraphModule: ...
+
+    def annotate(self, model: torch.fx.GraphModule) -> torch.fx.GraphModule: ...
+
+    def validate(self, model: torch.fx.GraphModule) -> None: ...
+
+    def get_quantization_setup(self, model: torch.fx.GraphModule, nncf_graph: NNCFGraph) -> SingleConfigQuantizerSetup:
+        """
+        Returns SingleConfigQuantizerSetup for the given GraphModule.
+        """
 
 
 class NNCFFXQuantizer(NNCFQuantizer):

@@ -29,19 +29,25 @@ from nncf.experimental.common.quantization.algorithms.post_training.algorithm im
 from nncf.experimental.common.quantization.algorithms.quantizer.fx_quantizer import NNCFFXQuantizer
 from nncf.experimental.torch.fx.transformations import fuse_conv_bn
 from nncf.parameters import ModelType
+from nncf.quantization.advanced_parameters import AdvancedBiasCorrectionParameters
 from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
+from nncf.quantization.advanced_parameters import AdvancedSmoothQuantParameters
+from nncf.quantization.advanced_parameters import RangeEstimatorParameters
 
 DEFAULT_RANGE_TYPE = "mean_min_max"
 
 
 def quantize_pt2e(
     model: torch.fx.GraphModule,
-    quantizer: Quantizer,
     calibration_dataset: Dataset,
+    quantizer: Quantizer,
     subset_size: int = 300,
     fast_bias_correction: bool = True,
-    model_type: Optional[ModelType] = None,
-    advanced_parameters: Optional[AdvancedQuantizationParameters] = None,
+    smooth_quant: bool = False,
+    smooth_quant_params: Optional[AdvancedSmoothQuantParameters] = None,
+    bias_correction_params: Optional[AdvancedBiasCorrectionParameters] = None,
+    activations_range_estimator_params: Optional[RangeEstimatorParameters] = None,
+    weights_range_estimator_params: Optional[RangeEstimatorParameters] = None,
 ) -> torch.fx.GraphModule:
     """
     Implementation of the `quantize()` method for the Torch FX backend.
@@ -52,6 +58,12 @@ def quantize_pt2e(
         " in case of errors or a poor model performance."
     )
 
+    self = object()
+    self.smooth_quant = smooth_quant
+    self.smooth_quant_params = smooth_quant_params
+    self.bias_correction_params = bias_correction_params
+    self.activations_range_estimator_params = activations_range_estimator_params
+    self.weights_range_estimator_params = weights_range_estimator_params
     original_graph_meta = model.meta
 
     copied_model = deepcopy(model)
@@ -60,8 +72,6 @@ def quantize_pt2e(
         quantizer=NNCFFXQuantizer(quantizer),
         subset_size=subset_size,
         fast_bias_correction=fast_bias_correction,
-        model_type=model_type,
-        advanced_parameters=advanced_parameters,
     )
 
     # To make it easier for bias correction algorithms,
