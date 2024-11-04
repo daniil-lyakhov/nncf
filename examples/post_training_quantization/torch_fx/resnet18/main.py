@@ -14,6 +14,7 @@ from pathlib import Path
 from time import time
 from typing import Tuple
 
+import openvino.torch  # noqa
 import torch
 import torch.nn as nn
 import torch.nn.parallel
