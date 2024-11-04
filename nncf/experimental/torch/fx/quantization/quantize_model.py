@@ -16,7 +16,6 @@ import torch
 import torch.fx
 from torch.ao.quantization.pt2e.duplicate_dq_pass import DuplicateDQPass
 from torch.ao.quantization.pt2e.port_metadata_pass import PortNodeMetaForQDQ
-from torch.ao.quantization.pt2e.qat_utils import _fold_conv_bn_qat
 from torch.ao.quantization.pt2e.utils import _disallow_eval_train
 from torch.fx import GraphModule
 from torch.fx.passes.infra.pass_manager import PassManager
@@ -88,7 +87,7 @@ def quantize_impl(
 
     # To make it easier for bias correction algorithms,
     # biases are being separated by the followng calls.
-    disable_quantization = True
+    disable_quantization = False
     if not disable_quantization:
         apply_quantization_transformations(copied_model)
 
@@ -110,7 +109,8 @@ def quantize_impl(
     # is not preformant
     quantized_model = GraphModule(quantized_model, quantized_model.graph)
 
-    quantized_model = _fold_conv_bn_qat(quantized_model)
+    # from torch.ao.quantization.pt2e.qat_utils import _fold_conv_bn_qat
+    # quantized_model = _fold_conv_bn_qat(quantized_model)
     pm = PassManager([DuplicateDQPass()])
 
     quantized_model = pm(quantized_model).graph_module

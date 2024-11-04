@@ -247,8 +247,8 @@ def quantize_impl(exported_model, val_loader, validator):
         prepared_model = prepare_pt2e(exported_model, quantizer)
 
         for idx, batch in tqdm(enumerate(calibration_dataset.get_inference_data())):
-            if idx >= 300:
-                break
+            # if idx >= 300:
+            #    break
             prepared_model(batch)
 
         converted_model = convert_pt2e(prepared_model)
@@ -265,6 +265,9 @@ def quantize_impl(exported_model, val_loader, validator):
 
 TORCH_FX = False
 MODEL_NAME = "yolov8n"
+# MODEL_NAME = "yolo11n"
+
+# ultralytics==8.3.27
 
 
 def main():
@@ -363,6 +366,7 @@ def main():
 
 def main_export_not_strict():
     model = YOLO(f"{ROOT}/{MODEL_NAME}.pt")
+    # model = YOLO(f"{MODEL_NAME}.pt")
 
     # Prepare validation dataset and helper
     validator, data_loader = prepare_validation(model, "coco128.yaml")
@@ -370,9 +374,9 @@ def main_export_not_strict():
     batch = next(iter(data_loader))
     batch = validator.preprocess(batch)
 
-    fp_stats, total_images, total_objects = validate_fx(model.model, tqdm(data_loader), validator)
-    print("Floating-point original torch model")
-    print_statistics(fp_stats, total_images, total_objects)
+    # fp_stats, total_images, total_objects = validate_fx(model.model, tqdm(data_loader), validator)
+    # print("Floating-point original torch model")
+    # print_statistics(fp_stats, total_images, total_objects)
 
     model.model(batch["img"])
     ex_model = torch.export.export(model.model, args=(batch["img"],), strict=False).module()
@@ -386,7 +390,8 @@ def main_export_not_strict():
     g = FxGraphDrawer(ex_model, "yolo_compiled_not_strict")
     g.get_dot_graph().write_svg("yolo_compiled_not_strict.svg")
 
-    fp_stats, total_images, total_objects = validate_fx(ex_model, tqdm(data_loader), validator)
+    ex_model_compiled = torch.compile(deepcopy(ex_model), backend="openvino")
+    fp_stats, total_images, total_objects = validate_fx(ex_model_compiled, tqdm(data_loader), validator)
     print("Floating-point ex strict=False")
     print_statistics(fp_stats, total_images, total_objects)
 
@@ -395,7 +400,7 @@ def main_export_not_strict():
     g = FxGraphDrawer(quantized_model, "yolo_int8_compiled_not_strict")
     g.get_dot_graph().write_svg("yolo_int8_compiled_not_strict.svg")
 
-    exported_model = torch.export.export(quantized_model, args=(batch["img"],))
+    exported_model = torch.export.export(deepcopy(quantized_model), args=(batch["img"],))
     ov_model = ov.convert_model(exported_model, example_input=batch["img"])
     ov.serialize(ov_model, "yolo_int8__not_strict.xml")
 
@@ -412,7 +417,31 @@ def main_export_not_strict():
     int8_stats, total_images, total_objects = validate_fx(quantized_model, tqdm(data_loader), validator)
     print("Int8 ex strict=False")
     print_statistics(int8_stats, total_images, total_objects)
-    # No quantized were inserted, metrics are OK
+
+    ov_benchmarking = False
+    if ov_benchmarking:
+        print("benchmarking IR...")
+        ov_fp32 = torch.export.export(deepcopy(ex_model), args=(batch["img"],))
+        ov_fp32 = ov.convert_model(ov_fp32, example_input=batch["img"])
+        ov.serialize(ov_fp32, "yolo_not_strict.xml")
+        args = get_cfg(cfg=DEFAULT_CFG)
+        args.data = "coco128.yaml"
+        fp32_fps = benchmark_performance("yolo_not_strict.xml", args)
+        int8_fps = benchmark_performance("yolo_int8__not_strict.xml", args)
+        print("FPS:")
+        print(f"FP32: {fp32_fps}")
+        print(f"INT8: {int8_fps}")
+        print(f"Speedup: {int8_fps / fp32_fps}")
+
+    fx_benchmarking = False
+    if fx_benchmarking:
+        print("benchmarking fx...")
+        fp32_time = measure_time(ex_model_compiled, (batch["img"],), 1000)
+        int8_time = measure_time(quantized_model, (batch["img"],), 1000)
+        print("Latency, msec:")
+        print(f"FP32: {fp32_time}")
+        print(f"INT8: {int8_time}")
+        print(f"Speedup: {fp32_time / int8_time}")
 
 
 if __name__ == "__main__":
