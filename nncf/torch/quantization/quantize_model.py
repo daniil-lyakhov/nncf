@@ -73,6 +73,7 @@ def quantize_impl(
         advanced_parameters=advanced_parameters,
     )
     graph = nncf_network.nncf.get_graph()
+    graph.visualize_graph("nncf_graph_torch.dot")
     warning_model_no_batchwise_support(graph, advanced_parameters, model_type, OPERATIONS_OUTPUT_HAS_NO_BATCH_AXIS)
     quantized_model = quantization_algorithm.apply(nncf_network, graph, dataset=calibration_dataset)
 

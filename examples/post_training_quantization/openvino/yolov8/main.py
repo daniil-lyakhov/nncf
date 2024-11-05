@@ -289,6 +289,12 @@ def main():
         print("Floating-point Torch model validation results:")
         print_statistics(fp_stats, total_images, total_objects)
 
+        exported_model = torch.export.export(model.model, (batch["img"],), strict=False).module()
+        fp_stats, total_images, total_objects = validate_fx(exported_model, tqdm(data_loader), validator)
+        print("Floating-point exported GraphModule model validation results:")
+        print_statistics(fp_stats, total_images, total_objects)
+        breakpoint()
+
         if NNCF_QUANTIZATION:
             fp32_compiled_model = torch.compile(model.model, backend="openvino")
         else:
@@ -444,6 +450,44 @@ def main_export_not_strict():
         print(f"Speedup: {fp32_time / int8_time}")
 
 
+def main_nncf_torch():
+    model = YOLO(f"{ROOT}/{MODEL_NAME}.pt")
+    # model = YOLO(f"{MODEL_NAME}.pt")
+
+    # Prepare validation dataset and helper
+    validator, data_loader = prepare_validation(model, "coco128.yaml")
+
+    batch = next(iter(data_loader))
+    batch = validator.preprocess(batch)
+
+    def transform_fn(x):
+        batch = validator.preprocess(x)
+        return batch["img"]
+
+    calibration_dataset = nncf.Dataset(data_loader, transform_fn)
+
+    quantized_model = nncf.quantize(
+        model.model,
+        calibration_dataset,
+        subset_size=len(data_loader),
+        preset=nncf.QuantizationPreset.MIXED,
+        ignored_scope=nncf.IgnoredScope(
+            types=["__mul__", "__sub__", "sigmoid"],
+            subgraphs=[
+                nncf.Subgraph(
+                    inputs=["DetectionModel/Sequential[model]/Detect[22]/cat_3"],
+                    outputs=["/nncf_model_output_3"],
+                )
+            ],
+        ),
+    )
+    with torch.no_grad():
+        int8_stats, total_images, total_objects = validate_fx(quantized_model, tqdm(data_loader), validator)
+        print("Int8 torch nncf quantization no export:")
+        print_statistics(int8_stats, total_images, total_objects)
+
+
 if __name__ == "__main__":
-    main_export_not_strict()
+    main_nncf_torch()
+    # main_export_not_strict()
     # main()
