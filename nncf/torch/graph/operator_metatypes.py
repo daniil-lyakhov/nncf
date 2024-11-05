@@ -487,7 +487,10 @@ class PTLeakyRELUMetatype(PTOperatorMetatype):
 @PT_OPERATOR_METATYPES.register(is_subtype=True)
 class PTModuleLayerNormMetatype(PTModuleOperatorSubtype):
     name = "LayerNormOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["layer_norm"]}
+    module_to_function_names = {
+        NamespaceTarget.TORCH_NN_FUNCTIONAL: ["layer_norm"],
+        NamespaceTarget.ATEN: ["native_layer_norm"],
+    }
     hw_config_names = [HWConfigOpName.MVN]
     num_expected_input_edges = 1
     weight_port_ids = [2]
@@ -496,7 +499,10 @@ class PTModuleLayerNormMetatype(PTModuleOperatorSubtype):
 @PT_OPERATOR_METATYPES.register()
 class PTLayerNormMetatype(PTOperatorMetatype):
     name = "LayerNormOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["layer_norm"]}
+    module_to_function_names = {
+        NamespaceTarget.TORCH_NN_FUNCTIONAL: ["layer_norm"],
+        NamespaceTarget.ATEN: ["native_layer_norm"],
+    }
     hw_config_names = [HWConfigOpName.MVN]
     subtypes = [PTModuleLayerNormMetatype]
     num_expected_input_edges = 1
@@ -506,7 +512,10 @@ class PTLayerNormMetatype(PTOperatorMetatype):
 @PT_OPERATOR_METATYPES.register(is_subtype=True)
 class PTModuleGroupNormMetatype(PTModuleOperatorSubtype):
     name = "GroupNormOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["group_norm"]}
+    module_to_function_names = {
+        NamespaceTarget.TORCH_NN_FUNCTIONAL: ["group_norm"],
+        NamespaceTarget.ATEN: ["native_group_norm"],
+    }
     hw_config_names = [HWConfigOpName.MVN]
     weight_port_ids = [2]
 
@@ -514,7 +523,10 @@ class PTModuleGroupNormMetatype(PTModuleOperatorSubtype):
 @PT_OPERATOR_METATYPES.register()
 class PTGroupNormMetatype(PTOperatorMetatype):
     name = "GroupNormOp"
-    module_to_function_names = {NamespaceTarget.TORCH_NN_FUNCTIONAL: ["group_norm"]}
+    module_to_function_names = {
+        NamespaceTarget.TORCH_NN_FUNCTIONAL: ["group_norm"],
+        NamespaceTarget.ATEN: ["native_group_norm"],
+    }
     hw_config_names = [HWConfigOpName.MVN]
     subtypes = [PTModuleGroupNormMetatype]
     weight_port_ids = [2]
@@ -1105,6 +1117,7 @@ class PTScaledDotProductAttentionMetatype(PTOperatorMetatype):
     name = "ScaledDotProductAttentionOp"
     module_to_function_names = {
         NamespaceTarget.TORCH_NN_FUNCTIONAL: ["scaled_dot_product_attention"],
+        NamespaceTarget.ATEN: ["_scaled_dot_product_flash_attention_for_cpu"],
     }
     hw_config_names = [HWConfigOpName.SCALED_DOT_PRODUCT_ATTENTION]
     target_input_ports = [0, 1]
