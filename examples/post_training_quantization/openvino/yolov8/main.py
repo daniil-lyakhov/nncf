@@ -37,8 +37,12 @@ from ultralytics.utils import DEFAULT_CFG
 from ultralytics.utils.torch_utils import de_parallel
 
 import nncf
+from nncf.torch import disable_patching
 
-ROOT = Path(__file__).parent.resolve()
+disable_patching()
+
+
+ROOT = Path(__file__).parent.resolve()  # noqa
 
 
 def measure_time(model, example_inputs, num_iters=100):
@@ -219,9 +223,10 @@ def quantize_impl(exported_model, val_loader, validator):
             exported_model,
             calibration_dataset,
             subset_size=len(val_loader),
+            # model_type=nncf.ModelType.TRANSFORMER,
             preset=nncf.QuantizationPreset.MIXED,
             ignored_scope=nncf.IgnoredScope(
-                types=["mul", "sub", "sigmoid"],
+                types=["mul", "sub", "sigmoid", "__getitem__"],
                 subgraphs=[
                     nncf.Subgraph(
                         inputs=["cat_13", "cat_14", "cat_15"],
@@ -233,8 +238,8 @@ def quantize_impl(exported_model, val_loader, validator):
         g = FxGraphDrawer(converted_model, "yolo_nncf_fx_int8")
         g.get_dot_graph().write_svg(dir_name + "/yolo_nncf_fx_int8.svg")
 
-        quantized_model = torch.compile(converted_model, backend="openvino")
-        return quantized_model
+        # converted_model = torch.compile(converted_model, backend="openvino")
+        return converted_model
     else:
         from torch.ao.quantization.quantize_pt2e import convert_pt2e
         from torch.ao.quantization.quantize_pt2e import prepare_pt2e
@@ -264,8 +269,8 @@ def quantize_impl(exported_model, val_loader, validator):
 
 
 TORCH_FX = False
-MODEL_NAME = "yolov8n"
-# MODEL_NAME = "yolo11n"
+# MODEL_NAME = "yolov8n"
+MODEL_NAME = "yolo11n"
 
 # ultralytics==8.3.27
 
@@ -293,7 +298,6 @@ def main():
         fp_stats, total_images, total_objects = validate_fx(exported_model, tqdm(data_loader), validator)
         print("Floating-point exported GraphModule model validation results:")
         print_statistics(fp_stats, total_images, total_objects)
-        breakpoint()
 
         if NNCF_QUANTIZATION:
             fp32_compiled_model = torch.compile(model.model, backend="openvino")
@@ -406,26 +410,30 @@ def main_export_not_strict():
     g = FxGraphDrawer(quantized_model, "yolo_int8_compiled_not_strict")
     g.get_dot_graph().write_svg("yolo_int8_compiled_not_strict.svg")
 
-    exported_model = torch.export.export(deepcopy(quantized_model), args=(batch["img"],))
-    ov_model = ov.convert_model(exported_model, example_input=batch["img"])
-    ov.serialize(ov_model, "yolo_int8__not_strict.xml")
+    export_int8_2_ov = False
+    if export_int8_2_ov:
+        exported_model = torch.export.export(deepcopy(quantized_model), args=(batch["img"],))
+        ov_model = ov.convert_model(exported_model, example_input=batch["img"])
+        ov.serialize(ov_model, "yolo_int8__not_strict.xml")
 
-    fp_stats, total_images, total_objects = validate_ov(ov_model, tqdm(data_loader), validator)
-    print("INT8 OV strict=False")
-    print_statistics(fp_stats, total_images, total_objects)
+        fp_stats, total_images, total_objects = validate_ov(ov_model, tqdm(data_loader), validator)
+        print("INT8 OV strict=False")
+        print_statistics(fp_stats, total_images, total_objects)
 
-    # quantized_model = openvino_compile(quantized_model, batch["img"])
-    quantized_model = torch.compile(
-        quantized_model,
-        backend="openvino",
-        options={"device": "CPU", "model_caching": True, "cache_dir": "./model_cache"},
-    )
-    int8_stats, total_images, total_objects = validate_fx(quantized_model, tqdm(data_loader), validator)
-    print("Int8 ex strict=False")
-    print_statistics(int8_stats, total_images, total_objects)
+    val_fx_int8 = True
+    if val_fx_int8:
+        # quantized_model = openvino_compile(quantized_model, batch["img"])
+        quantized_model = torch.compile(
+            quantized_model,
+            backend="openvino",
+            options={"device": "CPU", "model_caching": True, "cache_dir": "./model_cache"},
+        )
+        int8_stats, total_images, total_objects = validate_fx(quantized_model, tqdm(data_loader), validator)
+        print("Int8 ex strict=False")
+        print_statistics(int8_stats, total_images, total_objects)
 
     ov_benchmarking = False
-    if ov_benchmarking:
+    if export_int8_2_ov and ov_benchmarking:
         print("benchmarking IR...")
         ov_fp32 = torch.export.export(deepcopy(ex_model), args=(batch["img"],))
         ov_fp32 = ov.convert_model(ov_fp32, example_input=batch["img"])
@@ -439,8 +447,8 @@ def main_export_not_strict():
         print(f"INT8: {int8_fps}")
         print(f"Speedup: {int8_fps / fp32_fps}")
 
-    fx_benchmarking = False
-    if fx_benchmarking:
+    fx_benchmarking = True
+    if val_fx_int8 and fx_benchmarking:
         print("benchmarking fx...")
         fp32_time = measure_time(ex_model_compiled, (batch["img"],), 1000)
         int8_time = measure_time(quantized_model, (batch["img"],), 1000)
@@ -488,6 +496,6 @@ def main_nncf_torch():
 
 
 if __name__ == "__main__":
-    main_nncf_torch()
-    # main_export_not_strict()
+    # main_nncf_torch()
+    main_export_not_strict()
     # main()

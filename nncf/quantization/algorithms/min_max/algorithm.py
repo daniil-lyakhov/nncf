@@ -995,7 +995,6 @@ class MinMaxQuantization(Algorithm):
         self._set_backend_entity(model)
         self._reset_cache()
         quantization_target_points, _ = self._get_quantization_target_points(model, graph)
-        # breakpoint()
         # ![(k.__dict__,v.__dict__) for k, v in quantization_target_points.items() if v.mode == 'asymmetric']
         output = StatisticPointsContainer()
         for quantization_target_point, qconfig in quantization_target_points.items():

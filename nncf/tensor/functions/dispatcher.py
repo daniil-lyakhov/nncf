@@ -26,6 +26,7 @@ def tensor_guard(func: callable):
     def wrapper(*args, **kwargs):
         if isinstance(args[0], Tensor):
             return func(*args, **kwargs)
+        breakpoint()
         raise NotImplementedError(f"Function `{func.__name__}` is not implemented for {type(args[0])}")
 
     return wrapper
