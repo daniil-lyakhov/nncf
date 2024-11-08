@@ -223,7 +223,7 @@ def quantize_impl(exported_model, val_loader, validator):
             exported_model,
             calibration_dataset,
             subset_size=len(val_loader),
-            # model_type=nncf.ModelType.TRANSFORMER,
+            model_type=nncf.ModelType.TRANSFORMER,
             preset=nncf.QuantizationPreset.MIXED,
             ignored_scope=nncf.IgnoredScope(
                 types=["mul", "sub", "sigmoid", "__getitem__"],
@@ -401,9 +401,11 @@ def main_export_not_strict():
     g.get_dot_graph().write_svg("yolo_compiled_not_strict.svg")
 
     ex_model_compiled = torch.compile(deepcopy(ex_model), backend="openvino")
-    fp_stats, total_images, total_objects = validate_fx(ex_model_compiled, tqdm(data_loader), validator)
-    print("Floating-point ex strict=False")
-    print_statistics(fp_stats, total_images, total_objects)
+    validate_exported_fp32 = False
+    if validate_exported_fp32:
+        fp_stats, total_images, total_objects = validate_fx(ex_model_compiled, tqdm(data_loader), validator)
+        print("Floating-point ex strict=False")
+        print_statistics(fp_stats, total_images, total_objects)
 
     quantized_model = quantize_impl(deepcopy(ex_model), data_loader, validator)
 
@@ -426,13 +428,13 @@ def main_export_not_strict():
         quantized_model = torch.compile(
             quantized_model,
             backend="openvino",
-            options={"device": "CPU", "model_caching": True, "cache_dir": "./model_cache"},
+            # options={"device": "CPU", "model_caching": True, "cache_dir": "./model_cache"},
         )
         int8_stats, total_images, total_objects = validate_fx(quantized_model, tqdm(data_loader), validator)
         print("Int8 ex strict=False")
         print_statistics(int8_stats, total_images, total_objects)
 
-    ov_benchmarking = False
+    ov_benchmarking = True
     if export_int8_2_ov and ov_benchmarking:
         print("benchmarking IR...")
         ov_fp32 = torch.export.export(deepcopy(ex_model), args=(batch["img"],))
