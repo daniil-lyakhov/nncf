@@ -342,38 +342,38 @@ class BenchmarkPipeline:
 
 PIPELINES = (
     BenchmarkPipeline(
-        # TorchExport(),
-        CapturePreAutogradGraphExport(),
+        TorchExport(),
+        # CapturePreAutogradGraphExport(),
         NoQuantize(),
         [
             (TorchCompileExport(), LatencyBenchmark()),
             (TorchCompileOVExport(), LatencyBenchmark()),
-            (OpenvinoIRExport(), LatencyBenchmark()),
+            (OpenvinoIRExport(), BenchmarkAppFPS()),
         ],
     ),
     BenchmarkPipeline(
-        # TorchExport(),
-        CapturePreAutogradGraphExport(),
+        TorchExport(),
+        # CapturePreAutogradGraphExport(),
         NNCFQuantize(compress_weights=True),
         [
             (TorchCompileOVExport(), LatencyBenchmark()),
-            (OpenvinoIRExport(), LatencyBenchmark()),
+            (OpenvinoIRExport(), BenchmarkAppFPS()),
         ],
     ),
-    BenchmarkPipeline(
-        # TorchExport(),
-        CapturePreAutogradGraphExport(),
-        NNCFQuantize(compress_weights=False),
-        [
-            (TorchCompileExport(), LatencyBenchmark()),
-        ],
-    ),
-    BenchmarkPipeline(
-        # TorchExport(),
-        CapturePreAutogradGraphExport(),
-        TorchAOQuantize(fold_quantize=False),
-        [(TorchCompileOVExport(), LatencyBenchmark()), (TorchCompileExport(), LatencyBenchmark())],
-    ),
+    # BenchmarkPipeline(
+    #    # TorchExport(),
+    #    CapturePreAutogradGraphExport(),
+    #    NNCFQuantize(compress_weights=False),
+    #    [
+    #        (TorchCompileExport(), LatencyBenchmark()),
+    #    ],
+    # ),
+    # BenchmarkPipeline(
+    #    # TorchExport(),
+    #    CapturePreAutogradGraphExport(),
+    #    TorchAOQuantize(fold_quantize=False),
+    #    [(TorchCompileOVExport(), LatencyBenchmark()), (TorchCompileExport(), LatencyBenchmark())],
+    # ),
     # BenchmarkPipeline(
     #    # TorchExport(),
     #    CapturePreAutogradGraphExport(),
@@ -386,12 +386,12 @@ PIPELINES = (
         NNCFQuantize(compress_weights=False),
         [(NoExport(), LatencyBenchmark())],
     ),
-)
+)[0:2]
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", help="Target model name", type=str, default="all")
+    parser.add_argument("--model", help="Target model name", type=str, default="yolov8n")
     parser.add_argument("--file_name", help="Output csv file_name", type=str, default="result.csv")
 
     args = parser.parse_args()
