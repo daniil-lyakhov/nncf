@@ -98,4 +98,20 @@ MODEL_SCOPE = {
         num_iters=100,
         torch_export_strict=False,
     ),
+    "yolo11n": ModelConfig(
+        UltralyticsModelBuilder("yolo11n"),
+        {
+            # "ignored_scope": nncf.IgnoredScope(
+            #    types=["mul", "sub", "sigmoid"],
+            #    subgraphs=[
+            #        nncf.Subgraph(
+            #            inputs=["cat_13", "cat_14", "cat_15"],
+            #            outputs=["output"],
+            #        )
+            #    ],
+            # )
+        },
+        num_iters=500,
+        torch_export_strict=False,
+    ),
 }

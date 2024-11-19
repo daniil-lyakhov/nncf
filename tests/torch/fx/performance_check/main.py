@@ -342,8 +342,8 @@ class BenchmarkPipeline:
 
 PIPELINES = (
     BenchmarkPipeline(
-        # TorchExport(),
-        CapturePreAutogradGraphExport(),
+        TorchExport(),
+        # CapturePreAutogradGraphExport(),
         NoQuantize(),
         [
             (TorchCompileExport(), LatencyBenchmark()),
@@ -352,8 +352,8 @@ PIPELINES = (
         ],
     ),
     BenchmarkPipeline(
-        # TorchExport(),
-        CapturePreAutogradGraphExport(),
+        TorchExport(),
+        # CapturePreAutogradGraphExport(),
         NNCFQuantize(compress_weights=True),
         [
             (TorchCompileOVExport(), LatencyBenchmark()),
@@ -361,16 +361,16 @@ PIPELINES = (
         ],
     ),
     BenchmarkPipeline(
-        # TorchExport(),
-        CapturePreAutogradGraphExport(),
+        TorchExport(),
+        # CapturePreAutogradGraphExport(),
         NNCFQuantize(compress_weights=False),
         [
             (TorchCompileExport(), LatencyBenchmark()),
         ],
     ),
     BenchmarkPipeline(
-        # TorchExport(),
-        CapturePreAutogradGraphExport(),
+        TorchExport(),
+        # CapturePreAutogradGraphExport(),
         TorchAOQuantize(fold_quantize=False),
         [(TorchCompileOVExport(), LatencyBenchmark()), (TorchCompileExport(), LatencyBenchmark())],
     ),
