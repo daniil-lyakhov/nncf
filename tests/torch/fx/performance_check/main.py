@@ -13,6 +13,7 @@ import os
 from abc import ABC
 from abc import abstractmethod
 from copy import deepcopy
+from enum import Enum
 from typing import Any, List, Tuple, Union
 
 # This should be set befre any torch import
@@ -158,29 +159,40 @@ class NNCFQuantize(CompressionInference):
         self.serialize_fx_int8_graph = serialize_fx_int8_graph
         self.compress_weights = compress_weights
 
+    @staticmethod
+    def _get_backend(model) -> str:
+        if isinstance(model, torch.fx.GraphModule):
+            return "FX"
+        if isinstance(model, ov.Model):
+            return "OV"
+        return ""
+
     def __call__(self, model: Any, model_config: ModelConfig, save_dir: Path) -> Any:
-        advanced_parameters = model_config.quantization_params.get(
-            "advanced_parameters", AdvancedQuantizationParameters()
-        )
+        quantization_params = deepcopy(model_config.quantization_params)
+        advanced_parameters = quantization_params.get("advanced_parameters", AdvancedQuantizationParameters())
         advanced_parameters.backend_params[FXBackendParameters.COMPRESS_WEIGHTS] = self.compress_weights
-        model_config.quantization_params["advanced_parameters"] = advanced_parameters
+        quantization_params["advanced_parameters"] = advanced_parameters
+
+        backend = self._get_backend(model)
+        if "fx" in quantization_params:
+            fx_params = quantization_params.pop("fx")
+            if backend == "FX":
+                quantization_params = {**quantization_params, **fx_params}
+
         with disable_patching():
             with torch.no_grad():
                 example_inputs = model_config.model_builder.get_example_inputs()
                 quantized_model = nncf.quantize(
                     model,
                     nncf.Dataset(example_inputs),
-                    **model_config.quantization_params,
+                    **quantization_params,
                 )
-        backend = ""
-        if isinstance(quantized_model, ov.Model):
-            backend = "OV"
+        if backend == "OV":
             ov_int8_model_path = save_dir / "openvino_int8_model.xml"
             ov.serialize(quantized_model, ov_int8_model_path)
             print(f"Openvino quantized model saved to {ov_int8_model_path}")
 
-        elif isinstance(quantized_model, torch.fx.GraphModule):
-            backend = "FX"
+        elif backend == "FX":
             _save_int8_torch_fx_info(quantized_model, save_dir, self.serialize_fx_int8_graph, "nncf")
 
         int8_graph_visualization_path = str(save_dir / f"{backend}_int8_nncf_graph.dot")
@@ -261,12 +273,26 @@ class LatencyBenchmark(BenchmarkInterface):
         return "Latency, msec"
 
 
+class BenchmarkAppMode(Enum):
+    SYNC = "sync"
+    ASYNC = "async"
+
+
 class BenchmarkAppFPS(BenchmarkInterface):
+    def __init__(self, mode: BenchmarkAppMode) -> None:
+        self.mode = mode
+
     def __call__(self, model: Any, model_config: ModelConfig, model_path: Path) -> Any:
-        return benchmark_performance(model_path, model_config.model_builder.get_input_sizes())
+        fps, latency = benchmark_performance(
+            model_path=model_path,
+            input_shape=model_config.model_builder.get_input_sizes(),
+            mode=self.mode.value,
+            num_iters=model_config.num_iters,
+        )
+        return fps, latency
 
     def name(self) -> str:
-        return "FPS"
+        return f"Benchmark app: {self.mode.value} (FPS, latency, msec))"
 
 
 def measure_time(model, example_inputs, num_iters=500):
@@ -295,13 +321,22 @@ def measure_time_ov(model, example_inputs, num_iters=500):
     return average_time
 
 
-def benchmark_performance(model_path, input_shape) -> float:
-    command = f"benchmark_app -m {model_path} -d CPU -api async -t 30"
+def benchmark_performance(model_path: str, input_shape: List[int], mode: str, num_iters: int) -> Tuple[float, float]:
+    if mode == "sync":
+        exec_mode = "latency"
+    else:
+        exec_mode = "throughput"
+
+    command = f"benchmark_app -m {model_path} -d CPU -hint {exec_mode} -niter {num_iters}"
     command += f' -shape "[{",".join(str(s) for s in input_shape)}]"'
     cmd_output = subprocess.check_output(command, shell=True)  # nosec
 
     match = re.search(r"Throughput\: (.+?) FPS", str(cmd_output))
-    return float(match.group(1))
+    fps = float(match.group(1))
+
+    match = re.search(r"Average\: (.+?) ms", str(cmd_output))
+    latency = float(match.group(1))
+    return fps, latency
 
 
 class BenchmarkPipeline:
@@ -310,12 +345,17 @@ class BenchmarkPipeline:
         export_before_q: ExportInterface,
         compress: CompressionInference,
         benchmarks: List[Tuple[ExportInterface, Union[List[BenchmarkInterface], BenchmarkInterface]]],
+        enabled: bool = True,
     ):
         self.export_before_q = export_before_q
         self.compress = compress
         self.benchmarks = benchmarks
+        self.enabled = enabled
 
     def run(self, model_name: torch.nn.Module, model_config: ModelConfig, save_dir: Path):
+        if not self.enabled:
+            return [], []
+
         pt_model = model_config.model_builder.build()
 
         exported_model = self.export_before_q(
@@ -341,14 +381,17 @@ class BenchmarkPipeline:
 
 
 PIPELINES = (
+    BenchmarkPipeline(NoExport(), NoQuantize(), [(NoExport(), LatencyBenchmark())], enabled=False),
     BenchmarkPipeline(
         TorchExport(),
         # CapturePreAutogradGraphExport(),
         NoQuantize(),
         [
-            (TorchCompileExport(), LatencyBenchmark()),
+            # (TorchCompileExport(), LatencyBenchmark()),
             (TorchCompileOVExport(), LatencyBenchmark()),
-            (OpenvinoIRExport(), LatencyBenchmark()),
+            # (OpenvinoIRExport(), LatencyBenchmark()),
+            (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.SYNC)),
+            # (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.ASYNC)),
         ],
     ),
     BenchmarkPipeline(
@@ -357,7 +400,9 @@ PIPELINES = (
         NNCFQuantize(compress_weights=True),
         [
             (TorchCompileOVExport(), LatencyBenchmark()),
-            (OpenvinoIRExport(), LatencyBenchmark()),
+            # (OpenvinoIRExport(), LatencyBenchmark()),
+            (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.SYNC)),
+            # (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.ASYNC)),
         ],
     ),
     BenchmarkPipeline(
@@ -367,6 +412,7 @@ PIPELINES = (
         [
             (TorchCompileExport(), LatencyBenchmark()),
         ],
+        enabled=False,
     ),
     BenchmarkPipeline(
         TorchExport(),
@@ -384,7 +430,12 @@ PIPELINES = (
         OpenvinoIRExport(),
         # CapturePreAutogradGraphExport(),
         NNCFQuantize(compress_weights=False),
-        [(NoExport(), LatencyBenchmark())],
+        [
+            (NoExport(), LatencyBenchmark()),
+            (NoExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.SYNC)),
+            (NoExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.ASYNC)),
+        ],
+        enabled=False,
     ),
 )
 

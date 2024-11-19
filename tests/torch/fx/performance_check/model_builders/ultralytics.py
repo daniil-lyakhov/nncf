@@ -16,7 +16,7 @@ from tests.torch.fx.performance_check.model_builders.base import BaseModelBuilde
 
 
 class UltralyticsModelBuilder(BaseModelBuilder):
-    INPUT_SHAPE = (1, 3, 224, 224)
+    INPUT_SHAPE = (1, 3, 640, 640)
 
     def __init__(self, model_id: str):
         self._model_id = model_id

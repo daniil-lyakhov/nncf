@@ -85,31 +85,37 @@ MODEL_SCOPE = {
     "yolov8n": ModelConfig(
         UltralyticsModelBuilder("yolov8n"),
         {
-            "ignored_scope": nncf.IgnoredScope(
-                types=["mul", "sub", "sigmoid"],
-                subgraphs=[
-                    nncf.Subgraph(
-                        inputs=["cat_13", "cat_14", "cat_15"],
-                        outputs=["output"],
-                    )
-                ],
-            )
+            "preset": QuantizationPreset.MIXED,
+            "fx": {
+                "ignored_scope": nncf.IgnoredScope(
+                    types=["mul", "sub", "sigmoid"],
+                    subgraphs=[
+                        nncf.Subgraph(
+                            inputs=["cat_13", "cat_14", "cat_15"],
+                            outputs=["output"],
+                        )
+                    ],
+                )
+            },
         },
-        num_iters=100,
+        num_iters=500,
         torch_export_strict=False,
     ),
     "yolo11n": ModelConfig(
         UltralyticsModelBuilder("yolo11n"),
         {
-            # "ignored_scope": nncf.IgnoredScope(
-            #    types=["mul", "sub", "sigmoid"],
-            #    subgraphs=[
-            #        nncf.Subgraph(
-            #            inputs=["cat_13", "cat_14", "cat_15"],
-            #            outputs=["output"],
-            #        )
-            #    ],
-            # )
+            "model_type": nncf.ModelType.TRANSFORMER,
+            "fx": {
+                "ignored_scope": nncf.IgnoredScope(
+                    types=["mul", "sub", "sigmoid", "__getitem__"],
+                    subgraphs=[
+                        nncf.Subgraph(
+                            inputs=["cat_13", "cat_14", "cat_15"],
+                            outputs=["output"],
+                        )
+                    ],
+                )
+            },
         },
         num_iters=500,
         torch_export_strict=False,
