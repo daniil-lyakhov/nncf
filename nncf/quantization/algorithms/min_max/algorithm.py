@@ -794,8 +794,7 @@ class MinMaxQuantization(Algorithm):
 
         :param quantizer_setup: Quantization Target Points in format of SingleConfigQuantizerSetup.
         :param nncf_graph: NNCFGraph instance.
-        :return: Mapping of quantization target points with associated quantization configuration,
-        along with target points for scale unification.
+        :return: SingleConfigQuantizerSetup for the given model.
         """
         backend = get_backend(model)
         device = self._target_device
