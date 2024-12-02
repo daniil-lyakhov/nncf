@@ -91,7 +91,7 @@ def quantize_impl(
     quantized_model = quantization_algorithm.apply(copied_model, nncf_graph, dataset=calibration_dataset)
 
     if is_weight_compression_needed(advanced_parameters):
-        compress_post_quantize_transformation(quantized_model)
+        compress_post_quantize_transformation(deepcopy(quantized_model))
     else:
         fq_weights_transformation(quantized_model)
 

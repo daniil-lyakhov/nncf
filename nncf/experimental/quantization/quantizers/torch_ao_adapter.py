@@ -11,18 +11,18 @@
 
 
 from collections import defaultdict
-from typing import Dict, List, Tuple, Union
+from typing import List, Tuple, Union
 
 import torch
 import torch.fx
+from torch.ao.quantization.pt2e.prepare import _get_edge_or_node_to_group_id
+from torch.ao.quantization.pt2e.prepare import _get_edge_or_node_to_qspec
 from torch.ao.quantization.quantizer import Quantizer as TorchAOQuantizer
 from torch.ao.quantization.quantizer.quantizer import QuantizationSpec
-from torch.ao.quantization.quantizer.quantizer import QuantizationSpecBase
 from torch.ao.quantization.quantizer.quantizer import SharedQuantizationSpec
 
 import nncf
 from nncf.common.graph.graph import NNCFGraph
-from nncf.common.logging import nncf_logger
 from nncf.common.quantization.quantizer_setup import ActivationQuantizationInsertionPoint
 from nncf.common.quantization.quantizer_setup import QuantizationPointBase
 from nncf.common.quantization.quantizer_setup import SingleConfigQuantizationPoint
@@ -103,68 +103,74 @@ class TorchAOQuantizerAdapter(Quantizer):
     @staticmethod
     def get_quantizer_config_from_annotated_model(anotated_model: torch.fx.GraphModule) -> SingleConfigQuantizerSetup:
         edge_or_node_to_qspec = _get_edge_or_node_to_qspec(anotated_model)
+        # Node means all output edges should be quantized.
+        # Edge means only one edge should be quantized.
+        edge_or_node_to_group_id = _get_edge_or_node_to_group_id(edge_or_node_to_qspec)
 
-        q_map = defaultdict(list)
-        for edge, qspec in edge_or_node_to_qspec.items():
-            if not isinstance(edge, tuple):
-                continue
-            from_n, to_n = edge
-            q_map[from_n].append(to_n)
+        group_id_vs_edges = defaultdict(set)
+        group_id_vs_qspec = {}
+        for edge_or_node, group_id in edge_or_node_to_group_id.items():
+            target_edges = [edge_or_node]
+            if isinstance(edge_or_node, torch.fx.Node):
+                target_edges = []
+                for user in edge_or_node.users:
+                    target_edges.append((edge_or_node, user))
+            group_id_vs_edges[group_id].update(target_edges)
+            # All qspecs should be aligned after the _get_edge_or_node_to_group_id call
+            group_id_vs_qspec[group_id] = _unwrap_shared_qspec(
+                edge_or_node_to_qspec[edge_or_node], edge_or_node_to_qspec
+            )
 
         q_setup = SingleConfigQuantizerSetup()
-        for from_n, to_nodes in q_map.items():
-            to_n = to_nodes[0]
-            qspec = edge_or_node_to_qspec[(from_n, to_n)]
+        for group_id, edges in group_id_vs_edges.items():
+            qspec = group_id_vs_qspec[group_id]
             if qspec is None:
                 continue
-            if isinstance(qspec, QuantizationSpec):
-                if qspec.qscheme in [torch.per_channel_affine, torch.per_channel_symmetric]:
-                    per_channel = True
-                elif qspec.qscheme in [torch.per_tensor_affine, torch.per_tensor_symmetric]:
-                    per_channel = False
-                else:
-                    raise nncf.InternalError(f"Unknown qscheme: {qspec.qscheme}")
-                signed = qspec.dtype is torch.int8
-                mode = (
-                    QuantizationMode.SYMMETRIC
-                    if qspec.qscheme in [torch.per_channel_symmetric, torch.per_tensor_symmetric]
-                    else QuantizationMode.ASYMMETRIC
-                )
-                qconfig = QuantizerConfig(mode=mode, signedness_to_force=signed, per_channel=per_channel)
-
-                qps = TorchAOQuantizerAdapter._get_quantization_points(from_n, to_nodes, anotated_model, qconfig)
-                for qp in qps:
-                    q_setup.add_independent_quantization_point(qp)
-
-            elif isinstance(qspec, SharedQuantizationSpec):
-                # TODO(dlyakhov): Support SharedQuantizationSpec
-                nncf_logger.warning(
-                    "SharedQuantizationSpec is not supported yet;" f" edges {from_n} -> {to_nodes} won't be quantized."
-                )
-            else:
+            if not isinstance(qspec, QuantizationSpec):
                 raise nncf.InternalError(f"Unknown torch.ao quantization spec: {qspec}")
+
+            if qspec.qscheme in [torch.per_channel_affine, torch.per_channel_symmetric]:
+                per_channel = True
+            elif qspec.qscheme in [torch.per_tensor_affine, torch.per_tensor_symmetric]:
+                per_channel = False
+            else:
+                raise nncf.InternalError(f"Unknown qscheme: {qspec.qscheme}")
+
+            signed = qspec.dtype is torch.int8
+            mode = (
+                QuantizationMode.SYMMETRIC
+                if qspec.qscheme in [torch.per_channel_symmetric, torch.per_tensor_symmetric]
+                else QuantizationMode.ASYMMETRIC
+            )
+            narrow_range = qspec.quant_min % 2 != 0
+            qconfig = QuantizerConfig(
+                mode=mode, signedness_to_force=signed, per_channel=per_channel, narrow_range=narrow_range
+            )
+
+            joined_edges = defaultdict(list)
+            for edge in edges:
+                joined_edges[edge[0]].append(edge[1])
+
+            qps = []
+            for from_node, to_nodes in joined_edges.items():
+                qps.extend(
+                    TorchAOQuantizerAdapter._get_quantization_points(from_node, to_nodes, anotated_model, qconfig)
+                )
+            qp_ids = []
+            for qp in qps:
+                qp_ids.append(q_setup.add_independent_quantization_point(qp))
+            if len(qp_ids) > 1:
+                q_setup.register_unified_scale_group(qp_ids)
 
         return q_setup
 
 
-def _get_edge_or_node_to_qspec(
-    model: torch.fx.GraphModule,
-) -> Dict[EdgeOrNode, QuantizationSpecBase]:
-    """
-    Get a map from EdgeOrNode to quantization spec based on annotations on the nodes.
-
-    :param model: torch.fx.GraphModule instance.
-    :return: A map from EdgeOrNode to quantization spec based on annotations on the nodes.
-    """
-    edge_or_node_to_qspec: Dict[EdgeOrNode, QuantizationSpecBase] = {}
-    for n in model.graph.nodes:
-        if hasattr(n, "meta") and "quantization_annotation" in n.meta:
-            qa = n.meta["quantization_annotation"]
-            for input_to_n, qspec in qa.input_qspec_map.items():
-                input_edge = (input_to_n, n)
-                edge_or_node_to_qspec[input_edge] = qspec
-            if qa.output_qspec is not None:
-                output_node = n
-                qspec = qa.output_qspec
-                edge_or_node_to_qspec[output_node] = qspec
-    return edge_or_node_to_qspec
+def _unwrap_shared_qspec(qspec, edge_or_node_to_qspec):
+    MAX_DEPTH = 1000
+    i = 0
+    while i < MAX_DEPTH and isinstance(qspec, SharedQuantizationSpec):
+        qspec = edge_or_node_to_qspec[qspec.edge_or_node]
+        i += 1
+    if i == MAX_DEPTH:
+        raise RuntimeError(f"Shared qspecs referenced to each other more than the limit: {MAX_DEPTH}")
+    return qspec

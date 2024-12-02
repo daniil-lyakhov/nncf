@@ -24,6 +24,7 @@ from nncf.quantization.advanced_parameters import AdvancedQuantizationParameters
 from nncf.quantization.advanced_parameters import AdvancedScaleEstimationParameters
 from nncf.quantization.advanced_parameters import AdvancedSmoothQuantParameters
 from tests.post_training.pipelines.base import ALL_PTQ_BACKENDS
+from tests.post_training.pipelines.base import FX_BACKENDS
 from tests.post_training.pipelines.base import NNCF_PTQ_BACKENDS
 from tests.post_training.pipelines.base import BackendType
 from tests.post_training.pipelines.causal_language_model import CausalLMHF
@@ -32,6 +33,7 @@ from tests.post_training.pipelines.image_classification_timm import ImageClassif
 from tests.post_training.pipelines.image_classification_torchvision import ImageClassificationTorchvision
 from tests.post_training.pipelines.lm_weight_compression import LMWeightCompression
 from tests.post_training.pipelines.masked_language_modeling import MaskedLanguageModelingHF
+from tests.post_training.pipelines.ultralytics_detection import UltralyticsDetection
 
 QUANTIZATION_MODELS = [
     # HF models
@@ -87,8 +89,8 @@ QUANTIZATION_MODELS = [
         "model_id": "resnet18",
         "pipeline_cls": ImageClassificationTorchvision,
         "compression_params": {},
-        "backends": [BackendType.FX_TORCH, BackendType.TORCH, BackendType.CUDA_TORCH, BackendType.OV, BackendType.ONNX],
-        "batch_size": 128,
+        "backends": FX_BACKENDS + [BackendType.TORCH, BackendType.CUDA_TORCH, BackendType.OV, BackendType.ONNX],
+        "batch_size": 1,
     },
     {
         "reported_name": "torchvision/mobilenet_v3_small_BC",
@@ -98,7 +100,7 @@ QUANTIZATION_MODELS = [
             "fast_bias_correction": False,
             "preset": QuantizationPreset.MIXED,
         },
-        "backends": [BackendType.FX_TORCH, BackendType.OV, BackendType.ONNX],
+        "backends": FX_BACKENDS + [BackendType.OV, BackendType.ONNX],
         "batch_size": 128,
     },
     {
@@ -109,7 +111,7 @@ QUANTIZATION_MODELS = [
             "model_type": ModelType.TRANSFORMER,
             "advanced_parameters": AdvancedQuantizationParameters(smooth_quant_alpha=0.15),
         },
-        "backends": [BackendType.FX_TORCH, BackendType.OV],
+        "backends": FX_BACKENDS + [BackendType.OV],
         "batch_size": 1,
     },
     {
@@ -120,7 +122,86 @@ QUANTIZATION_MODELS = [
             "model_type": ModelType.TRANSFORMER,
             "advanced_parameters": AdvancedQuantizationParameters(smooth_quant_alpha=0.5),
         },
-        "backends": [BackendType.FX_TORCH, BackendType.OV],
+        "backends": FX_BACKENDS + [BackendType.OV],
+        "batch_size": 1,
+    },
+    # Ultralytics models
+    {
+        "reported_name": "ultralytics/yolov8n",
+        "model_id": "yolov8n",
+        "pipeline_cls": UltralyticsDetection,
+        "compression_params": {
+            "preset": nncf.QuantizationPreset.MIXED,
+            "ignored_scope": nncf.IgnoredScope(
+                types=["mul", "sub", "sigmoid", "__getitem__"],
+                subgraphs=[
+                    nncf.Subgraph(
+                        inputs=["cat_13", "cat_14", "cat_15"],
+                        outputs=["output"],
+                    )
+                ],
+            ),
+        },
+        "backends": [BackendType.FX_TORCH],
+        "batch_size": 1,
+    },
+    {
+        "reported_name": "ultralytics/yolov8n",
+        "model_id": "yolov8n",
+        "pipeline_cls": UltralyticsDetection,
+        "compression_params": {
+            "preset": QuantizationPreset.MIXED,
+            "ignored_scope": nncf.IgnoredScope(
+                types=["Multiply", "Subtract", "Sigmoid"],
+                subgraphs=[
+                    nncf.Subgraph(
+                        inputs=["/model.22/Concat", "/model.22/Concat_1", "/model.22/Concat_2"],
+                        outputs=["output0/sink_port_0"],
+                    )
+                ],
+            ),
+        },
+        "backends": [BackendType.OV],
+        "batch_size": 1,
+    },
+    {
+        "reported_name": "ultralytics/yolo11n",
+        "model_id": "yolo11n",
+        "pipeline_cls": UltralyticsDetection,
+        "compression_params": {
+            "model_type": nncf.ModelType.TRANSFORMER,
+            "preset": QuantizationPreset.MIXED,
+            "ignored_scope": nncf.IgnoredScope(
+                types=["mul", "sub", "sigmoid", "__getitem__"],
+                subgraphs=[
+                    nncf.Subgraph(
+                        inputs=["cat_13", "cat_14", "cat_15"],
+                        outputs=["output"],
+                    )
+                ],
+            ),
+        },
+        "backends": [BackendType.FX_TORCH],
+        "batch_size": 1,
+    },
+    {
+        "reported_name": "ultralytics/yolo11n",
+        "model_id": "yolo11n",
+        "pipeline_cls": UltralyticsDetection,
+        "compression_params": {
+            "model_type": nncf.ModelType.TRANSFORMER,
+            "preset": QuantizationPreset.MIXED,
+            "ignored_scope": nncf.IgnoredScope(
+                types=["Multiply", "Subtract", "Sigmoid"],
+                subgraphs=[
+                    nncf.Subgraph(
+                        inputs=["/model.23/Concat", "/model.23/Concat_1", "/model.23/Concat_2"],
+                        outputs=["output0/sink_port_0"],
+                    )
+                ],
+            ),
+        },
+        "backends": [BackendType.OV],
         "batch_size": 1,
     },
     # Timm models

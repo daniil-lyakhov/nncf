@@ -89,6 +89,11 @@ def fixture_run_benchmark_app(pytestconfig):
     return pytestconfig.getoption("benchmark")
 
 
+@pytest.fixture(scope="session", name="validate_in_backend")
+def fixture_validate_in_backend(pytestconfig):
+    return pytestconfig.getoption("validate_in_backend")
+
+
 @pytest.fixture(scope="session", name="extra_columns")
 def fixture_extra_columns(pytestconfig):
     return pytestconfig.getoption("extra_columns")
@@ -280,6 +285,7 @@ def test_ptq_quantization(
     run_torch_cuda_backend: bool,
     subset_size: Optional[int],
     run_benchmark_app: bool,
+    validate_in_backend: bool,
     capsys: pytest.CaptureFixture,
     extra_columns: bool,
     memory_monitor: bool,
@@ -288,7 +294,7 @@ def test_ptq_quantization(
     err_msg = None
     test_model_param = None
     start_time = time.perf_counter()
-    try:
+    if True:
         if test_case_name not in ptq_reference_data:
             raise nncf.ValidationError(f"{test_case_name} does not exist in 'reference_data.yaml'")
         test_model_param = PTQ_TEST_CASES[test_case_name]
@@ -307,17 +313,13 @@ def test_ptq_quantization(
                 "data_dir": data_dir,
                 "no_eval": no_eval,
                 "run_benchmark_app": run_benchmark_app,
+                "validate_in_backend": validate_in_backend,
                 "batch_size": batch_size,
                 "memory_monitor": memory_monitor,
             }
         )
         pipeline: BaseTestPipeline = pipeline_cls(**pipeline_kwargs)
         pipeline.run()
-    except Exception as e:
-        err_msg = str(e)
-        if not err_msg:
-            err_msg = "Unknown exception"
-        traceback.print_exc()
 
     if pipeline is not None:
         pipeline.cleanup_cache()
