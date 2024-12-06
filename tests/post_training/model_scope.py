@@ -15,6 +15,7 @@ from typing import Dict, List
 import nncf
 from nncf import ModelType
 from nncf import QuantizationPreset
+from nncf.experimental.torch.fx.quantization.backend_parameters import FXBackendParameters
 from nncf.parameters import BackupMode
 from nncf.parameters import CompressWeightsMode
 from nncf.parameters import SensitivityMetric
@@ -142,7 +143,7 @@ QUANTIZATION_MODELS = [
                 ],
             ),
         },
-        "backends": [BackendType.FX_TORCH],
+        "backends": FX_BACKENDS,
         "batch_size": 1,
     },
     {
@@ -180,8 +181,12 @@ QUANTIZATION_MODELS = [
                     )
                 ],
             ),
+            "advanced_parameters": AdvancedQuantizationParameters(
+                # Weight compression decreases accuracu on 0.2
+                backend_params={FXBackendParameters.COMPRESS_WEIGHTS: False}
+            ),
         },
-        "backends": [BackendType.FX_TORCH],
+        "backends": FX_BACKENDS,
         "batch_size": 1,
     },
     {

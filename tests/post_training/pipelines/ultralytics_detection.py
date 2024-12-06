@@ -21,6 +21,7 @@ from ultralytics.utils.torch_utils import de_parallel
 
 import nncf
 from nncf.torch import disable_patching
+from tests.post_training.pipelines.base import FX_BACKENDS
 from tests.post_training.pipelines.base import OV_BACKENDS
 from tests.post_training.pipelines.base import BackendType
 from tests.post_training.pipelines.base import PTQTestPipeline
@@ -45,7 +46,7 @@ class UltralyticsDetection(PTQTestPipeline):
             ov.save_model(ov.convert_model(onnx_model_path), ir_model_path)
             self.model = ov.Core().read_model(ir_model_path)
 
-        if self.backend == BackendType.FX_TORCH:
+        if self.backend in FX_BACKENDS:
             pt_model = yolo.model
             # Run mode one time to initialize all
             # internal variables
@@ -60,9 +61,17 @@ class UltralyticsDetection(PTQTestPipeline):
 
     @staticmethod
     def _validate_fx(
-        model: ov.Model, data_loader: torch.utils.data.DataLoader, validator: Validator, num_samples: int = None
+        model: ov.Model,
+        data_loader: torch.utils.data.DataLoader,
+        validator: Validator,
+        backend: BackendType,
+        num_samples: int = None,
     ) -> Tuple[Dict, int, int]:
-        compiled_model = torch.compile(model, backend="openvino")
+        if backend in [BackendType.FX_TORCH, BackendType.OV_QUANTIZER_AO, BackendType.OV_QUANTIZER_NNCF]:
+            compiled_model = torch.compile(model, backend="openvino")
+        else:
+            compiled_model = torch.compile(model)
+
         for batch_i, batch in enumerate(data_loader):
             if num_samples is not None and batch_i == num_samples:
                 break
@@ -119,8 +128,10 @@ class UltralyticsDetection(PTQTestPipeline):
             stats, _, _ = self._validate_ov(self.model, self.data_loader, self.validator)
         elif self.backend in OV_BACKENDS:
             stats, _, _ = self._validate_ov(self.compressed_model, self.data_loader, self.validator)
-        elif self.backend == BackendType.FX_TORCH:
-            stats, _, _ = self._validate_fx(self.compressed_model, self.data_loader, self.validator)
+        elif self.backend in FX_BACKENDS:
+            stats, _, _ = self._validate_fx(
+                self.compressed_model, self.data_loader, self.validator, backend=self.backend
+            )
         else:
             raise RuntimeError(f"Backend {self.backend} is not supported in UltralyticsDetection")
 
