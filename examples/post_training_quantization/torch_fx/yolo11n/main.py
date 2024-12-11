@@ -9,19 +9,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Iterator
 
 import cv2
+import numpy as np
 import openvino as ov
 import openvino.torch  # noqa
 import torch
-from ultralytics.cfg import get_cfg
-from ultralytics.data.utils import check_det_dataset
-from ultralytics.engine.validator import BaseValidator as Validator
 from ultralytics.models.yolo import YOLO
-from ultralytics.models.yolo.detect.val import DetectionValidator
-from ultralytics.utils import DEFAULT_CFG
-from ultralytics.utils.torch_utils import de_parallel
 
 import nncf
 from nncf.torch import disable_patching
@@ -31,24 +26,42 @@ MODEL_NAME = "yolo11n"
 ROOT = Path(__file__).parent.resolve()
 
 
-def quantize(model: ov.Model, data_loader: torch.utils.data.DataLoader, validator: DetectionValidator) -> ov.Model:
-    def transform_fn(data_item: Dict):
-        """
-        Quantization transform function. Extracts and preprocess input data from dataloader
-        item for quantization.
-        Parameters:
-        data_item: Dict with data item produced by DataLoader during iteration
-        Returns:
-            input_tensor: Input data for quantization
-        """
-        input_tensor = validator.preprocess(data_item)["img"]
-        return input_tensor
+class CV2VideoIter:
+    def __init__(self, cap) -> None:
+        self._cap = cap
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        success, frame = self._cap.read()
+        if not success:
+            raise StopIteration()
+        return frame
+
+    def __len__(self):
+        return int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+
+class CV2VideoDataset(torch.utils.data.IterableDataset):
+    def __init__(self, cap) -> None:
+        super().__init__()
+        self._iter = CV2VideoIter(cap)
+
+    def __iter__(self) -> Iterator:
+        return self._iter
+
+    def __len__(self):
+        return len(self._iter)
+
+
+def quantize(model: ov.Model, data_loader: CV2VideoDataset, transform_fn) -> ov.Model:
 
     quantization_dataset = nncf.Dataset(data_loader, transform_fn)
     quantized_model = nncf.quantize(
         model,
         quantization_dataset,
-        subset_size=len(data_loader),
+        subset_size=300,
         preset=nncf.QuantizationPreset.MIXED,
         ignored_scope=nncf.IgnoredScope(
             types=["mul", "sub", "sigmoid", "__getitem__"],
@@ -63,65 +76,53 @@ def quantize(model: ov.Model, data_loader: torch.utils.data.DataLoader, validato
     return quantized_model
 
 
-def _prepare_validation(model: YOLO, data: str) -> Tuple[Validator, torch.utils.data.DataLoader]:
-    custom = {"rect": False, "batch": 1}  # method defaults
-    args = {**model.overrides, **custom, "mode": "val"}  # highest priority args on the right
-
-    validator = model._smart_load("validator")(args=args, _callbacks=model.callbacks)
-    stride = 32  # default stride
-    validator.stride = stride  # used in get_dataloader() for padding
-    validator.data = check_det_dataset(data)
-    validator.init_metrics(de_parallel(model))
-
-    data_loader = validator.get_dataloader(validator.data.get(validator.args.split), validator.args.batch)
-
-    return validator, data_loader
-
-
 # ultralytics==8.3.27
 def main():
     model = YOLO(ROOT / f"{MODEL_NAME}.pt")
 
-    args = get_cfg(cfg=DEFAULT_CFG)
-    args.data = "coco128.yaml"
-    validator, data_loader = _prepare_validation(model, "coco128.yaml")
-    import numpy as np
+    # Open the video file
+    video_path = (
+        # "/home/dlyakhov/Projects/nncf/examples/
+        # post_training_quantization/torch_fx/yolo11n/Camera_road_in_Thailand.mp4"
+        "/home/dlyakhov/Projects/nncf/examples/post_training_quantization/torch_fx/yolo11n/animals.mp4"
+    )
 
-    np_dummy_tensor = np.ones((360, 640, 3))
-    breakpoint()
-    model(np_dummy_tensor)
+    save_path = "out_int8"
+    save_path = "out"
+    cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
 
-    pt_model = model.model
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
+    # Setup pre-processing
+    np_dummy_tensor = np.ones((height, width, 3))
+    model.predict(np_dummy_tensor, imgsz=((height, width)), device="cpu")
+    # model.predict(frame)
+
+    pt_model = model.model.to(torch.device("cpu"))
     # Run mode one time to initialize all
     # internal variables
     # pt_model(dummy_tensor)
 
-    dummy_tensor = torch.ones((1, 3, 384, 640))
-    dummy_tensor = torch.ones((1, 3, 640, 640))
+    def transform_fn(frame):
+        input_tensor = model.predictor.preprocess([frame])
+        return input_tensor
+
     with torch.no_grad():
         with disable_patching():
             pass
             # pt_model = torch.export.export(pt_model, args=(dummy_tensor,), strict=True).module()
             # pt_model = torch.compile(pt_model)
-            pt_model = torch.export.export(pt_model, args=(dummy_tensor,), strict=False).module()
+            pt_model = torch.export.export(pt_model, args=(transform_fn(np_dummy_tensor),), strict=False).module()
             # pt_model = torch.compile(pt_model, backend="openvino")
 
-    pt_model = quantize(pt_model, data_loader, validator)
-    pt_model = torch.export.export(pt_model, args=(torch.ones((1, 3, 384, 640)),), strict=False).module()
+    # pt_model = quantize(pt_model, CV2VideoDataset(cap), transform_fn)
+    # pt_model = torch.export.export(pt_model, args=(torch.ones((1, 3, 384, 640)),), strict=False).module()
     pt_model = torch.compile(pt_model, backend="openvino")
     # exit()
     # model.predict(source="https://youtu.be/4aWufTZDLMU?si=Vd24h_w39XJb1PgX", save=True)
     # model.predict(source="tcp://127.0.0.1:23000", save=True, name="ov_stream")
 
-    # Open the video file
-    video_path = (
-        "/home/dlyakhov/Projects/nncf/examples/post_training_quantization/openvino/yolov8/Camera_road_in_Thailand.mp4"
-    )
-    save_path = "out"
-    cap = cv2.VideoCapture(video_path)
-
-    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float `width`
-    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
     suffix, fourcc = (".avi", "MJPG")
     vid_writer = cv2.VideoWriter(
         filename=str(Path(save_path).with_suffix(suffix)),
@@ -131,25 +132,29 @@ def main():
     )
 
     idx = 0
-    sec = 10
+    sec = 40
     fps = 30
+    # Reset video duration
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     while cap.isOpened():
         # Read a frame from the video
         idx += 1
         if idx > fps * sec:
             break
 
-        if idx % fps == 0:
-            print(f"{idx // fps}/{sec}")
-
         success, frame = cap.read()
 
         if not success:
             break
+
+        if idx % fps == 0:
+            print(f"{idx // fps}/{sec}")
+            print(frame.shape)
+
         # Run YOLO inference on the frame
 
         # frame = torch.tensor(frame).transpose(0, -1).unsqueeze(0)
-        pre_frame = model.predictor.preprocess([frame])
+        pre_frame = transform_fn(frame)
         results = pt_model(pre_frame)
         results = model.predictor.postprocess(results, pre_frame, [frame])
 
