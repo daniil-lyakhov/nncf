@@ -8,8 +8,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 from pathlib import Path
+from time import time
 from typing import Iterator
+
+os.environ["TORCHINDUCTOR_FREEZING"] = "1"
 
 import cv2
 import numpy as np
@@ -24,6 +28,29 @@ from nncf.torch import disable_patching
 MODEL_NAME = "yolo11n"
 
 ROOT = Path(__file__).parent.resolve()
+
+
+class AverageMeter:
+    """Computes and stores the average and current value"""
+
+    def __init__(self):
+        self.val = None
+        self.avg = None
+        self.sum = None
+        self.count = None
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
 
 
 class CV2VideoIter:
@@ -63,6 +90,7 @@ def quantize(model: ov.Model, data_loader: CV2VideoDataset, transform_fn) -> ov.
         quantization_dataset,
         subset_size=300,
         preset=nncf.QuantizationPreset.MIXED,
+        model_type=nncf.ModelType.TRANSFORMER,
         ignored_scope=nncf.IgnoredScope(
             types=["mul", "sub", "sigmoid", "__getitem__"],
             subgraphs=[
@@ -77,18 +105,18 @@ def quantize(model: ov.Model, data_loader: CV2VideoDataset, transform_fn) -> ov.
 
 
 # ultralytics==8.3.27
-def main():
+def main(quantize_model: bool):
     model = YOLO(ROOT / f"{MODEL_NAME}.pt")
 
     # Open the video file
     video_path = (
-        # "/home/dlyakhov/Projects/nncf/examples/
-        # post_training_quantization/torch_fx/yolo11n/Camera_road_in_Thailand.mp4"
-        "/home/dlyakhov/Projects/nncf/examples/post_training_quantization/torch_fx/yolo11n/animals.mp4"
+        # "/home/dlyakhov/Projects/nncf/examples/post_training_quantization/torch_fx/yolo11n/nn.mp4"
+        "/home/dlyakhov/Projects/nncf/examples/"
+        "post_training_quantization/torch_fx/yolo11n/Camera_road_in_Thailand.mp4"
+        # "/home/dlyakhov/Projects/nncf/examples/post_training_quantization/torch_fx/yolo11n/animals.mp4"
     )
 
-    save_path = "out_int8"
-    save_path = "out"
+    save_path = "out_int8" if quantize_model else "out"
     cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
 
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -113,16 +141,26 @@ def main():
             pass
             # pt_model = torch.export.export(pt_model, args=(dummy_tensor,), strict=True).module()
             # pt_model = torch.compile(pt_model)
-            pt_model = torch.export.export(pt_model, args=(transform_fn(np_dummy_tensor),), strict=False).module()
+            if quantize_model:
+                pt_model = torch.export.export(pt_model, args=(transform_fn(np_dummy_tensor),), strict=False).module()
+            else:
+                pt_model = torch.export.export(pt_model, args=(transform_fn(np_dummy_tensor),)).module()
             # pt_model = torch.compile(pt_model, backend="openvino")
 
-    # pt_model = quantize(pt_model, CV2VideoDataset(cap), transform_fn)
-    # pt_model = torch.export.export(pt_model, args=(torch.ones((1, 3, 384, 640)),), strict=False).module()
-    pt_model = torch.compile(pt_model, backend="openvino")
+    if quantize_model:
+        pt_model = quantize(pt_model, CV2VideoDataset(cap), transform_fn)
+        # pt_model = torch.export.export(pt_model, args=(torch.ones((1, 3, 384, 640)),), strict=False).module()
+        pt_model = torch.compile(pt_model, backend="openvino")
+    else:
+        # pt_model = torch.compile(pt_model, backend="openvino")
+        pt_model = torch.compile(pt_model)
+    # JIT
+    with torch.no_grad():
+        with disable_patching():
+            pt_model(transform_fn(np_dummy_tensor))
     # exit()
     # model.predict(source="https://youtu.be/4aWufTZDLMU?si=Vd24h_w39XJb1PgX", save=True)
     # model.predict(source="tcp://127.0.0.1:23000", save=True, name="ov_stream")
-
     suffix, fourcc = (".avi", "MJPG")
     vid_writer = cv2.VideoWriter(
         filename=str(Path(save_path).with_suffix(suffix)),
@@ -131,11 +169,46 @@ def main():
         frameSize=(int(width), int(height)),  # (width, height)
     )
 
+    with torch.no_grad():
+        with disable_patching():
+            res = run_(cap, model, pt_model, transform_fn, vid_writer)
+
+    # Release the video capture object and close the display window
+    cap.release()
+    vid_writer.release()
+
+    cap = cv2.VideoCapture(str(Path(save_path).with_suffix(suffix)), cv2.CAP_FFMPEG)
+
+    new_fps = int(1 / res.avg)
+    vid_writer = cv2.VideoWriter(
+        filename=str(Path(save_path + "_actual_speed").with_suffix(suffix)),
+        fourcc=cv2.VideoWriter_fourcc(*fourcc),
+        fps=new_fps,  # integer required, floats produce error in MP4 codec
+        frameSize=(int(width), int(height)),  # (width, height)
+    )
+
+    while cap.isOpened():
+        # Read a frame from the video
+        success, frame = cap.read()
+
+        if not success:
+            break
+        vid_writer.write(frame)
+
+    cap.release()
+    vid_writer.release()
+    print(f"quantize=={quantize_model}")
+    print(res.__dict__)
+    return res
+
+
+def run_(cap, model, pt_model, transform_fn, vid_writer):
     idx = 0
     sec = 40
     fps = 30
     # Reset video duration
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    average_meter = AverageMeter()
     while cap.isOpened():
         # Read a frame from the video
         idx += 1
@@ -155,18 +228,23 @@ def main():
 
         # frame = torch.tensor(frame).transpose(0, -1).unsqueeze(0)
         pre_frame = transform_fn(frame)
+        start = time()
         results = pt_model(pre_frame)
+        lat = time() - start
         results = model.predictor.postprocess(results, pre_frame, [frame])
 
         # Visualize the results on the frame
         annotated_frame = results[0].plot()
+        average_meter.update(lat)
 
         vid_writer.write(annotated_frame)
 
-    # Release the video capture object and close the display window
-    cap.release()
-    vid_writer.release()
+    return average_meter
 
 
 if __name__ == "__main__":
-    main()
+    fp32_res = main(quantize_model=False)
+    int8_res = main(quantize_model=True)
+    print(f"fp32: {fp32_res.__dict__}")
+    print(f"int8: {int8_res.__dict__}")
+    print(f"avg speedup: {fp32_res.avg / int8_res.avg :.3f}")
