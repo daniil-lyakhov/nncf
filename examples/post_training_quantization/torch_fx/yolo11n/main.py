@@ -105,7 +105,7 @@ def quantize(model: ov.Model, data_loader: CV2VideoDataset, transform_fn) -> ov.
 
 
 # ultralytics==8.3.27
-def main(quantize_model: bool):
+def main(quantize_model: bool, async_: bool):
     model = YOLO(ROOT / f"{MODEL_NAME}.pt")
 
     # Open the video file
@@ -117,6 +117,7 @@ def main(quantize_model: bool):
     )
 
     save_path = "out_int8" if quantize_model else "out"
+    save_path += "_async" if async_ else "_sync"
     cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
 
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -171,7 +172,14 @@ def main(quantize_model: bool):
 
     with torch.no_grad():
         with disable_patching():
-            res = run_(cap, model, pt_model, transform_fn, vid_writer)
+            if async_:
+                inputs = transform_fn(np_dummy_tensor)
+                exported_model = torch.export.export(pt_model, args=(inputs,))
+                ov_model = ov.convert_model(exported_model, example_input=inputs)
+                compiled_model = ov.Core().compile_model(ov_model)
+                res = run_async(cap, model, compiled_model, transform_fn, vid_writer, width, height)
+            else:
+                res = run_sync(cap, model, pt_model, transform_fn, vid_writer)
 
     # Release the video capture object and close the display window
     cap.release()
@@ -202,7 +210,7 @@ def main(quantize_model: bool):
     return res
 
 
-def run_(cap, model, pt_model, transform_fn, vid_writer):
+def run_sync(cap, model, pt_model, transform_fn, vid_writer):
     idx = 0
     sec = 40
     fps = 30
@@ -222,19 +230,19 @@ def run_(cap, model, pt_model, transform_fn, vid_writer):
 
         if idx % fps == 0:
             print(f"{idx // fps}/{sec}")
-            print(frame.shape)
 
         # Run YOLO inference on the frame
 
         # frame = torch.tensor(frame).transpose(0, -1).unsqueeze(0)
-        pre_frame = transform_fn(frame)
         start = time()
+        pre_frame = transform_fn(frame)
         results = pt_model(pre_frame)
-        lat = time() - start
         results = model.predictor.postprocess(results, pre_frame, [frame])
 
         # Visualize the results on the frame
         annotated_frame = results[0].plot()
+
+        lat = time() - start
         average_meter.update(lat)
 
         vid_writer.write(annotated_frame)
@@ -242,9 +250,64 @@ def run_(cap, model, pt_model, transform_fn, vid_writer):
     return average_meter
 
 
+def run_async(cap, model, compiled_model, transform_fn, vid_writer, width, height):
+    idx = 0
+    sec = 40
+    fps = 30
+    # Reset video duration
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    res_video = np.empty((int(sec * fps), int(height), int(width), 3), dtype=np.uint8)
+    average_meter = AverageMeter()
+
+    def callback(infer_request, info) -> None:
+        res = infer_request.get_output_tensor(0).data[0]
+        res = list(map(torch.tensor, (t.data for t in infer_request.output_tensors)))
+        res = [res[0], res[1:]]
+        results = model.predictor.postprocess(res, info[1], [info[2]])
+        # Visualize the results on the frame
+        annotated_frame = results[0].plot()
+        # lat = time() - info[-1]
+        # average_meter.update(lat)
+        res_video[info[0]] = annotated_frame
+
+    infer_queue = ov.AsyncInferQueue(compiled_model, 8)
+    infer_queue.set_callback(callback)
+
+    start = time()
+    while cap.isOpened():
+        # Read a frame from the video
+        idx += 1
+        if idx > fps * sec:
+            break
+
+        success, frame = cap.read()
+
+        if not success:
+            break
+
+        if idx % fps == 0:
+            print(f"{idx // fps}/{sec}")
+
+        # Run YOLO inference on the frame
+
+        # frame = torch.tensor(frame).transpose(0, -1).unsqueeze(0)
+        pre_frame = transform_fn(frame)
+        infer_queue.start_async(pre_frame, (idx, pre_frame, frame))
+
+    average_meter.avg = (time() - start) / res_video.shape[0]
+
+    for img in res_video:
+        vid_writer.write(img)
+
+    return average_meter
+
+
 if __name__ == "__main__":
-    fp32_res = main(quantize_model=False)
-    int8_res = main(quantize_model=True)
+    fp32_res = main(quantize_model=False, async_=False)
+    int8_res = main(quantize_model=True, async_=False)
+    async_int8_res = main(quantize_model=True, async_=True)
     print(f"fp32: {fp32_res.__dict__}")
     print(f"int8: {int8_res.__dict__}")
-    print(f"avg speedup: {fp32_res.avg / int8_res.avg :.3f}")
+    print(f"int8: {async_int8_res.__dict__}")
+    print(f"avg speedup with quantization: {fp32_res.avg / int8_res.avg :.3f}")
+    print(f"avg speedup with async: {int8_res.avg / async_int8_res.avg :.3f}")
