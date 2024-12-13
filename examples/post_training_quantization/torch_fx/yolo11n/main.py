@@ -9,6 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import sys
 from pathlib import Path
 from time import time
 from typing import Iterator
@@ -28,6 +29,9 @@ from nncf.torch import disable_patching
 MODEL_NAME = "yolo11n"
 
 ROOT = Path(__file__).parent.resolve()
+
+OUTPUT_VIDEO_LEN_SEC = 40
+SUBSET_SIZE = 300
 
 
 class AverageMeter:
@@ -88,7 +92,7 @@ def quantize(model: ov.Model, data_loader: CV2VideoDataset, transform_fn) -> ov.
     quantized_model = nncf.quantize(
         model,
         quantization_dataset,
-        subset_size=300,
+        subset_size=SUBSET_SIZE,
         preset=nncf.QuantizationPreset.MIXED,
         model_type=nncf.ModelType.TRANSFORMER,
         ignored_scope=nncf.IgnoredScope(
@@ -109,12 +113,7 @@ def main(quantize_model: bool, async_: bool):
     model = YOLO(ROOT / f"{MODEL_NAME}.pt")
 
     # Open the video file
-    video_path = (
-        # "/home/dlyakhov/Projects/nncf/examples/post_training_quantization/torch_fx/yolo11n/nn.mp4"
-        "/home/dlyakhov/Projects/nncf/examples/"
-        "post_training_quantization/torch_fx/yolo11n/Camera_road_in_Thailand.mp4"
-        # "/home/dlyakhov/Projects/nncf/examples/post_training_quantization/torch_fx/yolo11n/animals.mp4"
-    )
+    video_path = sys.argv[1]
 
     save_path = "out_int8" if quantize_model else "out"
     save_path += "_async" if async_ else "_sync"
@@ -212,7 +211,7 @@ def main(quantize_model: bool, async_: bool):
 
 def run_sync(cap, model, pt_model, transform_fn, vid_writer):
     idx = 0
-    sec = 40
+    sec = OUTPUT_VIDEO_LEN_SEC
     fps = 30
     # Reset video duration
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -252,7 +251,7 @@ def run_sync(cap, model, pt_model, transform_fn, vid_writer):
 
 def run_async(cap, model, compiled_model, transform_fn, vid_writer, width, height):
     idx = 0
-    sec = 40
+    sec = OUTPUT_VIDEO_LEN_SEC
     fps = 30
     # Reset video duration
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
