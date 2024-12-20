@@ -50,12 +50,11 @@ from nncf.torch.model_graph_manager import split_const_name
 from nncf.torch.model_transformer import PTModelTransformer
 from nncf.torch.nncf_network import NNCFNetwork
 
+# from nncf.torch.quantization.layers import SymmetricQuantizer
+# from nncf.torch.quantization.layers import SymmetricWeightsDecompressor
 # from nncf.torch.quantization.layers import AsymmetricWeightsDecompressor
 from nncf.torch.quantization.layers import AsymmetricQuantizer
 from nncf.torch.quantization.layers import PTQuantizerSpec
-
-# from nncf.torch.quantization.layers import SymmetricQuantizer
-# from nncf.torch.quantization.layers import SymmetricWeightsDecompressor
 
 
 class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
