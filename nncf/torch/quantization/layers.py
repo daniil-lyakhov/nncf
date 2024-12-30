@@ -910,6 +910,9 @@ class FQLoRA(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, W, group_shape, A, B, input_low, input_range, level_low, level_high, levels):
+        # if torch.any(B > 0):
+        #    breakpoint()
+        # breakpoint()
         original_shape = W.shape
 
         input_ = W + B @ A

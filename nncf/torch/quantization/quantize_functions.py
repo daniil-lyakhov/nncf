@@ -294,6 +294,7 @@ def decompress_asymmetric(input: torch.Tensor, scale: torch.Tensor, zero_point: 
     :param zero_point: A zero point tensor
     :return: The decompressed tensor
     """
+    # breakpoint()
     input = input.type(dtype=scale.dtype)
     zero_point = zero_point.type(dtype=scale.dtype)
     decompressed_input = (input - zero_point) * scale

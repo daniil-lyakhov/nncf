@@ -31,7 +31,17 @@ def strip_tuned_lora_model(model: NNCFNetwork) -> NNCFNetwork:
     model = model.nncf.get_clean_shallow_copy()
     graph = model.nncf.get_graph()
     transformation_layout = TransformationLayout()
-    for command in layout.transformations:
+    t = layout.transformations
+    # breakpoint()
+    idx = [
+        (idx, a.target_points[0].target_node_name)
+        for idx, a in enumerate(t)
+        if "q_proj" in a.target_points[0].target_node_name
+    ][0][0]
+    buff = t[0]
+    t[0] = t[idx]
+    t[idx] = buff
+    for command in t:
         quantizer_module = command.fn
         if isinstance(quantizer_module, AsymmetricQuantizer):
             input_range_safe = abs(quantizer_module.input_range) + quantizer_module.eps
@@ -58,10 +68,15 @@ def strip_tuned_lora_model(model: NNCFNetwork) -> NNCFNetwork:
             output = input_.clip(min=input_low, max=input_low + input_range)
             output -= input_low
             output *= scale
+
+            # breakpoint()
+            zero_point = (-input_low * scale).round()
+            output -= zero_point
             output = output.round()
+            output = output.to(torch.int8) + zero_point.to(torch.int8)
+            output = output.to(torch.bfloat16)
 
             original_shape = w.shape
-            zero_point = (-input_low * scale).round()
             compressor_scale = 1 / scale
 
             decompressor = INT4AsymmetricWeightsDecompressor(
@@ -73,6 +88,8 @@ def strip_tuned_lora_model(model: NNCFNetwork) -> NNCFNetwork:
             )
 
             packed_tensor = decompressor.pack_weight(output.to(torch.uint8))
+
+            # tmp = decompressor(packed_tensor)
 
             # sets compressed tensor
             compressed_parameter = torch.nn.Parameter(packed_tensor, requires_grad=False)
