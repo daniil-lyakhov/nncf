@@ -44,11 +44,11 @@ UNSUPPORTED_MODES = (CompressWeightsMode.NF4, CompressWeightsMode.E2M1)
 
 
 class ShortTransformer(torch.nn.Module):
-    def __init__(self, in_features, num_embeddings, share_weights=False):
+    def __init__(self, in_features, num_embeddings, share_weights=False, bias: bool = True):
         super().__init__()
         self.wte = torch.nn.Embedding(num_embeddings, in_features)
-        self.linear = torch.nn.Linear(in_features, in_features)
-        self.lm_head = torch.nn.Linear(in_features, num_embeddings)
+        self.linear = torch.nn.Linear(in_features, in_features, bias=bias)
+        self.lm_head = torch.nn.Linear(in_features, num_embeddings, bias=bias)
 
         if share_weights:
             self.lm_head.weight = self.wte.weight

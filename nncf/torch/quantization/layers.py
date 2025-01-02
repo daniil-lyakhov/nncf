@@ -943,7 +943,8 @@ class FQLoRA(torch.autograd.Function):
         output *= scale
         output -= zero_point
         output = output.round()
-        output = output / scale
+        output = output * (1 / scale)
+        # output = output / scale
 
         # Save tensors for backward pass
         ctx.save_for_backward(A, B, input_, output, input_low, input_range)

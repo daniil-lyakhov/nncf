@@ -33,14 +33,17 @@ def strip_tuned_lora_model(model: NNCFNetwork) -> NNCFNetwork:
     transformation_layout = TransformationLayout()
     t = layout.transformations
     # breakpoint()
-    idx = [
-        (idx, a.target_points[0].target_node_name)
-        for idx, a in enumerate(t)
-        if "q_proj" in a.target_points[0].target_node_name
-    ][0][0]
-    buff = t[0]
-    t[0] = t[idx]
-    t[idx] = buff
+    test_sorting = False
+    if test_sorting:
+        idx = [
+            (idx, a.target_points[0].target_node_name)
+            for idx, a in enumerate(t)
+            if "q_proj" in a.target_points[0].target_node_name
+        ][0][0]
+        buff = t[0]
+        t[0] = t[idx]
+        t[idx] = buff
+
     for command in t:
         quantizer_module = command.fn
         if isinstance(quantizer_module, AsymmetricQuantizer):
@@ -71,10 +74,11 @@ def strip_tuned_lora_model(model: NNCFNetwork) -> NNCFNetwork:
 
             # breakpoint()
             zero_point = (-input_low * scale).round()
+            output_dtype = output.dtype
             output -= zero_point
             output = output.round()
             output = output.to(torch.int8) + zero_point.to(torch.int8)
-            output = output.to(torch.bfloat16)
+            output = output.to(output_dtype)
 
             original_shape = w.shape
             compressor_scale = 1 / scale

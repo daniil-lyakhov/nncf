@@ -1,0 +1,35 @@
+strict digraph  {
+"0 /nncf_model_input_0" [id=0, type=nncf_model_input];
+"1 wte.weight" [id=1, type=nncf_model_const];
+"2 ShortTransformer/Embedding[wte]/embedding_0" [id=2, type=embedding];
+"3 linear.weight" [id=3, type=nncf_model_const];
+"4 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/unpack_uint4_0" [id=4, type=unpack_uint4];
+"5 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_0" [id=5, type=reshape];
+"6 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/unpack_uint4_1" [id=6, type=unpack_uint4];
+"7 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_1" [id=7, type=reshape];
+"8 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/decompress_asymmetric_0" [id=8, type=decompress_asymmetric];
+"9 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_2" [id=9, type=reshape];
+"10 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/type_0" [id=10, type=type];
+"11 linear.bias" [id=11, type=nncf_model_const];
+"12 ShortTransformer/Linear[linear]/linear_0" [id=12, type=linear];
+"13 lm_head.weight" [id=13, type=nncf_model_const];
+"14 lm_head.bias" [id=14, type=nncf_model_const];
+"15 ShortTransformer/Linear[lm_head]/linear_0" [id=15, type=linear];
+"16 /nncf_model_output_0" [id=16, type=nncf_model_output];
+"0 /nncf_model_input_0" -> "2 ShortTransformer/Embedding[wte]/embedding_0"  [label="(16,)", style=dashed];
+"1 wte.weight" -> "2 ShortTransformer/Embedding[wte]/embedding_0"  [label="(16, 64)", style=solid];
+"2 ShortTransformer/Embedding[wte]/embedding_0" -> "12 ShortTransformer/Linear[linear]/linear_0"  [label="(16, 64)", style=solid];
+"3 linear.weight" -> "4 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/unpack_uint4_0"  [label="(2048, 1)", style=dashed];
+"4 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/unpack_uint4_0" -> "5 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_0"  [label="(2048, 1, 2)", style=dashed];
+"5 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_0" -> "8 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/decompress_asymmetric_0"  [label="(64, 1, 64)", style=dashed];
+"6 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/unpack_uint4_1" -> "7 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_1"  [label="(32, 1, 2)", style=dashed];
+"7 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_1" -> "8 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/decompress_asymmetric_0"  [label="(64, 1, 1)", style=dashed];
+"8 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/decompress_asymmetric_0" -> "9 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_2"  [label="(64, 1, 64)", style=solid];
+"9 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/reshape_2" -> "10 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/type_0"  [label="(64, 64)", style=solid];
+"10 ShortTransformer/Linear[linear]/INT4AsymmetricWeightsDecompressor/type_0" -> "12 ShortTransformer/Linear[linear]/linear_0"  [label="(64, 64)", style=solid];
+"11 linear.bias" -> "12 ShortTransformer/Linear[linear]/linear_0"  [label="(64,)", style=solid];
+"12 ShortTransformer/Linear[linear]/linear_0" -> "15 ShortTransformer/Linear[lm_head]/linear_0"  [label="(16, 64)", style=solid];
+"13 lm_head.weight" -> "15 ShortTransformer/Linear[lm_head]/linear_0"  [label="(16, 64)", style=solid];
+"14 lm_head.bias" -> "15 ShortTransformer/Linear[lm_head]/linear_0"  [label="(16,)", style=solid];
+"15 ShortTransformer/Linear[lm_head]/linear_0" -> "16 /nncf_model_output_0"  [label="(16, 16)", style=solid];
+}
