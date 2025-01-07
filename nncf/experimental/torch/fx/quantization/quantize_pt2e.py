@@ -27,9 +27,12 @@ from nncf.common.factory import NNCFGraphFactory
 from nncf.common.logging import nncf_logger
 from nncf.data import Dataset
 from nncf.experimental.quantization.algorithms.post_training.algorithm import ExperimentalPostTrainingQuantization
+from nncf.experimental.quantization.quantizer.openvino_quantizer import OpenVINOQuantizer
+from nncf.experimental.quantization.quantizer.openvino_quantizer import OpenVINOQuantizerAdapter
 from nncf.experimental.quantization.quantizer.torch_ao_adapter import TorchAOQuantizerAdapter
 from nncf.experimental.torch.fx.constant_folding import constant_fold
 from nncf.experimental.torch.fx.transformations import QUANTIZE_NODE_TARGETS
+from nncf.experimental.torch.fx.transformations import compress_post_quantize_transformation
 from nncf.quantization.advanced_parameters import AdvancedBiasCorrectionParameters
 from nncf.quantization.advanced_parameters import AdvancedSmoothQuantParameters
 from nncf.quantization.advanced_parameters import RangeEstimatorParameters
@@ -94,7 +97,10 @@ def quantize_pt2e(
     # before the NNCFGraph creation
     quantizer.transform_for_annotation(model)
 
-    quantizer = TorchAOQuantizerAdapter(quantizer)
+    if isinstance(quantizer, OpenVINOQuantizer):
+        quantizer = OpenVINOQuantizerAdapter(quantizer)
+    else:
+        quantizer = TorchAOQuantizerAdapter(quantizer)
 
     quantization_algorithm = ExperimentalPostTrainingQuantization(
         quantizer=quantizer,
@@ -116,7 +122,10 @@ def quantize_pt2e(
     quantized_model = GraphModule(quantized_model, quantized_model.graph)
 
     if fold_quantize:
-        constant_fold(quantized_model, _quant_node_constraint)
+        if isinstance(quantizer, OpenVINOQuantizerAdapter):
+            compress_post_quantize_transformation(quantized_model)
+        else:
+            constant_fold(quantized_model, _quant_node_constraint)
 
     pm = PassManager([DuplicateDQPass()])
 
