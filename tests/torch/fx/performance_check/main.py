@@ -10,11 +10,8 @@
 # limitations under the License.
 
 import os
-from abc import ABC
-from abc import abstractmethod
 from copy import deepcopy
-from enum import Enum
-from typing import Any, Callable, List, Tuple, Union
+from typing import List, Tuple, Union
 
 # This should be set befre any torch import
 # to enable speed up for quantized model
@@ -22,458 +19,31 @@ from typing import Any, Callable, List, Tuple, Union
 os.environ["TORCHINDUCTOR_FREEZING"] = "1"
 
 import argparse
-import re
-import subprocess
 import traceback
 import warnings
 from pathlib import Path
-from time import time
 
-import openvino as ov
-import openvino.torch  # noqa
 import pandas as pd
 import torch
 import torch.fx
-from torch._export import capture_pre_autograd_graph
-from torch.ao.quantization.quantize_pt2e import convert_pt2e
-from torch.ao.quantization.quantize_pt2e import prepare_pt2e
-from torch.ao.quantization.quantizer.quantizer import Quantizer
-from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
-from torch.ao.quantization.quantizer.x86_inductor_quantizer import get_default_x86_inductor_quantization_config
-from torch.fx.passes.graph_drawer import FxGraphDrawer
 from torch.jit import TracerWarning
 
-import nncf
-from nncf import AdvancedQuantizationParameters
-from nncf.common.factory import NNCFGraphFactory
-from nncf.experimental.quantization.quantizer.openvino_quantizer import OpenVINOQuantizer
-from nncf.experimental.torch.fx.quantization.backend_parameters import FXBackendParameters
-from nncf.experimental.torch.fx.quantization.quantize_pt2e import quantize_pt2e
-from nncf.torch.dynamic_graph.patch_pytorch import disable_patching
+from tests.torch.fx.performance_check import benchmark as b
+from tests.torch.fx.performance_check import export as e
+from tests.torch.fx.performance_check import quantization as q
 from tests.torch.fx.performance_check.model_scope import MODEL_SCOPE
 from tests.torch.fx.performance_check.model_scope import ModelConfig
 
 warnings.filterwarnings("ignore", category=TracerWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-VISUALIZE_FX_INT8_GRAPH = True
-
-
-class ExportInterface(ABC):
-    @abstractmethod
-    def __call__(self, model: Any, model_config: ModelConfig, path_to_save_model: Path) -> Any:
-        """
-        Converts passed torch.nn.Module to the target representation
-        """
-
-    @abstractmethod
-    def name(self) -> str:
-        """
-        Return name of the export before quantization stage.
-        """
-
-
-class NoExport(ExportInterface):
-    def __call__(self, model: Any, model_config: ModelConfig, path_to_save_model: Path) -> Any:
-        return model
-
-    def name(self) -> str:
-        return "No export"
-
-
-class CapturePreAutogradGraphExport(ExportInterface):
-    def __call__(self, model: Any, model_config: ModelConfig, path_to_save_model: Path) -> torch.fx.GraphModule:
-        with disable_patching():
-            with torch.no_grad():
-                return capture_pre_autograd_graph(model, args=model_config.model_builder.get_example_inputs())
-
-    def name(self) -> str:
-        return "capture_pre_autograd_graph"
-
-
-class TorchExport(ExportInterface):
-    def __call__(self, model: Any, model_config: ModelConfig, path_to_save_model: Path) -> Any:
-        with disable_patching():
-            with torch.no_grad():
-                return torch.export.export(
-                    model, args=model_config.model_builder.get_example_inputs(), strict=model_config.torch_export_strict
-                ).module()
-
-    def name(self) -> str:
-        return "torch.export.export"
-
-
-class OpenvinoIRExport(ExportInterface):
-    def __call__(self, model: Any, model_config: ModelConfig, path_to_save_model: Path) -> Any:
-        with disable_patching():
-            with torch.no_grad():
-                example_inputs = model_config.model_builder.get_example_inputs()
-                export_inputs = example_inputs[0] if isinstance(example_inputs[0], tuple) else example_inputs
-                input_sizes = model_config.model_builder.get_input_sizes()
-                ex_model = torch.export.export(model, export_inputs)
-                ov_model = ov.convert_model(ex_model, example_input=example_inputs[0], input=input_sizes)
-                ov.serialize(ov_model, path_to_save_model)
-                return ov_model
-
-    def name(self) -> str:
-        return "Export to openvino IR"
-
-
-class TorchCompileExport(ExportInterface):
-    def __call__(self, model: Any, model_config: ModelConfig, path_to_save_model: Path):
-        return torch.compile(model)
-
-    def name(self) -> str:
-        return "torch.compile(...)"
-
-
-class TorchCompileOVExport(ExportInterface):
-    def __call__(self, model: Any, model_config: ModelConfig, path_to_save_model: Path):
-        return torch.compile(model, backend="openvino")
-
-    def name(self) -> str:
-        return "torch.compile(..., backend='openvino')"
-
-
-class CompressionInference(ABC):
-    @abstractmethod
-    def __call__(self, model: Any, model_config: ModelConfig, save_dir: Path):
-        """
-        Quantizes given model with given parameters
-        """
-
-    @abstractmethod
-    def name(self) -> str:
-        """
-        The name of the quantization stage.
-        """
-
-    @abstractmethod
-    def quantizer_name(self) -> str:
-        """
-        The name of the used quantizer.
-        """
-
-
-class NoQuantize(CompressionInference):
-    def __call__(self, model: Any, model_config: ModelConfig, save_dir: Path) -> Any:
-        return model
-
-    def name(self) -> str:
-        return "No quantization"
-
-    def quantizer_name(self) -> str:
-        return "-"
-
-
-class NNCFQuantize(CompressionInference):
-    def __init__(self, compress_weights: bool, serialize_fx_int8_graph: bool = VISUALIZE_FX_INT8_GRAPH):
-        self.serialize_fx_int8_graph = serialize_fx_int8_graph
-        self.compress_weights = compress_weights
-
-    @staticmethod
-    def _get_backend(model) -> str:
-        if isinstance(model, torch.fx.GraphModule):
-            return "FX"
-        if isinstance(model, ov.Model):
-            return "OV"
-        return ""
-
-    def __call__(self, model: Any, model_config: ModelConfig, save_dir: Path) -> Any:
-        quantization_params = deepcopy(model_config.quantization_params)
-        advanced_parameters = quantization_params.get("advanced_parameters", AdvancedQuantizationParameters())
-        advanced_parameters.backend_params[FXBackendParameters.COMPRESS_WEIGHTS] = self.compress_weights
-        quantization_params["advanced_parameters"] = advanced_parameters
-
-        backend = self._get_backend(model)
-        if "fx" in quantization_params:
-            fx_params = quantization_params.pop("fx")
-            if backend == "FX":
-                quantization_params = {**quantization_params, **fx_params}
-
-        with disable_patching():
-            example_inputs = model_config.model_builder.get_example_inputs()
-            quantized_model = nncf.quantize(
-                model,
-                nncf.Dataset(example_inputs),
-                **quantization_params,
-            )
-        if backend == "OV":
-            ov_int8_model_path = save_dir / "openvino_int8_model.xml"
-            ov.serialize(quantized_model, ov_int8_model_path)
-            print(f"Openvino quantized model saved to {ov_int8_model_path}")
-
-        elif backend == "FX":
-            _save_int8_torch_fx_info(
-                quantized_model, save_dir, self.serialize_fx_int8_graph, f"nncf_compress_{self.compress_weights}"
-            )
-
-        int8_graph_visualization_path = str(
-            save_dir / f"{backend}_int8_nncf_graph_compress_{self.compress_weights}.dot"
-        )
-        NNCFGraphFactory.create(quantized_model).visualize_graph(int8_graph_visualization_path)
-        print(f"NNCFGraph visualization of int8 model is saved to {int8_graph_visualization_path}")
-
-        return quantized_model
-
-    def name(self) -> str:
-        return f"nncf.quantize(compress_weights=={self.compress_weights})"
-
-    def quantizer_name(self) -> str:
-        return "-"
-
-
-class TorchAOQuantize(CompressionInference):
-    def __init__(
-        self,
-        quantizer_builder: Callable[[Tuple[Any, ...]], Quantizer],
-        fold_quantize: bool,
-        serialize_fx_int8_graph: bool = VISUALIZE_FX_INT8_GRAPH,
-    ) -> None:
-        """
-        fold_quantize == False for the torch.compile("openvino") inference
-        """
-        self.fold_quantize = fold_quantize
-        self.serialize_fx_int8_graph = serialize_fx_int8_graph
-        self.quantizer_builder = quantizer_builder
-
-    def __call__(self, model: Any, model_config: ModelConfig, save_dir: Path) -> torch.fx.GraphModule:
-        assert isinstance(model, torch.fx.GraphModule)
-
-        quantization_params = deepcopy(model_config.quantization_params)
-        if "fx" in quantization_params:
-            fx_params = quantization_params.pop("fx")
-            quantization_params = {**quantization_params, **fx_params}
-
-        quantizer = self.quantizer_builder(**quantization_params)
-
-        with disable_patching():
-            with torch.no_grad():
-                example_inputs = model_config.model_builder.get_example_inputs()
-                export_inputs = example_inputs[0] if isinstance(example_inputs[0], tuple) else example_inputs
-                prepared_model = prepare_pt2e(model, quantizer)
-                prepared_model(*export_inputs)
-                quantized_model = convert_pt2e(prepared_model, fold_quantize=self.fold_quantize)
-                _save_int8_torch_fx_info(
-                    quantized_model,
-                    save_dir,
-                    self.serialize_fx_int8_graph,
-                    f"torch_ao_{quantizer.__class__.__name__}_fold_{self.fold_quantize}",
-                )
-                return quantized_model
-
-    def name(self) -> str:
-        return f"torch.ao quantization quantizer: (fold_quantize=={self.fold_quantize})"
-
-    def quantizer_name(self) -> str:
-        return self.quantizer_builder.__name__.split("_")[-1]
-
-
-class NNCFQuantizePT2E(CompressionInference):
-    def __init__(
-        self,
-        quantizer_builder: Callable[[Tuple[Any, ...]], Quantizer],
-        fold_quantize: bool,
-        serialize_fx_int8_graph: bool = VISUALIZE_FX_INT8_GRAPH,
-    ) -> None:
-        """
-        fold_quantize == False for the torch.compile("openvino") inference
-        """
-        self.fold_quantize = fold_quantize
-        self.serialize_fx_int8_graph = serialize_fx_int8_graph
-        self.quantizer_builder = quantizer_builder
-
-    def __call__(self, model: Any, model_config: ModelConfig, save_dir: Path) -> torch.fx.GraphModule:
-        assert isinstance(model, torch.fx.GraphModule)
-
-        quantization_params = deepcopy(model_config.quantization_params)
-        if "fx" in quantization_params:
-            fx_params = quantization_params.pop("fx")
-            quantization_params = {**quantization_params, **fx_params}
-
-        quantizer = self.quantizer_builder(**quantization_params)
-
-        pt2e_kwargs = {}
-        for key in (
-            "subset_size",
-            "fast_bias_correction",
-            "smooth_quant",
-            "bias_correction_params",
-            "smooth_quant_params",
-            "activations_range_estimator_params",
-            "weights_range_estimator_params",
-        ):
-            if key in quantization_params:
-                pt2e_kwargs[key] = quantization_params[key]
-        smooth_quant = False
-        if quantization_params.get("model_type", False):
-            smooth_quant = quantization_params["model_type"] == nncf.ModelType.TRANSFORMER
-
-        with disable_patching():
-            example_inputs = model_config.model_builder.get_example_inputs()
-            quantized_model = quantize_pt2e(
-                model,
-                quantizer,
-                nncf.Dataset(example_inputs),
-                smooth_quant=smooth_quant,
-                fold_quantize=self.fold_quantize,
-                **pt2e_kwargs,
-            )
-            _save_int8_torch_fx_info(
-                quantized_model,
-                save_dir,
-                self.serialize_fx_int8_graph,
-                f"nncf_pt2e_{quantizer.__class__.__name__}_fold_{self.fold_quantize}",
-            )
-            return quantized_model
-
-    def name(self) -> str:
-        return f"nncf.quantize_pt2e(fold_quantize=={self.fold_quantize})"
-
-    def quantizer_name(self) -> str:
-        return self.quantizer_builder.__name__.split("_")[-1]
-
-
-def build_X86Quantizer(*args, **kwarsg) -> X86InductorQuantizer:
-    quantizer = X86InductorQuantizer()
-    quantizer.set_global(get_default_x86_inductor_quantization_config())
-    return quantizer
-
-
-def build_OpenVINOQuantizer(*args, **kwargs) -> OpenVINOQuantizer:
-
-    quantizer_kwargs = {}
-    for key in (
-        "mode",
-        "preset",
-        "target_device",
-        "model_type",
-        "ignored_scope",
-        "overflow_fix",
-        "quantize_outputs",
-        "activations_quantization_params",
-        "weights_quantization_params",
-        "quantizer_propagation_rule",
-    ):
-        if key in kwargs:
-            quantizer_kwargs[key] = kwargs[key]
-    return OpenVINOQuantizer(**quantizer_kwargs)
-
-
-def _save_int8_torch_fx_info(
-    quantized_model: torch.fx.GraphModule, save_dir: Path, serialize_fx_int8_graph: bool, q_backend: str
-):
-    int8_code_path = str(save_dir / f"int8_code_{q_backend}.py")
-    with open(int8_code_path, "w") as f:
-        f.write(quantized_model.code)
-    print(f"int8 FX code is saved to {int8_code_path}")
-
-    if serialize_fx_int8_graph:
-        int8_model_visualization_path = str(save_dir / f"int8_fx_graph_q_backend_{q_backend}.svg")
-        g = FxGraphDrawer(quantized_model, int8_model_visualization_path)
-        g.get_dot_graph().write_svg(int8_model_visualization_path)
-        print(f"Visualization of int8 model is saved to {int8_model_visualization_path}")
-
-
-class BenchmarkInterface(ABC):
-    @abstractmethod
-    def __call__(self, model: Any, model_config: ModelConfig, model_path: Path) -> Any:
-        """
-        Benchmarks given model.
-        """
-
-    @abstractmethod
-    def name(self) -> str:
-        """
-        Name of the Benchmarking stage.
-        """
-
-
-class LatencyBenchmark(BenchmarkInterface):
-    def __call__(self, model: Any, model_config: ModelConfig, model_path: Path) -> Any:
-        with disable_patching():
-            with torch.no_grad():
-                example_inputs = model_config.model_builder.get_example_inputs()
-                if isinstance(model, ov.Model):
-                    return measure_time_ov(model, example_inputs, model_config.num_iters)
-                return measure_time(model, example_inputs, model_config.num_iters)
-
-    def name(self) -> str:
-        return "Latency, msec"
-
-
-class BenchmarkAppMode(Enum):
-    SYNC = "sync"
-    ASYNC = "async"
-
-
-class BenchmarkAppFPS(BenchmarkInterface):
-    def __init__(self, mode: BenchmarkAppMode) -> None:
-        self.mode = mode
-
-    def __call__(self, model: Any, model_config: ModelConfig, model_path: Path) -> Any:
-        fps, latency = benchmark_performance(
-            model_path=model_path,
-            input_shape=model_config.model_builder.get_input_sizes(),
-            mode=self.mode.value,
-            num_iters=model_config.num_iters,
-        )
-        return fps, latency
-
-    def name(self) -> str:
-        return f"Benchmark app: {self.mode.value} (FPS, latency, msec))"
-
-
-def measure_time(model, example_inputs, num_iters=500):
-    with torch.no_grad():
-        model(*example_inputs)
-        total_time = 0
-        for _ in range(num_iters):
-            start_time = time()
-            model(*example_inputs)
-            total_time += time() - start_time
-        average_time = (total_time / num_iters) * 1000
-    return average_time
-
-
-def measure_time_ov(model, example_inputs, num_iters=500):
-    ie = ov.Core()
-    compiled_model = ie.compile_model(model, "CPU")
-    infer_request = compiled_model.create_infer_request()
-    infer_request.infer(example_inputs)
-    total_time = 0
-    for _ in range(num_iters):
-        start_time = time()
-        infer_request.infer(example_inputs)
-        total_time += time() - start_time
-    average_time = (total_time / num_iters) * 1000
-    return average_time
-
-
-def benchmark_performance(model_path: str, input_shape: List[int], mode: str, num_iters: int) -> Tuple[float, float]:
-    if mode == "sync":
-        exec_mode = "latency"
-    else:
-        exec_mode = "throughput"
-
-    command = f"benchmark_app -m {model_path} -d CPU -hint {exec_mode} -niter {num_iters}"
-    command += f' -shape "[{",".join(str(s) for s in input_shape)}]"'
-    cmd_output = subprocess.check_output(command, shell=True)  # nosec
-
-    match = re.search(r"Throughput\: (.+?) FPS", str(cmd_output))
-    fps = float(match.group(1))
-
-    match = re.search(r"Average\: (.+?) ms", str(cmd_output))
-    latency = float(match.group(1))
-    return fps, latency
-
 
 class BenchmarkPipeline:
     def __init__(
         self,
-        export_before_q: ExportInterface,
-        compress: CompressionInference,
-        benchmarks: List[Tuple[ExportInterface, Union[List[BenchmarkInterface], BenchmarkInterface]]],
+        export_before_q: e.ExportInterface,
+        compress: q.CompressionInterface,
+        benchmarks: List[Tuple[e.ExportInterface, Union[List[b.BenchmarkInterface], b.BenchmarkInterface]]],
         enabled: bool = True,
     ):
         self.export_before_q = export_before_q
@@ -510,60 +80,65 @@ class BenchmarkPipeline:
 
 
 PIPELINES = (
-    BenchmarkPipeline(NoExport(), NoQuantize(), [(NoExport(), LatencyBenchmark())], enabled=False),
+    BenchmarkPipeline(e.NoExport(), q.NoQuantize(), [(e.NoExport(), b.LatencyBenchmark())], enabled=False),
     BenchmarkPipeline(
-        TorchExport(),
-        NoQuantize(),
+        e.TorchExport(),
+        q.NoQuantize(),
         [
-            (TorchCompileOVExport(), LatencyBenchmark()),
-            (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.SYNC)),
+            (e.TorchCompileOVExport(), b.LatencyBenchmark()),
+            (e.OpenvinoIRExport(), b.BenchmarkAppFPS(mode=b.BenchmarkAppMode.SYNC)),
         ],
     ),
     BenchmarkPipeline(
-        TorchExport(),
+        e.TorchExport(),
         # CapturePreAutogradGraphExport(),
-        NNCFQuantize(compress_weights=False),
+        q.NNCFQuantize(compress_weights=False),
         [
-            (TorchCompileOVExport(), LatencyBenchmark()),
+            (e.TorchCompileOVExport(), b.LatencyBenchmark()),
             # (OpenvinoIRExport(), LatencyBenchmark()),
-            (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.SYNC)),
+            (e.OpenvinoIRExport(), b.BenchmarkAppFPS(mode=b.BenchmarkAppMode.SYNC)),
             # (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.ASYNC)),
         ],
     ),
     BenchmarkPipeline(
-        TorchExport(),
-        # CapturePreAutogradGraphExport(),
-        NNCFQuantize(compress_weights=True),
+        e.TorchExport(),
+        q.NNCFQuantize(compress_weights=True),
         [
-            (TorchCompileOVExport(), LatencyBenchmark()),
-            # (OpenvinoIRExport(), LatencyBenchmark()),
-            (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.SYNC)),
-            # (OpenvinoIRExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.ASYNC)),
+            (e.TorchCompileOVExport(), b.LatencyBenchmark()),
+            (e.OpenvinoIRExport(), b.BenchmarkAppFPS(mode=b.BenchmarkAppMode.SYNC)),
         ],
     ),
     BenchmarkPipeline(
-        TorchExport(),
-        # CapturePreAutogradGraphExport(),
-        NNCFQuantizePT2E(build_OpenVINOQuantizer, fold_quantize=False),
-        [(TorchCompileOVExport(), LatencyBenchmark())],
+        e.TorchExport(),
+        q.NNCFQuantizePT2E(q.build_OpenVINOQuantizer, fold_quantize=False),
+        [(e.TorchCompileOVExport(), b.LatencyBenchmark())],
     ),
     BenchmarkPipeline(
-        TorchExport(),
-        # CapturePreAutogradGraphExport(),
-        NNCFQuantizePT2E(build_X86Quantizer, fold_quantize=False),
-        [(TorchCompileExport(), LatencyBenchmark())],
+        e.TorchExport(),
+        q.NNCFQuantizePT2E(q.build_X86Quantizer, fold_quantize=False),
+        [(e.TorchCompileExport(), b.LatencyBenchmark())],
     ),
     BenchmarkPipeline(
-        OpenvinoIRExport(),
-        # CapturePreAutogradGraphExport(),
-        NNCFQuantize(compress_weights=True),
+        e.OpenvinoIRExport(),
+        q.NNCFQuantize(compress_weights=True),
         [
-            (NoExport(), LatencyBenchmark()),
-            (NoExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.SYNC)),
-            # (NoExport(), BenchmarkAppFPS(mode=BenchmarkAppMode.ASYNC)),
+            (e.NoExport(), b.LatencyBenchmark()),
+            (e.NoExport(), b.BenchmarkAppFPS(mode=b.BenchmarkAppMode.SYNC)),
         ],
     ),
-)  # [4:6]  # [5:6]
+    BenchmarkPipeline(
+        e.TorchExport(),
+        q.TorchAOQuantize(q.build_XNNPACKQuantizer, fold_quantize=True),
+        [(e.TorchCompileExport(), b.LatencyBenchmark())],
+    ),
+    BenchmarkPipeline(
+        e.TorchExport(),
+        q.NNCFQuantizePT2E(q.build_XNNPACKQuantizer, fold_quantize=True),
+        [(e.TorchCompileExport(), b.LatencyBenchmark())],
+    ),
+)[
+    -2:
+]  # [4:6]  # [5:6]
 
 
 def main():
