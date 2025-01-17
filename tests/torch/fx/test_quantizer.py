@@ -22,12 +22,14 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.models as models
+from torch.ao.quantization.quantize_pt2e import convert_pt2e
+from torch.ao.quantization.quantize_pt2e import prepare_pt2e
 from torch.ao.quantization.quantizer.quantizer import Quantizer
 from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
 from torch.ao.quantization.quantizer.x86_inductor_quantizer import get_default_x86_inductor_quantization_config
 
 import nncf
-from nncf.experimental.common.quantization.algorithms.quantizer.openvino_quantizer import OpenVINOQuantizer
+from nncf.experimental.quantization.quantizers.openvino_quantizer import OpenVINOQuantizer
 from nncf.experimental.torch.fx.nncf_graph_builder import GraphConverter
 from nncf.experimental.torch.fx.quantization.quantize_pt2e import quantize_pt2e
 from tests.torch import test_models
@@ -168,3 +170,23 @@ def test_quantized_model(
     # visualize_fx_model(ao_quantized_model, f"{model_case.model_id}ao_int8.svg")
     # ao_nncf_graph = GraphConverter.create_nncf_graph(ao_quantized_model)
     # ao_nncf_graph.visualize_graph("ao_" + get_dot_filename(model_case.model_id))
+
+
+@pytest.mark.parametrize(
+    "model_case,quantizer_params",
+    [(m[0], m[1]) for m in TEST_MODELS_QUANIZED],
+    ids=[m[0].model_id for m in TEST_MODELS_QUANIZED],
+)
+def test_openvino_quantizer_with_torch_ao_convert_pt2e(model_case: ModelCase, quantizer_params):
+    quantizer = get_openvino_quantizer(**quantizer_params)
+    fx_model, example_input = _build_torch_fx_model(model_case)
+    prepared_model = prepare_pt2e(fx_model, quantizer)
+    prepared_model(example_input)
+    ao_quantized_model = convert_pt2e(prepared_model)
+    nncf_graph = GraphConverter.create_nncf_graph(ao_quantized_model)
+    check_graph(
+        nncf_graph,
+        get_dot_filename(model_case.model_id),
+        FX_QUANTIZED_DIR_NAME / "ao_export_quantization_OpenVINOQuantizer",
+        extended=True,
+    )

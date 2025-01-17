@@ -17,7 +17,7 @@ from torch.ao.quantization.observer import HistogramObserver
 from torch.ao.quantization.observer import PerChannelMinMaxObserver
 from torch.ao.quantization.quantizer.quantizer import QuantizationAnnotation as InductorQAnotation
 from torch.ao.quantization.quantizer.quantizer import QuantizationSpec as InductorQuantizationSpec
-from torch.ao.quantization.quantizer.quantizer import Quantizer
+from torch.ao.quantization.quantizer.quantizer import Quantizer as TorchAOQuantizer
 
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.quantization.quantizer_propagation.solver import QuantizerPropagationRule
@@ -26,7 +26,7 @@ from nncf.common.quantization.quantizer_setup import SingleConfigQuantizerSetup
 from nncf.common.quantization.structs import QuantizationPreset
 from nncf.common.quantization.structs import QuantizationScheme
 from nncf.common.quantization.structs import QuantizerConfig as NNCFQuantizerConfig
-from nncf.experimental.quantization.algorithms.quantizer.base_quantizer import Quantizer as NNCFQuantizer
+from nncf.experimental.quantization.quantizers.quantizer import Quantizer
 from nncf.experimental.torch.fx.nncf_graph_builder import GraphConverter
 from nncf.experimental.torch.fx.node_utils import get_graph_node_by_name
 from nncf.experimental.torch.fx.transformations import fold_constant_except_qdq
@@ -42,7 +42,12 @@ from nncf.scopes import IgnoredScope
 QUANT_ANNOTATION_KEY = "quantization_annotation"
 
 
-class OpenVINOQuantizer(Quantizer):
+class OpenVINOQuantizer(TorchAOQuantizer):
+    """
+    Implementation of the Torch AO quantizer which annotates models with quantization annotations
+    optimally for the inference via OpenVINO.
+    """
+
     def __init__(
         self,
         mode: Optional[QuantizationMode] = None,
@@ -171,9 +176,12 @@ class OpenVINOQuantizer(Quantizer):
         return model
 
 
-class OpenVINOQuantizerAdapter(NNCFQuantizer):
+class OpenVINOQuantizerAdapter(Quantizer):
     def __init__(self, quantizer: OpenVINOQuantizer):
         self._quantizer = quantizer
+
+    def transform_prior_quantization(self, model: torch.fx.GraphModule) -> torch.fx.GraphModule:
+        return self._quantizer.transform_for_annotation(model)
 
     def get_quantization_setup(self, model: torch.fx.GraphModule, nncf_graph: NNCFGraph) -> SingleConfigQuantizerSetup:
         return self._quantizer.get_quantization_setup(model, nncf_graph)
