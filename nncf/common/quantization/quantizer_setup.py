@@ -28,7 +28,11 @@ from nncf.common.stateful_classes_registry import CommonStatefulClassesRegistry
 QuantizationPointId = int
 
 DEFAULT_QUANTIZER_CONFIG = QuantizerConfig(
-    num_bits=8, mode=QuantizationMode.SYMMETRIC, signedness_to_force=None, per_channel=False
+    num_bits=8,
+    mode=QuantizationMode.SYMMETRIC,
+    signedness_to_force=None,
+    per_channel=False,
+    narrow_range=False,
 )
 
 
@@ -242,12 +246,13 @@ class QuantizerSetupBase:
         self._next_unified_scale_gid = 0
         self._next_shared_inputs_gid = 0
 
-    def add_independent_quantization_point(self, qp: QuantizationPointBase):
+    def add_independent_quantization_point(self, qp: QuantizationPointBase) -> int:
         if self.quantization_points.keys():
             new_id = max(self.quantization_points.keys()) + 1
         else:
             new_id = 0
         self.quantization_points[new_id] = qp
+        return new_id
 
     def register_unified_scale_group(self, qp_group: List[QuantizationPointId]) -> int:
         for qp_id in qp_group:

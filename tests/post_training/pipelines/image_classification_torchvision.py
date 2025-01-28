@@ -19,12 +19,14 @@ import torch
 from torchvision import models
 
 from nncf.torch import disable_patching
+from tests.post_training.pipelines.base import FX_BACKENDS
 from tests.post_training.pipelines.base import PT_BACKENDS
 from tests.post_training.pipelines.base import BackendType
 from tests.post_training.pipelines.image_classification_base import ImageClassificationBase
 
 
 def _torch_export_for_training(model: torch.nn.Module, args: Tuple[Any, ...]) -> torch.fx.GraphModule:
+    # return _torch_export(model, args)
     return torch.export.export_for_training(model, args).module()
 
 
@@ -74,7 +76,7 @@ class ImageClassificationTorchvision(ImageClassificationBase):
         if self.batch_size > 1:  # Dynamic batch_size shape export
             self.input_size[0] = -1
 
-        if self.backend == BackendType.FX_TORCH:
+        if self.backend in FX_BACKENDS:
             with torch.no_grad():
                 with disable_patching():
                     self.model = self.model_params.export_fn(model, (self.dummy_tensor,))
@@ -120,7 +122,7 @@ class ImageClassificationTorchvision(ImageClassificationBase):
                 )
             ov.serialize(ov_model, self.fp32_model_dir / "model_fp32.xml")
 
-        if self.backend == BackendType.FX_TORCH:
+        if self.backend in FX_BACKENDS:
             exported_model = torch.export.export(self.model, (self.dummy_tensor,))
             ov_model = ov.convert_model(exported_model, example_input=self.dummy_tensor, input=self.input_size)
             ov.serialize(ov_model, self.fp32_model_dir / "fx_model_fp32.xml")
@@ -132,7 +134,7 @@ class ImageClassificationTorchvision(ImageClassificationBase):
         self.transform = self.model_params.weights.transforms()
 
     def get_transform_calibration_fn(self):
-        if self.backend in [BackendType.FX_TORCH] + PT_BACKENDS:
+        if self.backend in FX_BACKENDS + PT_BACKENDS:
             device = torch.device("cuda" if self.backend == BackendType.CUDA_TORCH else "cpu")
 
             def transform_fn(data_item):

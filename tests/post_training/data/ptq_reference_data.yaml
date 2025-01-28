@@ -38,13 +38,45 @@ torchvision/resnet18_backend_CUDA_TORCH:
   metric_value: 0.69152
 torchvision/resnet18_backend_FX_TORCH:
   metric_value: 0.6946
+torchvision/resnet18_backend_OV_QUANTIZER_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_ARM_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_ARM_AO:
+  metric_value: 0.6946
+torchvision/resnet18_backend_QUALCOMM_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_QUALCOMM_AO:
+  metric_value: 0.6946
+torchvision/resnet18_backend_XNNPACK_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_XNNPACK_AO:
+  metric_value: 0.6946
+torchvision/resnet18_backend_OV_QUANTIZER_AO:
+  metric_value: 0.6946
+torchvision/resnet18_backend_X86_QUANTIZER_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_X86_QUANTIZER_AO:
+  metric_value: 0.6946
 torchvision/mobilenet_v3_small_BC_backend_FP32:
   metric_value: 0.6766
+torchvision/mobilenet_v3_small_BC_backend_XNNPACK_NNCF:
+  metric_value: 0.6681
+torchvision/mobilenet_v3_small_BC_backend_XNNPACK_AO:
+  metric_value: 0.6681
 torchvision/mobilenet_v3_small_BC_backend_OV:
   metric_value: 0.6681
 torchvision/mobilenet_v3_small_BC_backend_ONNX:
   metric_value: 0.6679
 torchvision/mobilenet_v3_small_BC_backend_FX_TORCH:
+  metric_value: 0.6679
+torchvision/mobilenet_v3_small_BC_backend_OV_QUANTIZER_NNCF:
+  metric_value: 0.6679
+torchvision/mobilenet_v3_small_BC_backend_OV_QUANTIZER_AO:
+  metric_value: 0.6679
+torchvision/mobilenet_v3_small_BC_backend_X86_QUANTIZER_NNCF:
+  metric_value: 0.6679
+torchvision/mobilenet_v3_small_BC_backend_X86_QUANTIZER_AO:
   metric_value: 0.6679
 torchvision/vit_b_16_backend_FP32:
   metric_value: 0.8107
@@ -52,12 +84,44 @@ torchvision/vit_b_16_backend_OV:
   metric_value: 0.80948
 torchvision/vit_b_16_backend_FX_TORCH:
   metric_value: 0.80922
+torchvision/vit_b_16_backend_OV_QUANTIZER_NNCF:
+  metric_value: 0.80922
+torchvision/vit_b_16_backend_XNNPACK_NNCF:
+  metric_value: 0.80922
+torchvision/vit_b_16_backend_XNNPACK_AO:
+  metric_value: 0.80922
+torchvision/vit_b_16_backend_OV_QUANTIZER_AO:
+  metric_value: 0.80922
+torchvision/vit_b_16_backend_X86_QUANTIZER_NNCF:
+  metric_value: 0.80922
+torchvision/vit_b_16_backend_X86_QUANTIZER_AO:
+  metric_value: 0.80922
 torchvision/swin_v2_s_backend_FP32:
   metric_value: 0.83712
 torchvision/swin_v2_s_backend_OV:
   metric_value: 0.83638
 torchvision/swin_v2_s_backend_FX_TORCH:
   metric_value: 0.8360
+torchvision/swin_v2_s_backend_OV_QUANTIZER_NNCF:
+  metric_value: 0.8360
+torchvision/swin_v2_s_backend_OV_QUANTIZER_AO:
+  metric_value: 0.8360
+torchvision/swin_v2_s_backend_X86_QUANTIZER_NNCF:
+  metric_value: 0.8360
+torchvision/swin_v2_s_backend_X86_QUANTIZER_AO:
+  metric_value: 0.8360
+ultralytics/yolov8n_backend_FP32:
+  metric_value: 0.6056
+ultralytics/yolov8n_backend_FX_TORCH:
+  metric_value: 0.61417
+ultralytics/yolov8n_backend_OV:
+  metric_value: 0.6188
+ultralytics/yolo11n_backend_FP32:
+  metric_value: 0.6770
+ultralytics/yolo11n_backend_FX_TORCH:
+  metric_value: 0.6735
+ultralytics/yolo11n_backend_OV:
+  metric_value: 0.6752
 timm/crossvit_9_240_backend_CUDA_TORCH:
   metric_value: 0.7275
 timm/crossvit_9_240_backend_FP32:

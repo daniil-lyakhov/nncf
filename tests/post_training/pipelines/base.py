@@ -44,6 +44,16 @@ class BackendType(Enum):
     TORCH = "TORCH"
     CUDA_TORCH = "CUDA_TORCH"
     FX_TORCH = "FX_TORCH"
+    OV_QUANTIZER_NNCF = "OV_QUANTIZER_NNCF"
+    OV_QUANTIZER_AO = "OV_QUANTIZER_AO"
+    X86_QUANTIZER_NNCF = "X86_QUANTIZER_NNCF"
+    XNNPACK_AO = "XNNPACK_AO"
+    XNNPACK_NNCF = "XNNPACK_NNCF"
+    ARM_NNCF = "ARM_NNCF"
+    ARM_AO = "ARM_AO"
+    QUALCOMM_NNCF = "QUALCOMM_NNCF"
+    QUALCOMM_AO = "QUALCOMM_AO"
+    X86_QUANTIZER_AO = "X86_QUANTIZER_AO"
     ONNX = "ONNX"
     OV = "OV"
     OPTIMUM = "OPTIMUM"
@@ -52,6 +62,27 @@ class BackendType(Enum):
 NNCF_PTQ_BACKENDS = [BackendType.TORCH, BackendType.CUDA_TORCH, BackendType.ONNX, BackendType.OV]
 ALL_PTQ_BACKENDS = NNCF_PTQ_BACKENDS
 PT_BACKENDS = [BackendType.TORCH, BackendType.CUDA_TORCH]
+FX_BACKENDS = [
+    BackendType.FX_TORCH,
+    BackendType.OV_QUANTIZER_NNCF,
+    BackendType.OV_QUANTIZER_AO,
+    BackendType.X86_QUANTIZER_NNCF,
+    BackendType.X86_QUANTIZER_AO,
+    BackendType.XNNPACK_NNCF,
+    BackendType.XNNPACK_AO,
+    BackendType.ARM_NNCF,
+    BackendType.ARM_AO,
+    BackendType.QUALCOMM_NNCF,
+    BackendType.QUALCOMM_AO,
+]
+FX_EAGER_BACKENDS = [
+    BackendType.XNNPACK_NNCF,
+    BackendType.XNNPACK_AO,
+    BackendType.ARM_NNCF,
+    BackendType.ARM_AO,
+    BackendType.QUALCOMM_NNCF,
+    BackendType.QUALCOMM_AO,
+]
 OV_BACKENDS = [BackendType.OV, BackendType.OPTIMUM]
 
 LIMIT_LENGTH_OF_STATUS = 120
@@ -211,6 +242,7 @@ class BaseTestPipeline(ABC):
         reference_data: dict,
         no_eval: bool,
         run_benchmark_app: bool,
+        validate_in_backend: bool = False,
         params: dict = None,
         batch_size: int = 1,
         memory_monitor: bool = False,
@@ -227,6 +259,7 @@ class BaseTestPipeline(ABC):
         self.memory_monitor = memory_monitor
         self.no_eval = no_eval
         self.run_benchmark_app = run_benchmark_app
+        self.validate_in_backend = validate_in_backend
         self.output_model_dir: Path = self.output_dir / self.reported_name / self.backend.value
         self.output_model_dir.mkdir(parents=True, exist_ok=True)
         self.model_name = f"{self.reported_name}_{self.backend.value}"
@@ -405,8 +438,59 @@ class PTQTestPipeline(BaseTestPipeline):
             )
             self.path_compressed_ir = self.output_model_dir / "model.xml"
             ov.serialize(ov_model, self.path_compressed_ir)
-        elif self.backend == BackendType.FX_TORCH:
-            exported_model = torch.export.export(self.compressed_model, (self.dummy_tensor,))
+        elif self.backend in FX_BACKENDS:
+            from tests.torch.fx.helpers import visualize_fx_model
+
+            visualize_fx_model(self.compressed_model, str(self.output_model_dir / f"{self.backend.value}.svg"))
+            with open(self.output_model_dir / "fx_graph_code.py", "w") as f:
+                f.write(self.compressed_model.code)
+            # from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+            # from executorch.exir import EdgeCompileConfig
+            # from executorch.exir import to_edge_transform_and_lower
+            # from torch.export import export
+
+            # official_api = True
+            # if official_api:
+            #    edge = to_edge_transform_and_lower(
+            #        export(self.compressed_model, (self.dummy_tensor.cpu(),)),
+            #        compile_config=EdgeCompileConfig(_check_ir_validity=False),
+            #        partitioner=[XnnpackPartitioner()],
+            #    )
+            #    exec_prog = edge.to_executorch()
+            # else:
+            #    from executorch import exir
+            #    from executorch.backends.xnnpack.utils.configs import get_transform_passes
+            #    from executorch.backends.xnnpack.utils.configs import get_xnnpack_edge_compile_config
+            #    from executorch.backends.xnnpack.utils.configs import get_xnnpack_executorch_backend_config
+            #    from executorch.backends.xnnpack.utils.utils import capture_graph_for_xnnpack
+            #    from executorch.exir import ExecutorchProgram
+            #    from executorch.exir import ExirExportedProgram
+            #    from executorch.exir.backend.backend_api import to_backend
+
+            #    captured_program = exir.capture(
+            #        self.compressed_model,
+            #        (self.dummy_tensor,),
+            #        config=exir.CaptureConfig(enable_aot=True, _unlift=True),
+            #    )
+
+            #    edge_program = captured_program.to_edge(get_xnnpack_edge_compile_config()).transform(
+            #        *get_transform_passes()
+            #    )
+
+            #    delegated_program = to_backend("XnnpackBackend", edge_program.exported_program, [])
+
+            #    exported_program: ExirExportedProgram = capture_graph_for_xnnpack(
+            #        delegated_program, (self.dummy_tensor,)
+            #    )
+            #    exec_prog: ExecutorchProgram = exported_program.to_executorch(
+            #        get_xnnpack_executorch_backend_config(),
+            #    )
+
+            # with open(self.output_model_dir / "xnnpack.pte", "wb") as file:
+            #    exec_prog.write_to_file(file)
+
+        elif self.backend in set(FX_BACKENDS) - set(FX_EAGER_BACKENDS):
+            exported_model = torch.export.export(self.model, (self.dummy_tensor,))
             ov_model = ov.convert_model(exported_model, example_input=self.dummy_tensor.cpu(), input=self.input_size)
             self.path_compressed_ir = self.output_model_dir / "model.xml"
             ov.serialize(ov_model, self.path_compressed_ir)
@@ -427,6 +511,9 @@ class PTQTestPipeline(BaseTestPipeline):
         """
         Get number of the FakeQuantize nodes in the compressed IR.
         """
+
+        if not hasattr(self, "path_compressed_ir"):
+            return
 
         ie = ov.Core()
         model = ie.read_model(model=self.path_compressed_ir)
