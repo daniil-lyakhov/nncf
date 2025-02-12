@@ -24,6 +24,7 @@ import torch.utils.data.distributed
 import torchvision.models as models
 from torch.ao.quantization.quantize_pt2e import convert_pt2e
 from torch.ao.quantization.quantize_pt2e import prepare_pt2e
+from torch.ao.quantization.quantize_pt2e import prepare_qat_pt2e
 from torch.ao.quantization.quantizer.quantizer import QuantizationSpec as TorchAOQuantizationSpec
 from torch.ao.quantization.quantizer.quantizer import Quantizer
 from torch.ao.quantization.quantizer.quantizer import SharedQuantizationSpec as TorchAOSharedQuantizationSpec
@@ -187,6 +188,41 @@ def test_openvino_quantizer_with_torch_ao_convert_pt2e(model_case: ModelCase, qu
     prepared_model = prepare_pt2e(fx_model, quantizer)
     prepared_model(example_input)
     ao_quantized_model = convert_pt2e(prepared_model)
+    nncf_graph = GraphConverter.create_nncf_graph(ao_quantized_model)
+    check_graph(
+        nncf_graph,
+        get_dot_filename(model_case.model_id),
+        FX_QUANTIZED_DIR_NAME / "ao_export_quantization_OpenVINOQuantizer",
+        extended=True,
+    )
+
+
+def test_openvino_quantizer_with_torch_ao_convert_qat_pt2e():
+    model_case, quantizer_params, _ = TEST_MODELS_QUANIZED[1]  # resnet18
+    quantizer = get_openvino_quantizer(**quantizer_params)
+    fx_model, example_input = _build_torch_fx_model(model_case)
+    with nncf.torch.disable_patching():
+        prepared_model = prepare_qat_pt2e(fx_model, quantizer)
+        before = prepared_model(example_input)
+        prepared_model = torch.ao.quantization.move_exported_model_to_train(prepared_model)
+        optimizer = torch.optim.SGD(prepared_model.parameters(), lr=0.01)
+        target = torch.zeros(
+            (
+                1,
+                1000,
+            )
+        )
+        target[0][0] = 1
+        for _ in range(3):
+            optimizer.zero_grad()
+            y = prepared_model(example_input)
+            loss = torch.nn.functional.mse_loss(y, target)
+            loss.backward()
+            optimizer.step()
+
+        ao_quantized_model = convert_pt2e(prepared_model)
+        after = ao_quantized_model(example_input)
+    assert not torch.allclose(before, after)
     nncf_graph = GraphConverter.create_nncf_graph(ao_quantized_model)
     check_graph(
         nncf_graph,
