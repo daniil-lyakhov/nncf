@@ -1,0 +1,13 @@
+:orphan:
+
+:py:mod:`nncf.tensorflow.sparsity`
+==================================
+
+.. py:module:: nncf.tensorflow.sparsity
+
+.. autoapi-nested-parse::
+
+   Backend-specific implementations of sparsity algorithms.
+
+
+

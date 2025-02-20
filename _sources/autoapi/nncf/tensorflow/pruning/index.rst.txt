@@ -1,0 +1,13 @@
+:orphan:
+
+:py:mod:`nncf.tensorflow.pruning`
+=================================
+
+.. py:module:: nncf.tensorflow.pruning
+
+.. autoapi-nested-parse::
+
+   Backend-specific implementations of pruning algorithms.
+
+
+

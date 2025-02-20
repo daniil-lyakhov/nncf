@@ -1,0 +1,27 @@
+:py:mod:`nncf.common.quantization.structs`
+==========================================
+
+.. py:module:: nncf.common.quantization.structs
+
+
+
+Classes
+~~~~~~~
+
+.. autoapisummary::
+
+   nncf.common.quantization.structs.QuantizationScheme
+
+
+
+
+.. py:class:: QuantizationScheme
+
+   Bases: :py:obj:`nncf.parameters.StrEnum`
+
+   Basic enumeration for quantization scheme specification.
+
+   :param SYMMETRIC:
+   :param ASYMMETRIC:
+
+

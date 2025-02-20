@@ -1,0 +1,13 @@
+:orphan:
+
+:py:mod:`nncf.tensorflow`
+=========================
+
+.. py:module:: nncf.tensorflow
+
+.. autoapi-nested-parse::
+
+   Base subpackage for NNCF TensorFlow functionality.
+
+
+
