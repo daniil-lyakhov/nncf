@@ -83,6 +83,49 @@ Functions
        activations.
    :param weights_quantization_params: Quantization parameters for model weights.
    :param quantizer_propagation_rule: The strategy to be used while propagating and merging quantizers.
-   MERGE_ALL_IN_ONE by default.
+       MERGE_ALL_IN_ONE by default.
+
+   .. py:method:: set_ignored_scope(names = None, patterns = None, types = None, subgraphs = None, validate = True)
+
+      Provides an option to specify portions of model to be excluded from compression.
+      The ignored scope defines model sub-graphs that should be excluded from the quantization process.
+
+      :param names: List of ignored node names.
+      :param patterns: List of regular expressions that define patterns for names of ignored nodes.
+      :param types: List of ignored operation types.
+      :param subgraphs: List of ignored subgraphs.
+      :param validate: If set to True, then a RuntimeError will be raised if any ignored scope does not match
+          in the model graph.
+
+
+   .. py:method:: annotate(model)
+
+      Adds quantization annotations to the nodes in the model graph in-place.
+
+      :param model: A torch.fx.GraphModule to annotate.
+      :return: The torch.fx.GraphModule with updated annotations.
+
+
+   .. py:method:: validate(model)
+
+      Validates the annotated model before the insertion of FakeQuantizers / observers.
+
+      :param model: Annotated torch.fx.GraphModule to validate after the  annotation.
+
+
+   .. py:method:: transform_for_annotation(model)
+
+      Allows for user defined transforms to run before annotating the graph.
+      This allows quantizer to allow quantizing part of the model that are otherwise not quantizable.
+      For example quantizer can
+      a) decompose a compound operator like scaled dot product attention,
+      into bmm and softmax if quantizer knows how to quantize bmm/softmax but not sdpa
+      or b) transform scalars to tensor to allow quantizing scalares.
+
+      Note: this is an optional method
+
+      :param model: Given torch.fx.GraphModule to transform before the annotation.
+      :return: The transformed torch.fx.GraphModule ready for the annotation.
+
 
 
