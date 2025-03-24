@@ -24,6 +24,7 @@ import torch.utils.data.distributed
 import torchvision.models as models
 from torch.ao.quantization.quantize_pt2e import convert_pt2e
 from torch.ao.quantization.quantize_pt2e import prepare_pt2e
+from torch.ao.quantization.quantizer import xnnpack_quantizer
 from torch.ao.quantization.quantizer.quantizer import QuantizationSpec as TorchAOQuantizationSpec
 from torch.ao.quantization.quantizer.quantizer import Quantizer
 from torch.ao.quantization.quantizer.quantizer import SharedQuantizationSpec as TorchAOSharedQuantizationSpec
@@ -64,6 +65,12 @@ def get_dot_filename(model_name):
 def get_x86_quantizer(*args, **kwarsg) -> X86InductorQuantizer:
     quantizer = X86InductorQuantizer()
     quantizer.set_global(get_default_x86_inductor_quantization_config())
+    return quantizer
+
+
+def get_xnnpack_quantizer(*args, **kwargs) -> xnnpack_quantizer.XNNPACKQuantizer:
+    quantizer = xnnpack_quantizer.XNNPACKQuantizer()
+    quantizer.set_global(xnnpack_quantizer.get_symmetric_quantization_config())
     return quantizer
 
 
@@ -119,7 +126,13 @@ def _get_calibration_dataset(example_input: torch.Tensor) -> nncf.Dataset:
     ids=[m[0].model_id for m in TEST_MODELS_QUANIZED],
 )
 @pytest.mark.parametrize(
-    "quantizer_builder", [get_x86_quantizer, get_openvino_quantizer], ids=["X86InductorQuantizer", "OpenVINOQuantizer"]
+    "quantizer_builder",
+    [
+        get_xnnpack_quantizer,
+        get_x86_quantizer,
+        get_openvino_quantizer,
+    ],
+    ids=["XNNPACKQuantizer", "X86InductorQuantizer", "OpenVINOQuantizer"],
 )
 def test_quantized_model(
     quantizer_builder: Callable[[Tuple[Any, ...]], Quantizer],

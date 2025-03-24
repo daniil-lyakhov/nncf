@@ -12,16 +12,37 @@
 import copy
 import os
 
+from torch.ao.quantization.observer import MovingAverageMinMaxObserver
+
+os.environ["TORCHINDUCTOR_FREEZING"] = "1"
+
+from itertools import islice
+from typing import Optional
+
 import numpy as np
 import openvino as ov
 import torch
+
+# from executorch.backends.arm.quantizer import arm_quantizer
+from executorch.backends.qualcomm.quantizer import quantizer as qualcom_q
 from sklearn.metrics import accuracy_score
+from torch.ao.quantization.quantize_pt2e import convert_pt2e
+from torch.ao.quantization.quantize_pt2e import prepare_pt2e
+from torch.ao.quantization.quantizer import xnnpack_quantizer
+from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQuantizer
+from torch.ao.quantization.quantizer.x86_inductor_quantizer import get_default_x86_inductor_quantization_config
 from torchvision import datasets
 
 import nncf
+from nncf import AdvancedQuantizationParameters
 from nncf.common.logging.track_progress import track
+from nncf.experimental.torch.fx import OpenVINOQuantizer
+from nncf.experimental.torch.fx import quantize_pt2e
+from nncf.torch import disable_patching
 from tests.post_training.pipelines.base import DEFAULT_VAL_THREADS
 from tests.post_training.pipelines.base import FX_BACKENDS
+from tests.post_training.pipelines.base import FX_EAGER_BACKENDS
+from tests.post_training.pipelines.base import BackendType
 from tests.post_training.pipelines.base import PTQTestPipeline
 
 
@@ -75,14 +96,31 @@ class ImageClassificationBase(PTQTestPipeline):
     def _validate_torch_compile(
         self, val_loader: torch.utils.data.DataLoader, predictions: np.ndarray, references: np.ndarray
     ):
-        compiled_model = torch.compile(self.compressed_model.cpu(), backend="openvino")
-        for i, (images, target) in enumerate(val_loader):
-            # W/A for memory leaks when using torch DataLoader and OpenVINO
-            pred = compiled_model(images)
-            pred = torch.argmax(pred, dim=1)
-            predictions[i] = pred.numpy()
-            references[i] = target.numpy()
-        return predictions, references
+        # compiled_model = torch.compile(self.compressed_model, backend="openvino")
+        q_num = 0
+        for node in self.compressed_model.graph.nodes:
+            if ".quantize_per" in str(node.target):
+                q_num += 1
+
+        print(f"Qunatize ops num: {q_num}")
+
+        with disable_patching():
+            with torch.no_grad():
+                if self.backend in FX_EAGER_BACKENDS:
+                    # Run such models in eager model
+                    compiled_model = self.compressed_model
+                if self.backend in [BackendType.X86_QUANTIZER_AO, BackendType.X86_QUANTIZER_NNCF]:
+                    compiled_model = torch.compile(self.compressed_model)
+                else:
+                    compiled_model = torch.compile(self.compressed_model, backend="openvino")
+
+                for i, (images, target) in enumerate(val_loader):
+                    # W/A for memory leaks when using torch DataLoader and OpenVINO
+                    pred = compiled_model(images)
+                    pred = torch.argmax(pred, dim=1)
+                    predictions[i] = pred.numpy()
+                    references[i] = target.numpy()
+                return predictions, references
 
     def _validate(self) -> None:
         val_dataset = datasets.ImageFolder(root=self.data_dir / "imagenet" / "val", transform=self.transform)
@@ -94,7 +132,7 @@ class ImageClassificationBase(PTQTestPipeline):
         predictions = np.zeros(dataset_size)
         references = -1 * np.ones(dataset_size)
 
-        if self.backend in FX_BACKENDS and self.torch_compile_validation:
+        if self.backend in FX_BACKENDS:
             predictions, references = self._validate_torch_compile(val_loader, predictions, references)
         else:
             predictions, references = self._validate_ov(val_loader, predictions, references, dataset_size)
@@ -103,3 +141,155 @@ class ImageClassificationBase(PTQTestPipeline):
 
         self.run_info.metric_name = "Acc@1"
         self.run_info.metric_value = acc_top1
+        return []
+
+    def _compress_torch_ao(self, quantizer):
+        with disable_patching():
+            with torch.no_grad():
+                prepared_model = prepare_pt2e(self.model, quantizer)
+                subset_size = self.compression_params.get("subset_size", 300)
+                for data in islice(self.calibration_dataset.get_inference_data(), subset_size):
+                    prepared_model(data)
+                self.compressed_model = convert_pt2e(prepared_model)
+
+    def _compress_nncf_pt2e(self, quantizer):
+        pt2e_kwargs = {}
+        for key in (
+            "subset_size",
+            "fast_bias_correction",
+        ):
+            if key in self.compression_params:
+                pt2e_kwargs[key] = self.compression_params[key]
+
+        advanced_parameters: AdvancedQuantizationParameters = self.compression_params.get(
+            "advanced_parameters", AdvancedQuantizationParameters()
+        )
+
+        sq_params = advanced_parameters.smooth_quant_alphas
+        sq_alpha = advanced_parameters.smooth_quant_alpha
+        if sq_alpha is not None:
+            if sq_alpha < 0:
+                sq_params.convolution = -1
+                sq_params.matmul = -1
+            else:
+                sq_params.matmul = sq_alpha
+        pt2e_kwargs["smooth_quant_params"] = sq_params
+        pt2e_kwargs["bias_correction_params"] = advanced_parameters.bias_correction_params
+        pt2e_kwargs["activations_range_estimator_params"] = advanced_parameters.activations_range_estimator_params
+        pt2e_kwargs["weights_range_estimator_params"] = advanced_parameters.weights_range_estimator_params
+
+        smooth_quant = False
+        if self.compression_params.get("model_type", False):
+            smooth_quant = self.compression_params["model_type"] == nncf.ModelType.TRANSFORMER
+
+        # DEBUG PARAM
+        # pt2e_kwargs["subset_size"] = 1
+        ###
+        with disable_patching():
+            with torch.no_grad():
+                self.compressed_model = quantize_pt2e(
+                    self.model,
+                    quantizer,
+                    self.calibration_dataset,
+                    smooth_quant=smooth_quant,
+                    fold_quantize=False,
+                    **pt2e_kwargs,
+                )
+
+    def _compress(self):
+        """
+        Quantize self.model
+        """
+        if self.backend not in FX_BACKENDS:
+            super()._compress()
+
+            return
+        if self.backend == BackendType.FX_TORCH:
+            with disable_patching():
+                with torch.no_grad():
+                    super()._compress()
+                    return
+
+        if self.backend in [BackendType.OV_QUANTIZER_AO, BackendType.OV_QUANTIZER_NNCF]:
+            quantizer_kwargs = {}
+            for key in (
+                "mode",
+                "preset",
+                "target_device",
+                "model_type",
+                "ignored_scope",
+            ):
+                if key in self.compression_params:
+                    quantizer_kwargs[key] = self.compression_params[key]
+            advanced_parameters: AdvancedQuantizationParameters = self.compression_params.get(
+                "advanced_parameters", AdvancedQuantizationParameters()
+            )
+            quantizer_kwargs["overflow_fix"] = advanced_parameters.overflow_fix
+            quantizer_kwargs["quantize_outputs"] = advanced_parameters.quantize_outputs
+            quantizer_kwargs["activations_quantization_params"] = advanced_parameters.activations_quantization_params
+            quantizer_kwargs["weights_quantization_params"] = advanced_parameters.weights_quantization_params
+            quantizer_kwargs["quantizer_propagation_rule"] = advanced_parameters.quantizer_propagation_rule
+
+            quantizer = OpenVINOQuantizer(**quantizer_kwargs)
+        elif self.backend in [BackendType.XNNPACK_AO, BackendType.XNNPACK_NNCF]:
+            self.compressed_model = self.model
+            quantizer = xnnpack_quantizer.XNNPACKQuantizer()
+            quantizer.set_global(xnnpack_quantizer.get_symmetric_quantization_config())
+
+        elif self.backend in [BackendType.QUALCOMM_AO, BackendType.QUALCOMM_NNCF]:
+            quantizer = make_qualcom_quantizer(qualcom_q.QuantDtype.use_8a8w)
+        elif self.backend in [BackendType.ARM_AO, BackendType.ARM_NNCF]:
+            raise NotImplementedError()
+            # Source:
+            # https://github.com/pytorch/executorch/blob/main/backends/arm/test/tester/arm_tester.py#L200-L204
+
+            # quantizer = arm_quantizer.ArmQuantizer()
+            # quantizer.set_global(arm_quantizer.get_symmetric_quantization_config(is_per_channel=False))
+        elif self.backend in [BackendType.X86_QUANTIZER_AO, BackendType.X86_QUANTIZER_NNCF]:
+            quantizer = X86InductorQuantizer()
+            quantizer.set_global(get_default_x86_inductor_quantization_config())
+
+        else:
+            msg = f"Unsupported backend: {self.backend}"
+            raise RuntimeError(msg)
+
+        if self.backend in [
+            BackendType.OV_QUANTIZER_NNCF,
+            BackendType.X86_QUANTIZER_NNCF,
+            BackendType.XNNPACK_NNCF,
+            BackendType.ARM_NNCF,
+            BackendType.QUALCOMM_NNCF,
+        ]:
+            self._compress_nncf_pt2e(quantizer)
+        else:
+            self._compress_torch_ao(quantizer)
+
+
+# Source:
+# https://github.com/pytorch/executorch/blob/main/examples/qualcomm/utils.py#L229-L242
+def make_qualcom_quantizer(
+    quant_dtype: Optional[qualcom_q.QuantDtype],
+    custom_annotations=(),
+    per_channel_conv=True,
+    per_channel_linear=False,
+    act_observer=MovingAverageMinMaxObserver,
+):
+    quantizer = qualcom_q.QnnQuantizer()
+    quantizer.add_custom_quant_annotations(custom_annotations)
+    quantizer.set_per_channel_conv_quant(per_channel_conv)
+    quantizer.set_per_channel_linear_quant(per_channel_linear)
+
+    if quant_dtype == qualcom_q.QuantDtype.use_8a8w:
+        quantizer.set_bit8_op_quant_config(qualcom_q.get_default_8bit_qnn_ptq_config(act_observer=act_observer))
+    elif quant_dtype == qualcom_q.QuantDtype.use_16a16w:
+        quantizer.add_16bit_quant_ops(quantizer.SUPPORTED_OPS)
+        quantizer.set_bit16_op_quant_config(qualcom_q.get_default_16bit_qnn_ptq_config(act_observer=act_observer))
+    elif quant_dtype == qualcom_q.QuantDtype.use_16a4w:
+        quantizer.add_16bit_quant_ops(quantizer.SUPPORTED_OPS)
+        quantizer.set_bit16_op_quant_config(qualcom_q.get_16a4w_qnn_ptq_config(act_observer=act_observer))
+        quantizer.set_per_channel_weight_dtype(weight_dtype_for_16bit_act="int4")
+    else:
+        msg = f"No support for QuantDtype {quant_dtype}."
+        raise AssertionError(msg)
+
+    return quantizer

@@ -40,6 +40,26 @@ torchvision/resnet18_backend_TORCH:
   metric_value: 0.69152
 torchvision/resnet18_backend_CUDA_TORCH:
   metric_value: 0.69152
+torchvision/resnet18_backend_OV_QUANTIZER_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_OV_QUANTIZER_AO :
+  metric_value: 0.6946
+torchvision/resnet18_backend_X86_QUANTIZER_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_X86_QUANTIZER_AO:
+  metric_value: 0.6946
+torchvision/resnet18_backend_XNNPACK_AO:
+  metric_value: 0.6946
+torchvision/resnet18_backend_XNNPACK_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_ARM_NNCF:
+  metric_value: 0.6946
+torchvision/resnet18_backend_ARM_AO:
+  metric_value: 0.6946
+torchvision/resnet18_backend_QUALCOMM_NNCF :
+  metric_value: 0.6946
+torchvision/resnet18_backend_QUALCOMM_AO:
+  metric_value: 0.6946
 torchvision/resnet18_backend_FX_TORCH:
   metric_value: 0.6946
   exception_xfail_reason:

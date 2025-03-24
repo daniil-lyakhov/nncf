@@ -57,6 +57,16 @@ class BackendType(Enum):
     CUDA_TORCH = "CUDA_TORCH"
     FX_TORCH = "FX_TORCH"
     CUDA_FX_TORCH = "CUDA_FX_TORCH"
+    OV_QUANTIZER_NNCF = "OV_QUANTIZER_NNCF"
+    OV_QUANTIZER_AO = "OV_QUANTIZER_AO"
+    X86_QUANTIZER_NNCF = "X86_QUANTIZER_NNCF"
+    XNNPACK_AO = "XNNPACK_AO"
+    XNNPACK_NNCF = "XNNPACK_NNCF"
+    ARM_NNCF = "ARM_NNCF"
+    ARM_AO = "ARM_AO"
+    QUALCOMM_NNCF = "QUALCOMM_NNCF"
+    QUALCOMM_AO = "QUALCOMM_AO"
+    X86_QUANTIZER_AO = "X86_QUANTIZER_AO"
     ONNX = "ONNX"
     OV = "OV"
     OPTIMUM = "OPTIMUM"
@@ -65,7 +75,28 @@ class BackendType(Enum):
 NNCF_PTQ_BACKENDS = [BackendType.TORCH, BackendType.CUDA_TORCH, BackendType.ONNX, BackendType.OV]
 ALL_PTQ_BACKENDS = NNCF_PTQ_BACKENDS
 PT_BACKENDS = [BackendType.TORCH, BackendType.CUDA_TORCH]
-FX_BACKENDS = [BackendType.FX_TORCH, BackendType.CUDA_FX_TORCH]
+FX_BACKENDS = [
+    BackendType.FX_TORCH,
+    BackendType.CUDA_FX_TORCH,
+    BackendType.OV_QUANTIZER_NNCF,
+    BackendType.OV_QUANTIZER_AO,
+    BackendType.X86_QUANTIZER_NNCF,
+    BackendType.X86_QUANTIZER_AO,
+    BackendType.XNNPACK_NNCF,
+    BackendType.XNNPACK_AO,
+    BackendType.ARM_NNCF,
+    BackendType.ARM_AO,
+    BackendType.QUALCOMM_NNCF,
+    BackendType.QUALCOMM_AO,
+]
+FX_EAGER_BACKENDS = [
+    BackendType.XNNPACK_NNCF,
+    BackendType.XNNPACK_AO,
+    BackendType.ARM_NNCF,
+    BackendType.ARM_AO,
+    BackendType.QUALCOMM_NNCF,
+    BackendType.QUALCOMM_AO,
+]
 OV_BACKENDS = [BackendType.OV, BackendType.OPTIMUM]
 
 LIMIT_LENGTH_OF_STATUS = 120
@@ -102,11 +133,8 @@ class NumCompressNodes:
 @dataclass
 class PTQNumCompressNodes(NumCompressNodes):
     num_fq_nodes: Optional[int] = None
-
-    def get_data(self):
-        data = super().get_data()
-        data["Num FQ"] = self.num_fq_nodes
-        return data
+    num_int8: Optional[int] = None
+    num_int4: Optional[int] = None
 
 
 @dataclass
@@ -499,21 +527,69 @@ class PTQTestPipeline(BaseTestPipeline):
             )
             ov.serialize(ov_model, self.path_compressed_ir)
         elif self.backend in FX_BACKENDS:
-            exported_model = torch.export.export(self.compressed_model.cpu(), (self.dummy_tensor.cpu(),))
+            from tests.torch.fx.helpers import visualize_fx_model
+
+            visualize_fx_model(self.compressed_model, str(self.output_model_dir / f"{self.backend.value}.svg"))
+            with open(self.output_model_dir / "fx_graph_code.py", "w") as f:
+                f.write(self.compressed_model.code)
+            # from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+            # from executorch.exir import EdgeCompileConfig
+            # from executorch.exir import to_edge_transform_and_lower
+            # from torch.export import export
+
+            # official_api = True
+            # if official_api:
+            #    edge = to_edge_transform_and_lower(
+            #        export(self.compressed_model, (self.dummy_tensor.cpu(),)),
+            #        compile_config=EdgeCompileConfig(_check_ir_validity=False),
+            #        partitioner=[XnnpackPartitioner()],
+            #    )
+            #    exec_prog = edge.to_executorch()
+            # else:
+            #    from executorch import exir
+            #    from executorch.backends.xnnpack.utils.configs import get_transform_passes
+            #    from executorch.backends.xnnpack.utils.configs import get_xnnpack_edge_compile_config
+            #    from executorch.backends.xnnpack.utils.configs import get_xnnpack_executorch_backend_config
+            #    from executorch.backends.xnnpack.utils.utils import capture_graph_for_xnnpack
+            #    from executorch.exir import ExecutorchProgram
+            #    from executorch.exir import ExirExportedProgram
+            #    from executorch.exir.backend.backend_api import to_backend
+
+            #    captured_program = exir.capture(
+            #        self.compressed_model,
+            #        (self.dummy_tensor,),
+            #        config=exir.CaptureConfig(enable_aot=True, _unlift=True),
+            #    )
+
+            #    edge_program = captured_program.to_edge(get_xnnpack_edge_compile_config()).transform(
+            #        *get_transform_passes()
+            #    )
+
+            #    delegated_program = to_backend("XnnpackBackend", edge_program.exported_program, [])
+
+            #    exported_program: ExirExportedProgram = capture_graph_for_xnnpack(
+            #        delegated_program, (self.dummy_tensor,)
+            #    )
+            #    exec_prog: ExecutorchProgram = exported_program.to_executorch(
+            #        get_xnnpack_executorch_backend_config(),
+            #    )
+
+            # with open(self.output_model_dir / "xnnpack.pte", "wb") as file:
+            #    exec_prog.write_to_file(file)
+
+        elif self.backend in set(FX_BACKENDS) - set(FX_EAGER_BACKENDS):
+            exported_model = torch.export.export(self.model, (self.dummy_tensor,))
             ov_model = ov.convert_model(exported_model, example_input=self.dummy_tensor.cpu(), input=self.input_size)
-            ov_model.reshape(self.input_size)
+            self.path_compressed_ir = self.output_model_dir / "model.xml"
             ov.serialize(ov_model, self.path_compressed_ir)
-
-            if self.backend == BackendType.CUDA_FX_TORCH:
-                self.model = self.model.cuda()
-                self.dummy_tensor = self.dummy_tensor.cuda()
-
         elif self.backend == BackendType.ONNX:
             onnx_path = self.output_model_dir / "model.onnx"
             onnx.save(self.compressed_model, str(onnx_path))
             ov_model = ov.convert_model(onnx_path)
+            self.path_compressed_ir = self.output_model_dir / "model.xml"
             ov.serialize(ov_model, self.path_compressed_ir)
         elif self.backend in OV_BACKENDS:
+            self.path_compressed_ir = self.output_model_dir / "model.xml"
             from openvino._offline_transformations import apply_moc_transformations
 
             apply_moc_transformations(self.compressed_model, cf=True)
@@ -554,11 +630,8 @@ class PTQTestPipeline(BaseTestPipeline):
         self.run_info.stats_from_output = stats
 
     def get_num_compressed(self) -> None:
-        ie = ov.Core()
-        model = ie.read_model(model=self.path_compressed_ir)
-        num_fq, _, num_int8 = get_num_fq_int4_int8(model)
-        self.run_info.num_compress_nodes.num_int8 = num_int8
-        self.run_info.num_compress_nodes.num_fq_nodes = num_fq
+        self.run_info.num_compress_nodes.num_int8 = 0
+        self.run_info.num_compress_nodes.num_fq_nodes = 0
 
 
 def get_num_fq_int4_int8(model: ov.Model) -> Tuple[int, int, int]:

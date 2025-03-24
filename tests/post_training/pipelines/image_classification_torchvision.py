@@ -26,6 +26,7 @@ from tests.post_training.pipelines.image_classification_base import ImageClassif
 
 
 def _torch_export_for_training(model: torch.nn.Module, args: Tuple[Any, ...]) -> torch.fx.GraphModule:
+    # return _torch_export(model, args)
     return torch.export.export_for_training(model, args).module()
 
 
@@ -49,14 +50,10 @@ class ImageClassificationTorchvision(ImageClassificationBase):
             models.MobileNet_V3_Small_Weights.DEFAULT, _torch_export_for_training
         ),
         models.vit_b_16: VisionModelParams(
-            models.ViT_B_16_Weights.DEFAULT,
-            _torch_export_for_training,
-            export_torch_before_ov_convert=False,  # OV convert of exported model has issues Issue-162009
+            models.ViT_B_16_Weights.DEFAULT, _torch_export_for_training, export_torch_before_ov_convert=True
         ),
         models.swin_v2_s: VisionModelParams(
-            models.Swin_V2_S_Weights.DEFAULT,
-            _torch_export,
-            export_torch_before_ov_convert=False,  # OV convert of exported model has issues Issue-162009
+            models.Swin_V2_S_Weights.DEFAULT, _torch_export, export_torch_before_ov_convert=True
         ),
     }
 
@@ -82,9 +79,6 @@ class ImageClassificationTorchvision(ImageClassificationBase):
         if self.backend in FX_BACKENDS:
             with torch.no_grad():
                 with disable_patching():
-                    if self.backend is BackendType.CUDA_FX_TORCH:
-                        model = model.cuda()
-                        self.dummy_tensor = self.dummy_tensor.cuda()
                     self.model = self.model_params.export_fn(model, (self.dummy_tensor,))
 
         elif self.backend in PT_BACKENDS:
@@ -122,20 +116,16 @@ class ImageClassificationTorchvision(ImageClassificationBase):
         if self.backend in PT_BACKENDS:
             with disable_patching():
                 ov_model = ov.convert_model(
-                    self.model,
+                    torch.export.export(self.model, args=(self.dummy_tensor,)),
                     example_input=self.dummy_tensor,
                     input=self.input_size,
                 )
             ov.serialize(ov_model, self.fp32_model_dir / "model_fp32.xml")
 
         if self.backend in FX_BACKENDS:
-            exported_model = torch.export.export(self.model.cpu(), (self.dummy_tensor.cpu(),))
+            exported_model = torch.export.export(self.model, (self.dummy_tensor,))
             ov_model = ov.convert_model(exported_model, example_input=self.dummy_tensor, input=self.input_size)
             ov.serialize(ov_model, self.fp32_model_dir / "fx_model_fp32.xml")
-
-            if self.backend is BackendType.CUDA_FX_TORCH:
-                self.model = self.model.cuda()
-                self.dummy_tensor = self.dummy_tensor.cuda()
 
         if self.backend in [BackendType.FP32, BackendType.OV]:
             ov.serialize(self.model, self.fp32_model_dir / "model_fp32.xml")
@@ -145,9 +135,7 @@ class ImageClassificationTorchvision(ImageClassificationBase):
 
     def get_transform_calibration_fn(self):
         if self.backend in FX_BACKENDS + PT_BACKENDS:
-            device = torch.device(
-                "cuda" if self.backend in [BackendType.CUDA_TORCH, BackendType.CUDA_FX_TORCH] else "cpu"
-            )
+            device = torch.device("cuda" if self.backend == BackendType.CUDA_TORCH else "cpu")
 
             def transform_fn(data_item):
                 images, _ = data_item

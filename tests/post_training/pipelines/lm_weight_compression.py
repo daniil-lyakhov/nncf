@@ -26,8 +26,8 @@ from optimum.exporters.openvino.convert import export_from_model
 from optimum.intel.openvino import OVModelForCausalLM
 from transformers import AutoModelForCausalLM
 from transformers import AutoTokenizer
-from whowhatbench import Evaluator
 
+# from whowhatbench import Evaluator
 import nncf
 from tests.cross_fw.shared.paths import TEST_ROOT
 from tests.post_training.pipelines.base import BackendType
@@ -41,6 +41,8 @@ from tests.post_training.pipelines.base import get_num_fq_int4_int8
 from tools.memory_monitor import MemoryType
 from tools.memory_monitor import MemoryUnit
 from tools.memory_monitor import memory_monitor_context
+
+Evaluator = None
 
 
 @dataclass

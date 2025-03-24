@@ -230,8 +230,9 @@ def run_pipeline(
         }
     )
     pipeline: BaseTestPipeline = pipeline_cls(**pipeline_kwargs)
+    pipeline.run()
     try:
-        pipeline.run()
+        pass
     except Exception as e:
         message = f"{type(e).__name__} | {str(e)}"
         exception_report = ErrorReport(ErrorReason.EXCEPTION, message)

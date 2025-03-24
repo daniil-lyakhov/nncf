@@ -25,7 +25,7 @@ from nncf.common.utils.dot_file_rw import write_dot_graph
 def sort_dot(path):
     with open(path, encoding="utf8") as f:
         content = f.readlines()
-    start_line = "strict digraph  {\n"
+    start_line = "strict digraph {\n"
     end_line = "}\n"
     content.remove(start_line)
     content.remove(end_line)
