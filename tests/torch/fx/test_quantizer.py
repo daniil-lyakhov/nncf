@@ -32,8 +32,8 @@ from torch.ao.quantization.quantizer.x86_inductor_quantizer import X86InductorQu
 from torch.ao.quantization.quantizer.x86_inductor_quantizer import get_default_x86_inductor_quantization_config
 
 import nncf
+from nncf.experimental.torch.fx import quantize_pt2e
 from nncf.experimental.torch.fx.nncf_graph_builder import GraphConverter
-from nncf.experimental.torch.fx.quantization.quantize_pt2e import quantize_pt2e
 from nncf.experimental.torch.fx.quantization.quantizer.openvino_quantizer import OpenVINOQuantizer
 from nncf.experimental.torch.fx.quantization.quantizer.torch_ao_adapter import _get_edge_or_node_to_qspec
 from tests.torch import test_models
@@ -165,17 +165,15 @@ def test_quantized_model(
         FX_QUANTIZED_DIR_NAME / quantizer.__class__.__name__,
         extended=True,
     )
-
     # Uncomment to visualize reference graphs
     # from torch.ao.quantization.quantize_pt2e import convert_pt2e
     # from torch.ao.quantization.quantize_pt2e import prepare_pt2e
-    # from tests.torch.fx.helpers import visualize_fx_model
     # prepared_model = prepare_pt2e(fx_model, quantizer)
     # prepared_model(example_input)
     # ao_quantized_model = convert_pt2e(prepared_model)
-    # visualize_fx_model(ao_quantized_model, f"{model_case.model_id}ao_int8.svg")
+    # # visualize_fx_model(ao_quantized_model, f"{quantizer.__class__.__name__}_{model_case.model_id}ao_int8.svg")
     # ao_nncf_graph = GraphConverter.create_nncf_graph(ao_quantized_model)
-    # ao_nncf_graph.visualize_graph("ao_" + get_dot_filename(model_case.model_id))
+    # ao_nncf_graph.visualize_graph(f"ao_{quantizer.__class__.__name__}_{get_dot_filename(model_case.model_id)}")
 
 
 @pytest.mark.parametrize(
