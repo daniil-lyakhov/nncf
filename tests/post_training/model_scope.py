@@ -96,7 +96,7 @@ QUANTIZATION_MODELS = [
             BackendType.OV,
             BackendType.ONNX,
         ],
-        "batch_size": 128,
+        "batch_size": 1,
     },
     {
         "reported_name": "torchvision/mobilenet_v3_small_BC",

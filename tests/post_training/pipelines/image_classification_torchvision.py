@@ -78,14 +78,7 @@ class ImageClassificationTorchvision(ImageClassificationBase):
         if self.batch_size > 1:  # Dynamic batch_size shape export
             self.input_size[0] = -1
 
-        if self.backend in FX_BACKENDS:
-            with torch.no_grad():
-                if self.backend is BackendType.CUDA_FX_TORCH:
-                    model = model.cuda()
-                    self.dummy_tensor = self.dummy_tensor.cuda()
-                self.model = self.model_params.export_fn(model, (self.dummy_tensor,))
-
-        elif self.backend in PT_BACKENDS:
+        if self.backend in FX_BACKENDS or self.backend in PT_BACKENDS:
             self.model = model
 
         if self.backend == BackendType.ONNX:
