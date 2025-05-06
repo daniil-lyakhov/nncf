@@ -283,7 +283,8 @@ class FastBiasCorrection(Algorithm):
         for tensor_collector in statistic_points.get_algo_statistics_for_node(
             node_name, output_filter_func, self._algorithm_key
         ):
-            output_fp.extend(tensor_collector.get_statistics().mean_values)
+            stat = tensor_collector.get_statistics().mean_values
+            output_fp.extend(fns.atleast_1d(stat))
         return output_fp
 
     def _add_statistic_point(self, container: StatisticPointsContainer, point: TargetPoint, axis: int) -> None:
