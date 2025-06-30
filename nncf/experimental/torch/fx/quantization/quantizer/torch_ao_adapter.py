@@ -15,11 +15,11 @@ from typing import Any, Union
 
 import torch
 import torch.fx
-from torch.ao.quantization.pt2e.prepare import _get_edge_or_node_to_group_id
-from torch.ao.quantization.pt2e.prepare import _get_edge_or_node_to_qspec
-from torch.ao.quantization.quantizer import Quantizer as TorchAOQuantizer
-from torch.ao.quantization.quantizer.quantizer import QuantizationSpec
-from torch.ao.quantization.quantizer.quantizer import SharedQuantizationSpec
+from torchao.quantization.pt2e.prepare import _get_edge_or_node_to_group_id
+from torchao.quantization.pt2e.prepare import _get_edge_or_node_to_qspec
+from torchao.quantization.pt2e.quantizer import Quantizer as TorchAOQuantizer
+from torchao.quantization.pt2e.quantizer.quantizer import QuantizationSpec
+from torchao.quantization.pt2e.quantizer.quantizer import SharedQuantizationSpec
 
 import nncf
 from nncf.common.graph.graph import NNCFGraph

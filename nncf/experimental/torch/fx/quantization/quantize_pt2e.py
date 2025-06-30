@@ -14,12 +14,12 @@ from typing import Optional
 
 import torch
 import torch.fx
-from torch.ao.quantization.pt2e.port_metadata_pass import PortNodeMetaForQDQ
-from torch.ao.quantization.pt2e.utils import _disallow_eval_train
-from torch.ao.quantization.pt2e.utils import _fuse_conv_bn_
-from torch.ao.quantization.quantizer import Quantizer
 from torch.fx import GraphModule
 from torch.fx.passes.infra.pass_manager import PassManager
+from torchao.quantization.pt2e.quantizer import PortNodeMetaForQDQ
+from torchao.quantization.pt2e.quantizer import Quantizer
+from torchao.quantization.pt2e.utils import _disallow_eval_train
+from torchao.quantization.pt2e.utils import _fuse_conv_bn_
 
 import nncf
 from nncf import Dataset
