@@ -874,7 +874,7 @@ class WeightCompression(Algorithm):
 
         return all_weight_params, ratio_defining_params, group_size_values
 
-    def collect_statistics_and_statistic_points(
+    def _collect_statistics_and_statistic_points(
         self, model, graph, statistic_points, dataset, ratio_defining_params, all_weight_params
     ):
         if not dataset or not (self._data_aware_mixed_precision or self._data_aware_compression):
@@ -909,8 +909,28 @@ class WeightCompression(Algorithm):
         all_weight_params, ratio_defining_params, group_size_values = self.get_weight_compression_parameters(
             model, graph
         )
+        return self.apply_with_parameters(
+            model,
+            graph,
+            dataset,
+            statistic_points,
+            all_weight_params,
+            ratio_defining_params,
+            group_size_values,
+        )
+
+    def apply_with_parameters(
+        self,
+        model,
+        graph,
+        dataset,
+        statistic_points,
+        all_weight_params,
+        ratio_defining_params,
+        group_size_values,
+    ):
         # Collect statistics for the weights compression
-        statistics, statistic_points = self.collect_statistics_and_statistic_points(
+        statistics, statistic_points = self._collect_statistics_and_statistic_points(
             model, graph, statistic_points, dataset, ratio_defining_params, all_weight_params
         )
         # Set weight compression configuration
