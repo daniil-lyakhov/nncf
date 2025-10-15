@@ -28,8 +28,9 @@ from nncf.parameters import SensitivityMetric
 from nncf.quantization.algorithms.algorithm import Algorithm
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionConfig
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionParameters
+from nncf.quantization.algorithms.weight_compression.weight_lowering import do_int_dequantization
+from nncf.quantization.algorithms.weight_compression.weight_lowering import do_int_quantization
 from nncf.quantization.algorithms.weight_compression.weight_lowering import get_integer_quantization_error
-from nncf.quantization.algorithms.weight_compression.weight_lowering import integer_quantize_dequantize_weight
 from nncf.tensor import Tensor
 from nncf.tensor import functions as fns
 from nncf.tensor.definitions import TensorDataType
@@ -41,16 +42,18 @@ THE_LOWEST_SENSITIVITY = 0
 
 class MixedPrecisionCriterion(Algorithm):
     """
-    Computes mixed quantization scheme (e.g. uniform int8 or uniform int4/non-uniform fp4)
+    Assigns mixed quantization scheme (e.g. uniform int8 or uniform int4/non-uniform fp4)
     for weights based on some criteria.
     """
 
-    def __init__(self, ratio: float, subset_size: Optional[int] = None):
+    def __init__(self, primary_config: WeightCompressionConfig, ratio: float, subset_size: Optional[int] = None):
         """
+        :param primary_config: Configuration on how to compress (quantize) weights to primary precision.
         :param ratio: The ratio between primary and backup precisions (e.g. 0.9 means 90% of layers quantized to NF4
             and the rest to INT8_ASYM).
         :param subset_size: Size of dataset subset for statistics.
         """
+        self._primary_config = primary_config
         self._ratio = ratio
         self._subset_size = subset_size
         self._algorithm_key = f"MPC_{hash(self)}"
@@ -77,17 +80,15 @@ class MixedPrecisionCriterion(Algorithm):
         statistic_points: Optional[StatisticPointsContainer] = None,
         dataset: Optional[Dataset] = None,
         weight_params: list[WeightCompressionParameters] = None,
-    ) -> list[WeightCompressionParameters]:
+    ) -> None:
         """
-        Selects which weights should be compressed to a primary (4 bit) precision based on computed layers'
-        sensitivities, ratio of parameters.
+        Assigns quantization precision based on computed layers' sensitivities, ratio of parameters.
         """
         self._set_backend_entity(model)
 
         scores = self._calc_sensitivity(model, graph, weight_params, statistic_points)
         num_all_weights = sum(wp.num_weights for wp in weight_params)
 
-        primary_precision_weight_params = []
         indexes_of_layers_in_ascending_order_of_scores = [
             i[0] for i in sorted(enumerate(scores), reverse=False, key=lambda x: x[1])
         ]
@@ -97,9 +98,8 @@ class MixedPrecisionCriterion(Algorithm):
             current_ratio = (num_weights_in_4bit + weight_param.num_weights) / num_all_weights
             if current_ratio >= self._ratio:
                 break
-            primary_precision_weight_params.append(weight_param)
+            weight_param.compression_config = self._primary_config
             num_weights_in_4bit += weight_param.num_weights
-        return primary_precision_weight_params
 
     @abstractmethod
     def _set_backend_entity(self, model: TModel) -> None:
@@ -220,7 +220,7 @@ class DataBasedCriterion(DataFreeCriterion, ABC):
 
     @property
     def available_backends(self) -> list[BackendType]:
-        return [BackendType.OPENVINO, BackendType.TORCH, BackendType.ONNX]
+        return [BackendType.OPENVINO, BackendType.TORCH]
 
     def _set_backend_entity(self, model: TModel) -> None:
         model_backend = get_backend(model)
@@ -236,10 +236,6 @@ class DataBasedCriterion(DataFreeCriterion, ABC):
             from nncf.quantization.algorithms.weight_compression.torch_fx_backend import FXMixedPrecisionAlgoBackend
 
             self._backend_entity = FXMixedPrecisionAlgoBackend()
-        elif model_backend == BackendType.ONNX:
-            from nncf.quantization.algorithms.weight_compression.onnx_backend import ONNXMixedPrecisionAlgoBackend
-
-            self._backend_entity = ONNXMixedPrecisionAlgoBackend(model)
         else:
             msg = f"Cannot return backend-specific entity because {model_backend.value} is not supported!"
             raise nncf.UnsupportedBackendError(msg)
@@ -281,7 +277,7 @@ class DataBasedCriterion(DataFreeCriterion, ABC):
         self._set_backend_entity(model)
 
         statistic_container = StatisticPointsContainer()
-        for act_node, output_port_id in nodes_and_port_ids:
+        for act_node, output_port_id, _ in nodes_and_port_ids:
             n_dims = len(graph.get_output_edges_by_port_id(act_node, output_port_id)[0].tensor_shape)
             if n_dims < 2:
                 msg = (
@@ -366,7 +362,8 @@ class HAWQCriterion(DataBasedCriterion):
         if weight.dtype != TensorDataType.float32:
             weight = weight.astype(TensorDataType.float32)
 
-        decompressed_weight = integer_quantize_dequantize_weight(weight, backup_config, reduction_axes)
+        compressed_weights, scale, zero_point = do_int_quantization(weight, backup_config, reduction_axes)
+        decompressed_weight = do_int_dequantization(compressed_weights, scale, zero_point)
         decompressed_weight = decompressed_weight.reshape(orig_shape)
         return fns.linalg.norm(decompressed_weight - weight, ord="fro").item()
 

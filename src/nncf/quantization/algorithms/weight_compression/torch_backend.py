@@ -14,6 +14,7 @@ from typing import Callable, Iterable, Optional, Union
 import torch
 
 import nncf
+import nncf.torch.graph.operator_metatypes as om
 from nncf.common.graph.definitions import NNCFGraphNodeType
 from nncf.common.graph.graph import NNCFGraph
 from nncf.common.graph.graph import NNCFNode
@@ -24,21 +25,30 @@ from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.transformations.layout import TransformationLayout
 from nncf.common.quantization.structs import QuantizationScheme
 from nncf.common.tensor_statistics.statistic_point import StatisticPoint
+from nncf.experimental.common.tensor_statistics.collectors import MaxVarianceReducer
+from nncf.experimental.common.tensor_statistics.collectors import MeanAbsMaxReducer
+from nncf.experimental.common.tensor_statistics.collectors import MeanAggregator
 from nncf.experimental.common.tensor_statistics.collectors import MeanReducer
+from nncf.experimental.common.tensor_statistics.collectors import MeanVarianceReducer
 from nncf.experimental.common.tensor_statistics.collectors import NoopAggregator
 from nncf.experimental.common.tensor_statistics.collectors import ShapeReducer
 from nncf.experimental.common.tensor_statistics.collectors import TensorCollector
+from nncf.experimental.common.tensor_statistics.statistics import MaxVarianceTensorStatistic
+from nncf.experimental.common.tensor_statistics.statistics import MeanMagnitudeTensorStatistic
+from nncf.experimental.common.tensor_statistics.statistics import MeanVarianceTensorStatistic
 from nncf.experimental.common.tensor_statistics.statistics import WCTensorStatistic
 from nncf.parameters import CompressionFormat
 from nncf.parameters import CompressWeightsMode
 from nncf.quantization.advanced_parameters import AdvancedCompressionParameters
+from nncf.quantization.algorithms.smooth_quant.torch_backend import SQMultiply
 from nncf.quantization.algorithms.weight_compression.awq_patterns import get_awq_patterns
 from nncf.quantization.algorithms.weight_compression.backend import AWQAlgoBackend
 from nncf.quantization.algorithms.weight_compression.backend import MixedPrecisionAlgoBackend
 from nncf.quantization.algorithms.weight_compression.backend import WeightCompressionAlgoBackend
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionParameters
+from nncf.quantization.algorithms.weight_compression.handle_errors import handle_invalid_group_size_error
 from nncf.quantization.algorithms.weight_compression.lora_correction import LoraCorrectionAlgorithm
-from nncf.quantization.algorithms.weight_compression.parameters import CompressedWeight
+from nncf.quantization.algorithms.weight_compression.weight_lowering import CompressedWeight
 from nncf.quantization.algorithms.weight_compression.weight_lowering import compress_weight
 from nncf.tensor import Tensor
 from nncf.tensor.definitions import TensorDataType
@@ -46,9 +56,6 @@ from nncf.torch.function_hook.commands import PT2InsertionCommand
 from nncf.torch.function_hook.model_transformer import PT2ModelTransformer
 from nncf.torch.function_hook.nncf_graph.nncf_graph_builder import GraphModelWrapper
 from nncf.torch.graph.graph import PTTargetPoint
-from nncf.torch.graph.operator_metatypes import CONVOLUTION_METATYPES
-from nncf.torch.graph.operator_metatypes import EMBEDDING_METATYPES
-from nncf.torch.graph.operator_metatypes import MATMUL_METATYPES
 from nncf.torch.graph.operator_metatypes import PTMulMetatype
 from nncf.torch.graph.pattern_operations import ATOMIC_ACTIVATIONS_OPERATIONS
 from nncf.torch.graph.transformations.commands import PTSharedFnInsertionCommand
@@ -57,20 +64,16 @@ from nncf.torch.model_graph_manager import find_const_node_in_constant_subgraph
 from nncf.torch.model_graph_manager import get_const_data
 from nncf.torch.model_graph_manager import get_const_node
 from nncf.torch.model_graph_manager import get_module_by_name
-from nncf.torch.model_graph_manager import get_weight_compression_reduction_axes
 from nncf.torch.model_graph_manager import split_const_name
 from nncf.torch.model_transformer import PTModelTransformer
 from nncf.torch.nncf_network import NNCFNetwork
-from nncf.torch.quantization.ignored_patterns import create_rope
 from nncf.torch.quantization.layers import QUANTIZATION_MODULES
 from nncf.torch.quantization.layers import INT4AsymmetricWeightsDecompressor
 from nncf.torch.quantization.layers import INT4SymmetricWeightsDecompressor
 from nncf.torch.quantization.layers import INT8AsymmetricWeightsDecompressor
 from nncf.torch.quantization.layers import INT8SymmetricWeightsDecompressor
-from nncf.torch.quantization.layers import PTLoraNLSSpec
 from nncf.torch.quantization.layers import PTLoraSpec
 from nncf.torch.quantization.layers import PTQuantizerSpec
-from nncf.torch.quantization.layers import SQMultiply
 
 
 class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
@@ -78,25 +81,38 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         TargetType.PRE_LAYER_OPERATION: TargetType.OPERATOR_PRE_HOOK,
         TargetType.POST_LAYER_OPERATION: TargetType.OPERATOR_POST_HOOK,
     }
+    MATMUL_METATYPES = [om.PTLinearMetatype, om.PTMatMulMetatype, om.PTAddmmMetatype]
+    EMBEDDING_METATYPES = [om.PTEmbeddingMetatype, om.PTAtenEmbeddingMetatype]
+    CONVOLUTION_METATYPES = [
+        om.PTConv1dMetatype,
+        om.PTConv2dMetatype,
+        om.PTConv3dMetatype,
+        om.PTDepthwiseConv1dSubtype,
+        om.PTDepthwiseConv2dSubtype,
+        om.PTDepthwiseConv3dSubtype,
+        om.PTConvTranspose1dMetatype,
+        om.PTConvTranspose2dMetatype,
+        om.PTConvTranspose3dMetatype,
+    ]
 
     @property
     def matmul_metatypes(self) -> list[OperatorMetatype]:
-        return MATMUL_METATYPES
+        return PTWeightCompressionAlgoBackend.MATMUL_METATYPES
 
     @property
     def embedding_metatypes(self) -> list[OperatorMetatype]:
-        return EMBEDDING_METATYPES
+        return PTWeightCompressionAlgoBackend.EMBEDDING_METATYPES
 
     @property
     def convolution_metatypes(self) -> list[OperatorMetatype]:
-        return CONVOLUTION_METATYPES
+        return PTWeightCompressionAlgoBackend.CONVOLUTION_METATYPES
 
     @staticmethod
     def is_node_with_weights(node: NNCFNode, graph: NNCFGraph) -> bool:
         if (
-            node.metatype not in MATMUL_METATYPES
-            and node.metatype not in EMBEDDING_METATYPES
-            and node.metatype not in CONVOLUTION_METATYPES
+            node.metatype not in PTWeightCompressionAlgoBackend.MATMUL_METATYPES
+            and node.metatype not in PTWeightCompressionAlgoBackend.EMBEDDING_METATYPES
+            and node.metatype not in PTWeightCompressionAlgoBackend.CONVOLUTION_METATYPES
         ):
             return False
         for prev_node in graph.get_previous_nodes(node):
@@ -123,10 +139,31 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
     @staticmethod
     def get_reduction_axes(node_with_weight: NNCFNode, weight_port_id: int, graph: NNCFGraph) -> Optional[tuple[int]]:
         weight_node = get_const_node(node_with_weight, weight_port_id, graph)
-        node_with_weight_metatype = node_with_weight.metatype
 
         ndims = len(weight_node.layer_attributes.shape)
-        reduction_axes = get_weight_compression_reduction_axes(node_with_weight_metatype, weight_port_id, ndims)
+        reduction_axes = None
+        if node_with_weight.metatype == om.PTEmbeddingMetatype:
+            reduction_axes = [1]
+        elif node_with_weight.metatype == om.PTLinearMetatype:
+            reduction_axes = [ndims - 1]
+        elif node_with_weight.metatype == om.PTMatMulMetatype:
+            if weight_port_id == 0:
+                reduction_axes = [ndims - 1]
+            elif weight_port_id == 1:
+                reduction_axes = [max(0, ndims - 2)]
+        elif node_with_weight.metatype == om.PTAddmmMetatype:
+            if weight_port_id == 1:
+                reduction_axes = [ndims - 1]
+            elif weight_port_id == 2:
+                reduction_axes = [max(0, ndims - 2)]
+        elif node_with_weight.metatype in PTWeightCompressionAlgoBackend.CONVOLUTION_METATYPES:
+            channel_idx = (
+                1
+                if node_with_weight.metatype
+                in [om.PTConvTranspose1dMetatype, om.PTConvTranspose2dMetatype, om.PTConvTranspose3dMetatype]
+                else 0
+            )
+            reduction_axes = [i for i in range(ndims) if i != channel_idx]
         return tuple(reduction_axes)
 
     @staticmethod
@@ -266,12 +303,6 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         if is_all_8bit and compression_format == CompressionFormat.FQ_LORA:
             mode_vs_schema_map[CompressWeightsMode.INT8_ASYM] = QuantizationScheme.ASYMMETRIC_LORA
             mode_vs_schema_map[CompressWeightsMode.INT8_SYM] = QuantizationScheme.SYMMETRIC_LORA
-        if compression_format == CompressionFormat.FQ_LORA_NLS:
-            mode_vs_schema_map[CompressWeightsMode.INT4_ASYM] = QuantizationScheme.ASYMMETRIC_LORA_NLS
-            mode_vs_schema_map[CompressWeightsMode.INT4_SYM] = QuantizationScheme.SYMMETRIC_LORA_NLS
-            if is_all_8bit:
-                mode_vs_schema_map[CompressWeightsMode.INT8_ASYM] = QuantizationScheme.ASYMMETRIC_LORA_NLS
-                mode_vs_schema_map[CompressWeightsMode.INT8_SYM] = QuantizationScheme.SYMMETRIC_LORA_NLS
 
         schema = mode_vs_schema_map[compression_config.mode]
 
@@ -291,23 +322,10 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         )
 
         quantizer_cls = QUANTIZATION_MODULES.get(schema)
-        if schema in [
-            QuantizationScheme.ASYMMETRIC_LORA,
-            QuantizationScheme.ASYMMETRIC_LORA_NLS,
-            QuantizationScheme.SYMMETRIC_LORA,
-            QuantizationScheme.SYMMETRIC_LORA_NLS,
-        ]:
-            if schema in [QuantizationScheme.ASYMMETRIC_LORA, QuantizationScheme.SYMMETRIC_LORA]:
-                lora_spec = PTLoraSpec(
-                    lora_rank=lora_adapter_rank, orig_weight_shape=orig_weight_shape, weight_shape=weight_shape
-                )
-            else:
-                lora_spec = PTLoraNLSSpec(
-                    lora_rank=lora_adapter_rank,
-                    active_lora_rank=lora_adapter_rank,
-                    orig_weight_shape=orig_weight_shape,
-                    weight_shape=weight_shape,
-                )
+        if schema in [QuantizationScheme.ASYMMETRIC_LORA, QuantizationScheme.SYMMETRIC_LORA]:
+            lora_spec = PTLoraSpec(
+                lora_rank=lora_adapter_rank, orig_weight_shape=orig_weight_shape, weight_shape=weight_shape
+            )
             quantizer = quantizer_cls(quantizer_spec, lora_spec)
             lora_dtype = quantizer.lora_A.dtype
             svd_residual = torch.rand(weight_shape).to(device) * scale / 100  # value on [0,1] * (1/100 of quant size)
@@ -319,11 +337,7 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
             quantizer = quantizer_cls(quantizer_spec)
 
         levels = quantizer.levels
-        if schema in [
-            QuantizationScheme.ASYMMETRIC_LORA,
-            QuantizationScheme.ASYMMETRIC_LORA_NLS,
-            QuantizationScheme.ASYMMETRIC,
-        ]:
+        if schema in [QuantizationScheme.ASYMMETRIC_LORA, QuantizationScheme.ASYMMETRIC]:
             zero_point = compressed_weight.zero_point.data
             dtype = quantizer.input_low.dtype
             # NOTE: Lose some accuracy, because of inversion of round
@@ -418,14 +432,12 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         model: Union[GraphModelWrapper, torch.nn.Module],
         graph: NNCFGraph,
         weight_compression_parameters: Iterable[WeightCompressionParameters],
-        precomputed_compressed_weights: Optional[dict[str, CompressedWeight]] = None,
-        lora_correction_algo: Optional[LoraCorrectionAlgorithm] = None,
+        precomputed_scales: dict[str, Tensor] = None,
+        precomputed_zero_points: dict[str, Tensor] = None,
+        lora_correction_algo: LoraCorrectionAlgorithm = None,
         compression_format: CompressionFormat = CompressionFormat.DQ,
-        advanced_parameters: Optional[AdvancedCompressionParameters] = None,
+        advanced_parameters: AdvancedCompressionParameters = AdvancedCompressionParameters(),
     ) -> NNCFNetwork:
-        if advanced_parameters is None:
-            advanced_parameters = AdvancedCompressionParameters()
-
         if isinstance(model, GraphModelWrapper):
             model_transformer = PT2ModelTransformer(model)
             model = model.model
@@ -434,12 +446,13 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
 
         transformation_layout = TransformationLayout()
         is_all_8bit = all(wc_params.compression_config.num_bits == 8 for wc_params in weight_compression_parameters)
+        invalid_node_names = []
+        first_caught_error = None
         for wc_params in weight_compression_parameters:
             compression_config = wc_params.compression_config
             if compression_config.mode in [
                 CompressWeightsMode.NF4,
-                CompressWeightsMode.MXFP4,
-                CompressWeightsMode.MXFP8_E4M3,
+                CompressWeightsMode.E2M1,
             ]:
                 msg = f"{compression_config.mode.value} is not supported."
                 raise nncf.ParameterNotSupportedError(msg)
@@ -451,14 +464,19 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
                 msg = f"Could not find a torch.nn.Parameter in the model by name {weight_name}."
                 raise nncf.InternalError(msg)
 
-            precomputed_compressed_weights = precomputed_compressed_weights or {}
-            # calculates compressed weights and decompression parameters
-            compressed_weight = compress_weight(
-                Tensor(weight),
-                wc_params.reduction_axes,
-                compression_config,
-                precomputed_compressed_weights.get(wc_params.weight_name),
-            )
+            try:
+                # calculates compressed weights and decompression parameters
+                compressed_weight = compress_weight(
+                    Tensor(weight),
+                    wc_params.reduction_axes,
+                    compression_config,
+                    None if precomputed_scales is None else precomputed_scales.get(wc_params.weight_name),
+                    None if precomputed_zero_points is None else precomputed_zero_points.get(wc_params.weight_name),
+                )
+            except nncf.InvalidGroupSizeError as error:
+                first_caught_error = error
+                invalid_node_names.append(wc_params.node_with_weight.node_name)
+                continue
 
             if compression_format == CompressionFormat.DQ:
                 command = self.get_dq_insertion_command(compressed_weight, wc_params, model, graph, weight_node)
@@ -469,6 +487,8 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
                 )
             transformation_layout.register(command)
 
+        if first_caught_error:
+            handle_invalid_group_size_error(first_caught_error, invalid_node_names)
         # To have FQ's with requires_grad=True only
         model.requires_grad_(False)
 
@@ -478,15 +498,15 @@ class PTWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         return transformed_model
 
     @staticmethod
-    def get_ignored_patterns() -> GraphPattern:
-        return create_rope()
+    def get_activation_channel_axis(node: NNCFNode, port_id: int, input_shape: tuple[int]) -> int:
+        return node.metatype.output_channel_axis
 
 
 class PTAWQAlgoAlgoBackend(AWQAlgoBackend, PTWeightCompressionAlgoBackend):
     @staticmethod
     def get_awq_patterns():
         return get_awq_patterns(
-            MATMUL_METATYPES,
+            PTWeightCompressionAlgoBackend.MATMUL_METATYPES,
             PTMulMetatype,
             ATOMIC_ACTIVATIONS_OPERATIONS[GraphPattern.METATYPE_ATTR],
         )
@@ -516,4 +536,32 @@ class PTAWQAlgoAlgoBackend(AWQAlgoBackend, PTWeightCompressionAlgoBackend):
 
 
 class PTMixedPrecisionAlgoBackend(MixedPrecisionAlgoBackend, PTWeightCompressionAlgoBackend):
-    pass
+    @staticmethod
+    def mean_variance_statistic_collector(
+        reduction_axes: tuple[int], subset_size: Optional[int] = None
+    ) -> TensorCollector:
+        reducer = MeanVarianceReducer(reduction_axes)
+        aggregator = MeanAggregator(num_samples=subset_size)
+        collector = TensorCollector(MeanVarianceTensorStatistic)
+        collector.register_statistic_branch(MeanVarianceTensorStatistic.MEAN_VARIANCE_STAT, reducer, aggregator)
+        return collector
+
+    @staticmethod
+    def max_variance_statistic_collector(
+        reduction_axes: tuple[int], subset_size: Optional[int] = None
+    ) -> TensorCollector:
+        reducer = MaxVarianceReducer(reduction_axes)
+        aggregator = MeanAggregator(num_samples=subset_size)
+        collector = TensorCollector(MaxVarianceTensorStatistic)
+        collector.register_statistic_branch(MaxVarianceTensorStatistic.MAX_VARIANCE_STAT, reducer, aggregator)
+        return collector
+
+    @staticmethod
+    def mean_abs_max_statistic_collector(
+        reduction_axes: tuple[int], subset_size: Optional[int] = None
+    ) -> TensorCollector:
+        reducer = MeanAbsMaxReducer(reduction_axes)
+        aggregator = MeanAggregator(num_samples=subset_size)
+        collector = TensorCollector(MeanMagnitudeTensorStatistic)
+        collector.register_statistic_branch(MeanMagnitudeTensorStatistic.MEAN_MAGNITUDE_STAT, reducer, aggregator)
+        return collector

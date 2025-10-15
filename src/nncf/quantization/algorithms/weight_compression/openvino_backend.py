@@ -17,7 +17,6 @@ import nncf
 from nncf.common.graph import NNCFGraph
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import OperatorMetatype
-from nncf.common.graph.patterns.patterns import GraphPattern
 from nncf.common.graph.transformations.commands import TargetType
 from nncf.common.graph.utils import get_reduction_axes
 from nncf.common.tensor_statistics.statistic_point import StatisticPoint
@@ -33,8 +32,8 @@ from nncf.openvino.graph.metatypes import openvino_metatypes as om
 from nncf.openvino.graph.metatypes.groups import ATOMIC_ACTIVATIONS_OPERATIONS
 from nncf.openvino.graph.model_transformer import OVModelTransformer
 from nncf.openvino.graph.node_utils import convert_op
-from nncf.openvino.graph.node_utils import create_ov_codebook_subgraph
 from nncf.openvino.graph.node_utils import create_ov_const_from_tensor
+from nncf.openvino.graph.node_utils import get_activation_channel_axis
 from nncf.openvino.graph.node_utils import get_const_value_as_numpy_tensor
 from nncf.openvino.graph.node_utils import get_const_value_as_ov_tensor
 from nncf.openvino.graph.node_utils import get_weight_channel_axes
@@ -42,7 +41,6 @@ from nncf.openvino.graph.transformations.command_creation import OVCommandCreato
 from nncf.openvino.graph.transformations.commands import OVTargetPoint
 from nncf.openvino.optimized_functions import clear_ov_model_cache
 from nncf.openvino.optimized_functions.models import OV_MODEL_CACHE
-from nncf.openvino.quantization.ignored_patterns import create_rope
 from nncf.openvino.rt_info import dump_parameters
 from nncf.openvino.statistics.collectors import OVMaxVarianceReducer
 from nncf.openvino.statistics.collectors import OVMeanAbsMaxReducer
@@ -58,8 +56,8 @@ from nncf.quantization.algorithms.weight_compression.backend import MixedPrecisi
 from nncf.quantization.algorithms.weight_compression.backend import WeightCompressionAlgoBackend
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionConfig
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionParameters
+from nncf.quantization.algorithms.weight_compression.handle_errors import handle_invalid_group_size_error
 from nncf.quantization.algorithms.weight_compression.lora_correction import LoraCorrectionAlgorithm
-from nncf.quantization.algorithms.weight_compression.parameters import CompressedWeight
 from nncf.quantization.algorithms.weight_compression.weight_lowering import compress_weight
 from nncf.tensor import Tensor
 from nncf.tensor.definitions import TensorDataType
@@ -117,9 +115,6 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
 
     @staticmethod
     def get_activation_port_id(node: NNCFNode, nncf_graph: NNCFGraph) -> int:
-        if node.layer_attributes.input_attributes["transpose"]:
-            msg = "Transposed input is not supported"
-            raise nncf.UnsupportedModelError(msg)
         constant_ports = node.layer_attributes.get_const_port_ids()
         activation_ports = [
             e.input_port_id for e in nncf_graph.get_input_edges(node) if e.input_port_id not in constant_ports
@@ -136,6 +131,9 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         return result
 
     def get_weight(self, node_with_weight: NNCFNode, weight_port_id: int, model: ov.Model, graph: NNCFGraph) -> Tensor:
+        if not node_with_weight.layer_attributes.constant_attributes[weight_port_id]["transpose"]:
+            msg = "Only transposed weights are supported"
+            raise nncf.UnsupportedModelError(msg)
         weight_name = node_with_weight.layer_attributes.constant_attributes[weight_port_id]["name"]
         weight_node = self.name_to_node_mapping[weight_name]
         weight_tensor = get_const_value_as_numpy_tensor(weight_node)
@@ -202,7 +200,12 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
             A_W = opset.constant(lora_A.data)
             B_W = opset.constant(lora_B.data)
 
-        A_MM = opset.matmul(input_node, A_W, transpose_a=False, transpose_b=True)
+        A_MM = opset.matmul(
+            input_node,
+            A_W,
+            transpose_a=wc_params.node_with_weight.layer_attributes.input_attributes["transpose"],
+            transpose_b=True,
+        )
         B_MM = opset.matmul(A_MM, B_W, transpose_a=False, transpose_b=True)
 
         node_output_port = mm_node.output(0)
@@ -220,16 +223,14 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         weight_port_id: int,
         const_dtype,
         should_add_convert_node: bool,
-        precomputed_compressed_weight: Optional[CompressedWeight] = None,
+        layer_scales: Optional[Tensor] = None,
+        layer_zero_points: Optional[Tensor] = None,
     ):
         scale_dtype = ov.Type.f16
         if compression_config.mode == CompressWeightsMode.NF4:
             compression_dtype = ov.Type.nf4
-        elif compression_config.mode == CompressWeightsMode.MXFP4:
+        elif compression_config.mode == CompressWeightsMode.E2M1:
             compression_dtype = ov.Type.f4e2m1
-            scale_dtype = ov.Type.f8e8m0
-        elif compression_config.mode == CompressWeightsMode.MXFP8_E4M3:
-            compression_dtype = ov.Type.f8e4m3
             scale_dtype = ov.Type.f8e8m0
         elif compression_config.mode == CompressWeightsMode.INT4_SYM:
             compression_dtype = ov.Type.i4
@@ -239,47 +240,32 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
             compression_dtype = ov.Type.i8
         elif compression_config.mode == CompressWeightsMode.INT8_ASYM:
             compression_dtype = ov.Type.u8
-        elif compression_config.is_codebook:
-            compression_dtype = None
         else:
             msg = f"{compression_config.mode.value} is not supported."
             raise nncf.ParameterNotSupportedError(msg)
 
         original_shape = weight.shape
-
         with disable_results_caching(OV_MODEL_CACHE):
             compressed_weight = compress_weight(
                 weight,
                 reduction_axes,
                 compression_config,
-                precomputed_compressed_weight,
+                layer_scales,
+                layer_zero_points,
             )
+        compressed_const = create_ov_const_from_tensor(
+            compressed_weight.tensor, compression_dtype, name=const_node_name
+        )
+        converted_const = opset.convert(compressed_const, ov.Type.f16)
 
-        if compression_config.is_codebook:
-            n_quants = compressed_weight.codebook.size - 1
-            compression_dtype = ov.Type.u16 if n_quants > 255 else (ov.Type.u8 if n_quants > 15 else ov.Type.u4)
-            converted_const = create_ov_codebook_subgraph(
-                codebook=compressed_weight.codebook
-                if compression_config.mode == CompressWeightsMode.CODEBOOK
-                else compressed_weight.codebook.as_openvino_tensor().astype(TensorDataType.f8e4m3),
-                indexes=compressed_weight.tensor,
-                dtype=compression_dtype,
-                name=const_node_name,
+        if compressed_weight.zero_point is not None:
+            zero_point_const = create_ov_const_from_tensor(
+                compressed_weight.zero_point, compression_dtype, name=f"{const_node_name}/zero_point"
             )
-        else:
-            compressed_const = create_ov_const_from_tensor(
-                compressed_weight.tensor, compression_dtype, name=const_node_name
+            zero_point_const = opset.convert(zero_point_const, ov.Type.f16)
+            converted_const = opset.subtract(
+                converted_const, zero_point_const, name=f"{const_node_name}/zero_point/subtract"
             )
-            converted_const = opset.convert(compressed_const, ov.Type.f16)
-
-            if compressed_weight.zero_point is not None:
-                zero_point_const = create_ov_const_from_tensor(
-                    compressed_weight.zero_point, compression_dtype, name=f"{const_node_name}/zero_point"
-                )
-                zero_point_const = opset.convert(zero_point_const, ov.Type.f16)
-                converted_const = opset.subtract(
-                    converted_const, zero_point_const, name=f"{const_node_name}/zero_point/subtract"
-                )
 
         scale_const = create_ov_const_from_tensor(compressed_weight.scale, scale_dtype, name=f"{const_node_name}/scale")
         scale_const = convert_op(scale_const, ov.Type.f16)
@@ -297,33 +283,19 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
             mul = opset.convert(mul, const_dtype, name=f"{const_node_name}/fq_weights_{weight_port_id}/convert")
         return mul, compressed_weight
 
-    def _replace_node(self, src_node, new_node):
-        """
-        Replace all occurrences of a source constant node with a new node in the computational graph with
-        the elimination of unnecessary convert operations.
-
-        :param src_node: The source node (typically a constant node) to be replaced.
-        :param new_node: The new node that will replace the source node in the graph.
-        :return: None. The graph is modified in place.
-        """
-        new_output_type = new_node.get_element_type()
-        for target_input in src_node.output(0).get_target_inputs():
-            target_node = target_input.get_node()
-            if target_node.get_type_name() == "Convert" and target_node.get_element_type() == new_output_type:
-                self._replace_node(target_node, new_node)
-            else:
-                target_input.replace_source_output(new_node.output(0))
-
     def transform_model(
         self,
         model: ov.Model,
         graph: NNCFGraph,
         weight_compression_parameters: Iterable[WeightCompressionParameters],
-        precomputed_compressed_weights: Optional[dict[str, CompressedWeight]] = None,
-        lora_correction_algo: Optional[LoraCorrectionAlgorithm] = None,
+        precomputed_scales: dict[str, Tensor] = None,
+        precomputed_zero_points: dict[str, Tensor] = None,
+        lora_correction_algo: LoraCorrectionAlgorithm = None,
         compression_format: CompressionFormat = CompressionFormat.DQ,
-        advanced_parameters: Optional[AdvancedCompressionParameters] = None,
+        advanced_parameters: AdvancedCompressionParameters = AdvancedCompressionParameters(),
     ) -> ov.Model:
+        invalid_node_names = []
+        first_caught_error = None
         for wc_params in weight_compression_parameters:
             const_attributes = wc_params.node_with_weight.layer_attributes.constant_attributes[wc_params.weight_port_id]
             const_node_name = const_attributes["name"]
@@ -342,21 +314,30 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
                         should_add_convert_node = True
                         break
 
-            mul, compressed_weight = self._create_compression_subgraph(
-                weight=weight,
-                compression_config=wc_params.compression_config,
-                reduction_axes=wc_params.reduction_axes,
-                const_node_name=const_node_name,
-                weight_port_id=wc_params.weight_port_id,
-                const_dtype=const_dtype,
-                should_add_convert_node=should_add_convert_node,
-                precomputed_compressed_weight=None
-                if precomputed_compressed_weights is None
-                else precomputed_compressed_weights.get(wc_params.weight_name),
+            layer_scales = None if precomputed_scales is None else precomputed_scales.get(wc_params.weight_name)
+            layer_zero_points = (
+                None if precomputed_zero_points is None else precomputed_zero_points.get(wc_params.weight_name)
             )
+            try:
+                mul, compressed_weight = self._create_compression_subgraph(
+                    weight=weight,
+                    compression_config=wc_params.compression_config,
+                    reduction_axes=wc_params.reduction_axes,
+                    const_node_name=const_node_name,
+                    weight_port_id=wc_params.weight_port_id,
+                    const_dtype=const_dtype,
+                    should_add_convert_node=should_add_convert_node,
+                    layer_scales=layer_scales,
+                    layer_zero_points=layer_zero_points,
+                )
+            except nncf.InvalidGroupSizeError as error:
+                first_caught_error = error
+                invalid_node_names.append(wc_params.node_with_weight.node_name)
+                continue
 
-            self._replace_node(const_node, mul)
-
+            mul_output = mul.output(0)
+            for target_input in const_node.output(0).get_target_inputs():
+                target_input.replace_source_output(mul_output)
             if lora_correction_algo is not None and lora_correction_algo.is_applicable(wc_params):
                 # These tensors can potentially be in ov backend
                 weight = weight.as_numpy_tensor()
@@ -365,6 +346,10 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
                     compressed_weight.zero_point = compressed_weight.zero_point.as_numpy_tensor()
                 adapters = lora_correction_algo.calculate_adapters(weight, compressed_weight, wc_params)
                 self.insert_adapters(wc_params, *adapters, int8_lora=lora_correction_algo.use_int8_adapters)
+
+        if first_caught_error:
+            handle_invalid_group_size_error(first_caught_error, invalid_node_names)
+        # reset name_to_node_mapping
         self.name_to_node_mapping = None
 
         clear_ov_model_cache()
@@ -389,8 +374,8 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         return filter_func
 
     @staticmethod
-    def get_ignored_patterns() -> GraphPattern:
-        return create_rope()
+    def get_activation_channel_axis(node: NNCFNode, port_id: int, input_shape: tuple[int]) -> int:
+        return get_activation_channel_axis(node, port_id, input_shape)
 
 
 class OVTensorWeightCompressionAlgoBackend(OVWeightCompressionAlgoBackend):

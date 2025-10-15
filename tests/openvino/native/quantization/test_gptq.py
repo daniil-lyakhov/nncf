@@ -8,9 +8,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# MIT License
-# Copyright (c) 2023 潘其威(William)
 
 import math
 
@@ -23,7 +20,6 @@ from nncf.parameters import CompressWeightsMode
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionConfig
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionParameters
 from nncf.quantization.algorithms.weight_compression.gptq import GPTQ
-from nncf.tensor.definitions import TensorDataType
 from nncf.tensor.tensor import Tensor
 
 # Modification Notes:
@@ -350,22 +346,20 @@ def test_calculate_scale_linear():
 
     nodes = graph.get_all_nodes()
     wrapped_inputs = [Tensor(inp) for inp in inputs]
-    H = gptq._calculate_hessian(nodes[1], wrapped_inputs)
+    input_channel_axis = gptq._backend_entity.get_activation_channel_axis(
+        nodes[1], gptq._backend_entity.get_activation_port_id(nodes[1], graph), wrapped_inputs[0].shape
+    )
+    H = gptq._calculate_hessian(nodes[1], wrapped_inputs, input_channel_axis)
 
     ref_H = ref_gptq.H.numpy()
     assert np.all(np.isclose(ref_H, H.data))
 
     wc_params = WeightCompressionParameters(
-        weight_name="self.weight",
-        node_with_weight=nodes[1],
-        weight_port_id=1,
-        weight_dtype=TensorDataType.float32,
-        weight_shape=weights.shape,
-        reduction_axes=(1,),
+        weight_name="self.weight", node_with_weight=nodes[1], weight_port_id=1, num_weights=640, reduction_axes=(1,)
     )
     wc_params.compression_config = WeightCompressionConfig(mode=CompressWeightsMode.INT4_SYM, group_size=16)
 
-    scale, _ = gptq._quantize_weights(ov_model, graph, wc_params, H, wrapped_inputs)
+    scale, _ = gptq._quantize_weights(ov_model, graph, wc_params, H, wrapped_inputs, input_channel_axis)
     ref_scale = ref_scale.numpy()
     scale = scale.reshape(ref_scale.shape)
     assert np.all(np.isclose(ref_scale, scale.data))
