@@ -12,7 +12,6 @@
 import inspect
 import os
 from collections import defaultdict
-from contextlib import nullcontext
 from typing import Callable, Optional
 from unittest.mock import patch
 
@@ -1944,61 +1943,6 @@ def test_compression_with_different_algo_combinations(input_shape, kwargs):
     )
 
 
-@pytest.mark.parametrize(
-    "model_cls",
-    [
-        (LMLinearModel),
-        (AWQModel),
-    ],
-    ids=["lm_linear", "awq_model"],
-)
-@pytest.mark.parametrize(
-    ("transpose_a", "transpose_b", "raises_error"),
-    [
-        (False, True, False),
-        (True, True, False),
-        (False, False, True),
-        (True, False, True),
-    ],
-    ids=["tb_nota", "ta_tb", "nota_notb", "ta_notb"],
-)
-@pytest.mark.parametrize(
-    "kwargs",
-    [
-        dict(scale_estimation=True),
-        dict(lora_correction=True),
-        dict(
-            gptq=True,
-            awq=True,
-            scale_estimation=True,
-            advanced_parameters=CompressionParams(gptq_params=GPTQParams(subset_size=2)),
-        ),
-    ],
-    ids=["se", "lora", "gptq_se_awq"],
-)
-def test_compression_with_transpose(model_cls, transpose_a, transpose_b, raises_error, kwargs):
-    dataset_size = 4
-    model = model_cls(transpose_a=transpose_a, transpose_b=transpose_b).ov_model
-    input_data = [np.ones(inp.shape) for inp in model.inputs] * dataset_size
-    dataset = Dataset(input_data)
-
-    with (
-        pytest.raises(nncf.UnsupportedModelError)
-        if raises_error and not kwargs.get("lora_correction", False)
-        else nullcontext()
-    ):
-        compress_weights(
-            model,
-            mode=CompressWeightsMode.INT4_SYM,
-            ratio=1.0,
-            group_size=8,
-            subset_size=2,
-            dataset=dataset,
-            all_layers=True,
-            **kwargs,
-        )
-
-
 @pytest.mark.parametrize("disabled", [False, True])
 def test_disabled_optimized_compression(disabled):
     hidden_dim = (MIN_INPUT_SIZE_FOR_OPTIMIZED_COMPRESSION // LMLinearModel.OUTPUT_DIM) + 1
@@ -2120,6 +2064,14 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
     @staticmethod
     def get_awq_act_model(with_multiply, n_layers):
         return AWQActMatmulModel(with_multiply=with_multiply, n_layers=n_layers).ov_model
+
+    @staticmethod
+    def get_transposable_awq_model_and_inputs(transpose_a, transpose_b):
+        return AWQModel(transpose_a=transpose_a, transpose_b=transpose_b).ov_model
+
+    @staticmethod
+    def get_lml_model(transpose_a, transpose_b):
+        return LMLinearModel(transpose_a=transpose_a, transpose_b=transpose_b).ov_model
 
     @staticmethod
     def to_tensor(x) -> np.ndarray:

@@ -432,6 +432,29 @@ class TestONNXTemplateWeightCompression(TemplateWeightCompression):
         return mb.build(opset_version=21)
 
     @staticmethod
+    def get_transposable_awq_model_and_inputs(transpose_a: bool, transpose_b: bool):
+        mb = ModelBuilder()
+
+        x = mb.add_input("input", (2, 3))
+        output = mb.add_output("output", (2, 3))
+
+        w_shape = (2, 2) if transpose_a else (3, 3)
+        w_data = 0.01 * np.arange(0, np.prod(w_shape), dtype=np.float32).reshape(w_shape) + 0.05
+        w_data = w_data.T
+
+        if transpose_a:
+            transpose = mb.add_transpose(x, (0, 1))
+        else:
+            transpose = x
+        mb.add_gemm(transpose, w_data.shape, trans_a=int(transpose_a), trans_b=int(transpose_b), output=output)
+        model = mb.build()
+        return model, [np.ones((2, 3), dtype=np.float32)]
+
+    @staticmethod
+    def get_lml_model(transpose_a: bool, transpose_b: bool):
+        pass
+
+    @staticmethod
     def to_tensor(x: np.ndarray) -> np.ndarray:
         return np.array(x)
 

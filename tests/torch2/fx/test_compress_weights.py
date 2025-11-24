@@ -545,3 +545,15 @@ class TestFXTemplateWeightCompression(TemplateWeightCompression):
                 torch.tensor([[1.226455, 1.205499, 1.141340, 1.097436, 1.064355, 1.037971, 1.016118, 0.997526]])
             )
         }
+
+    @staticmethod
+    def get_transposable_awq_model_and_inputs(transpose_a: bool, transpose_b: bool):
+        pass
+
+    @staticmethod
+    def get_lml_model(transpose_a: bool, transpose_b: bool):
+        pass
+
+    @pytest.mark.skip("Torch does not have transpose functionality")
+    def test_compression_with_transpose(self):
+        pass

@@ -11,6 +11,7 @@
 import math
 from abc import ABC
 from abc import abstractmethod
+from contextlib import nullcontext
 from typing import Any, Callable, Optional, TypeVar
 from unittest.mock import patch
 
@@ -28,6 +29,7 @@ from nncf.errors import InvalidGroupSizeError
 from nncf.quantization import compress_weights
 from nncf.quantization.advanced_parameters import AdvancedAWQParameters as AWQParams
 from nncf.quantization.advanced_parameters import AdvancedCompressionParameters as CompressionParams
+from nncf.quantization.advanced_parameters import AdvancedGPTQParameters as GPTQParams
 from nncf.quantization.algorithms.weight_compression.algorithm import WeightCompression
 from nncf.quantization.algorithms.weight_compression.awq import AWQ
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionConfig
@@ -643,3 +645,77 @@ class TemplateWeightCompression(ABC):
     @staticmethod
     def get_reduction_axes() -> int:
         return 1
+
+    @staticmethod
+    @abstractmethod
+    def get_transposable_awq_model_and_inputs(transpose_a: bool, transpose_b: bool) -> TModel:
+        "Returns a backend model for test_compression_with_transpose."
+
+    @staticmethod
+    @abstractmethod
+    def get_lml_model(transpose_a: bool, transpose_b: bool) -> TModel:
+        "Returns a backend model for test_compression_with_transpose."
+
+    @pytest.mark.parametrize(
+        "model_cls_name",
+        [
+            ("AWQ"),
+            ("LMLMode"),
+        ],
+        ids=["lm_linear", "awq_model"],
+    )
+    @pytest.mark.parametrize(
+        ("transpose_a", "transpose_b", "raises_error"),
+        [
+            (False, True, False),
+            (True, True, False),
+            (False, False, True),
+            (True, False, True),
+        ],
+        ids=["tb_nota", "ta_tb", "nota_notb", "ta_notb"],
+    )
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            dict(scale_estimation=True),
+            dict(lora_correction=True),
+            dict(
+                gptq=True,
+                awq=True,
+                scale_estimation=True,
+                advanced_parameters=CompressionParams(gptq_params=GPTQParams(subset_size=2)),
+            ),
+        ],
+        ids=["se", "lora", "gptq_se_awq"],
+    )
+    def test_compression_with_transpose(self, model_cls_name, transpose_a, transpose_b, raises_error, kwargs):
+        if kwargs.get("scale_estimation", False) and "scale_estimation" in self.get_not_supported_algorithms():
+            pytest.skip("Scale estimation is not supported")
+        if kwargs.get("awq", False) and "awq" in self.get_not_supported_algorithms():
+            pytest.skip("AWQ is not supported")
+        if kwargs.get("gptq", False) and "gptq" in self.get_not_supported_algorithms():
+            pytest.skip("GPTQ is not supported")
+
+        if model_cls_name == "AWQ":
+            model, inputs = self.get_transposable_awq_model_and_inputs(transpose_a=transpose_a, transpose_b=transpose_b)
+        else:
+            model, inputs = self.get_lml_model(transpose_a=transpose_a, transpose_b=transpose_b)
+        dataset_size = 4
+        input_data = [self.to_tensor(np.ones(inp.shape, dtype=np.float32)) for inp in inputs] * dataset_size
+        dataset = Dataset(input_data, self.get_transform_func())
+
+        with (
+            pytest.raises(nncf.UnsupportedModelError)
+            if raises_error and not kwargs.get("lora_correction", False)
+            else nullcontext()
+        ):
+            compress_weights(
+                model,
+                mode=CompressWeightsMode.INT4_SYM,
+                ratio=1.0,
+                group_size=-1,
+                subset_size=2,
+                dataset=dataset,
+                all_layers=True,
+                **kwargs,
+            )

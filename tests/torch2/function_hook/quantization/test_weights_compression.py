@@ -681,6 +681,18 @@ class TestPTTemplateWeightCompression(TemplateWeightCompression):
             )
         }
 
+    @staticmethod
+    def get_transposable_awq_model_and_inputs(transpose_a: bool, transpose_b: bool):
+        pass
+
+    @staticmethod
+    def get_lml_model(transpose_a: bool, transpose_b: bool):
+        pass
+
+    @pytest.mark.skip("Torch does not have transpose functionality")
+    def test_compression_with_transpose(self):
+        pass
+
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 def test_half_precision_models(dtype):
