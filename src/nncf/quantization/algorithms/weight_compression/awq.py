@@ -184,7 +184,7 @@ class AWQ(Algorithm):
                 scale = self._data_aware_step(wp, weight, statistics[k], prev_weight, prev_statistics)
 
             w_scale = fns.unsqueeze(scale, 1 - wp.reduction_axes[0])
-            a_scale = fns.unsqueeze(1.0 / scale, wp.reduction_axes[0])
+            a_scale = 1.0 / scale
 
             scaled_weight = (weight * w_scale).astype(weight_dtype)
             self._backend_entity.set_weight(wp.node_with_weight, weight_port_id, model, graph, scaled_weight)
@@ -192,21 +192,22 @@ class AWQ(Algorithm):
             if is_mergeable:  # for MatMul->Multiply->MatMul pattern the scale is merged to the first MatMul
                 for _, port_id in self._backend_entity.get_weight_names_and_port_ids(merge_node, graph):
                     merge_weight = self._backend_entity.get_weight(merge_node, port_id, model, graph)
+                    a_scale = fns.unsqueeze(a_scale, wp.reduction_axes[0])
                     merge_weight = (merge_weight * a_scale).astype(weight_dtype)
                     self._backend_entity.set_weight(merge_node, port_id, model, graph, merge_weight)
             else:  # for Act->Multiply->MatMul and Act->MatMul patterns scale inserted after Act as extra node
-                a_scale = fns.transpose(a_scale).astype(weight_dtype)
-                out_edges = graph.get_output_edges(merge_node)
-                next_nodes = [edge.to_node for edge in out_edges]
-                source_node_output_port = graph.get_output_edges(merge_node)[0].output_port_id
+                # Calculate the activation scale shape
+                activation_port_id = self._backend_entity.get_activation_port_id(wp.node_with_weight, graph)
+                act_shape = graph.get_input_edge_by_port_id(wp.node_with_weight, activation_port_id).tensor_shape
+                act_ch_axis = self._backend_entity.get_activation_channel_axis(
+                    wp.node_with_weight, activation_port_id, act_shape
+                )
+                act_ch_axis = act_ch_axis % len(act_shape)
+                a_scale_shape = [scale.shape[0] if axis == act_ch_axis else 1 for axis in range(len(act_shape))]
+                a_scale = fns.reshape(a_scale, tuple(a_scale_shape))
 
-                # Unsqueeze activation scale to match the size of the activation
-                # Output edges always have the same shape
-                tensor_shape = out_edges[0].tensor_shape
-                a_scale_shape = a_scale.shape
-                if len(tensor_shape) > len(a_scale_shape):
-                    a_scale_shape = (1,) * (len(tensor_shape) - len(a_scale_shape)) + tuple(a_scale_shape)
-                    a_scale = fns.reshape(a_scale, a_scale_shape)
+                next_nodes = graph.get_next_nodes(merge_node)
+                source_node_output_port = graph.get_output_edges(merge_node)[0].output_port_id
 
                 scale_insertion_command = self._backend_entity.scale_insertion_command(
                     merge_node, next_nodes, source_node_output_port, a_scale.data

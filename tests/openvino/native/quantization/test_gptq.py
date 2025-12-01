@@ -341,6 +341,7 @@ def test_calculate_scale_linear():
         ref_scale, _, _ = ref_gptq.fasterquant(percdamp=0.1, group_size=16)
 
     # convert PyTorch model to OpenVINO
+    # TODO: Add a transposed version of the model
     ov_model = ov.convert_model(layer, example_input=inputs[0])
     graph = NNCFGraphFactory.create(ov_model)
 

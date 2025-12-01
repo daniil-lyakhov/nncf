@@ -22,6 +22,7 @@ from nncf.common.utils.backend import BackendType
 from nncf.common.utils.backend import get_backend
 from nncf.parameters import CompressWeightsMode
 from nncf.quantization.algorithms.layerwise.engine import LayerwiseEngine
+from nncf.quantization.algorithms.weight_compression.activation_stats import activations_to_wc_statistics
 from nncf.quantization.algorithms.weight_compression.backend import WeightCompressionAlgoBackend
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionConfig
 from nncf.quantization.algorithms.weight_compression.config import WeightCompressionParameters
@@ -273,12 +274,11 @@ class GPTQ:
                         scales.append(scale)
                     else:
                         if self._scale_estimation and block_compression_config.num_bits == 4:
+                            # Slicing across input channel axis
                             slicing_along_axis = [slice(None)] * len(inputs[0].shape)
                             slicing_along_axis[input_channel_axis] = slice(i1 + i, i1 + i + group_size)
                             activations = [inp[tuple(slicing_along_axis)] for inp in inputs]
-                            wc_statistics = ScaleEstimation.activations_to_wc_statistics(
-                                activations, input_channel_axis
-                            )
+                            wc_statistics = activations_to_wc_statistics(activations, input_channel_axis)
                             scale, zero_point = ScaleEstimation.calculate_quantization_params(
                                 wc_statistics,
                                 weight_tensor[:, (i1 + i) : (i1 + i + group_size)],

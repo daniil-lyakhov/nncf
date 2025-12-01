@@ -58,3 +58,22 @@ def process_stats(stats: WCTensorStatistic, subset_size: int) -> tuple[Tensor, T
     # Result: [HiddenDim] or [No. of Experts, HiddenDim]
     s = fns.max(fns.abs(X_full), axis=sample_axis)
     return s, X
+
+
+def activations_to_wc_statistics(activations: list[Tensor], input_channel_axis: int) -> WCTensorStatistic:
+    """
+    Mimic the activation reducing logic from WeightCompression.get_statistic_points.
+
+    :param activations: List of raw activations.
+    :return: Instance of WCTensorStatistic class containing reduced activations and shapes.
+    """
+    mean_values = []
+    shapes = []
+    for act in activations:
+        shapes.append(act.shape)
+        # negative axis (e.g. -1 for the last axis) is converted into corresponding positive value
+        input_channel_axis = input_channel_axis % len(act.shape)
+        reduction_shape = tuple(i for i in range(len(act.shape)) if i != input_channel_axis)
+        mean_values.append(fns.mean(act, axis=reduction_shape))
+    wc_statistics = WCTensorStatistic(mean_values, shapes)
+    return wc_statistics

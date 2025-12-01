@@ -2067,7 +2067,8 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
 
     @staticmethod
     def get_transposable_awq_model_and_inputs(transpose_a, transpose_b):
-        return AWQModel(transpose_a=transpose_a, transpose_b=transpose_b).ov_model
+        ov_model = AWQModel(transpose_a=transpose_a, transpose_b=transpose_b).ov_model
+        return ov_model, ov_model.inputs
 
     @staticmethod
     def get_lml_model(transpose_a, transpose_b):
@@ -2173,7 +2174,7 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
             ]
         )
 
-    @pytest.mark.parametrize("is_moe", [False, pytest.param(True, marks=pytest.mark.xfail(reason="Ticket - 176465"))])
+    @pytest.mark.parametrize("is_moe", [False, True])
     def test_scale_estimation(self, mocker, is_moe):
         super().test_scale_estimation(mocker, is_moe)
 

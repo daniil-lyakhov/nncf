@@ -198,14 +198,14 @@ class ScaleEstimation:
         eps = fns.finfo(weight).eps
         is_3d_weight = len(weight.shape) == 3
 
-        was_transposed = False
+        was_weights_transposed = False
         if reduction_axis == 0 or (reduction_axis == 1 and is_3d_weight):
             # Weights
             # 3D: [num_experts, hidden_dimension, out_features] -> [num_experts, out_features, hidden_dimension]
             # 2D: [hidden_dimension, out_features] -> [out_features, hidden_dimension]
             weight = fns.moveaxis(weight, -1, -2)
             reduction_axis = weight.ndim - 1
-            was_transposed = True
+            was_weights_transposed = True
 
         group_size = config.group_size if config.group_size != -1 else weight.shape[reduction_axis]
         cur_config = deepcopy(config)
@@ -369,7 +369,7 @@ class ScaleEstimation:
         if zp is not None and config.group_size == -1:
             zp = fns.squeeze(zp, axis=-2)
 
-        if was_transposed:
+        if was_weights_transposed:
             if config.group_size == -1:
                 result_scale = fns.moveaxis(result_scale, -1, -2)
                 if zp is not None:
@@ -380,25 +380,6 @@ class ScaleEstimation:
                     zp = fns.moveaxis(zp, (-1, -2, -3), (-2, -3, -1))
 
         return result_scale, zp
-
-    @staticmethod
-    def activations_to_wc_statistics(activations: list[Tensor], input_channel_axis: int) -> WCTensorStatistic:
-        """
-        Mimic the activation reducing logic from WeightCompression.get_statistic_points.
-
-        :param activations: List of raw activations.
-        :return: Instance of WCTensorStatistic class containing reduced activations and shapes.
-        """
-        mean_values = []
-        shapes = []
-        for act in activations:
-            shapes.append(act.shape)
-            # negative axis (e.g. -1 for the last axis) is converted into corresponding positive value
-            input_channel_axis = input_channel_axis % len(act.shape)
-            reduction_shape = tuple(i for i in range(len(act.shape)) if i != input_channel_axis)
-            mean_values.append(fns.mean(act, axis=reduction_shape))
-        wc_statistics = WCTensorStatistic(mean_values, shapes)
-        return wc_statistics
 
 
 def get_target_zero_mask(compressed_weights: Tensor, zp: Optional[Tensor] = None) -> tuple[Tensor, Tensor]:

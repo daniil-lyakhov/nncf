@@ -11,7 +11,6 @@
 import math
 from abc import ABC
 from abc import abstractmethod
-from contextlib import nullcontext
 from typing import Any, Callable, Optional, TypeVar
 from unittest.mock import patch
 
@@ -23,6 +22,7 @@ import nncf.tensor.functions as fns
 from nncf import CompressWeightsMode
 from nncf import SensitivityMetric
 from nncf import nncf_logger
+from nncf.common.factory import NNCFGraphFactory
 from nncf.common.tensor_statistics.statistic_point import StatisticPointsContainer
 from nncf.data.dataset import Dataset
 from nncf.errors import InvalidGroupSizeError
@@ -660,6 +660,17 @@ class TemplateWeightCompression(ABC):
     def get_lml_model(transpose_a: bool, transpose_b: bool) -> TModel:
         "Returns a backend model for test_compression_with_transpose."
 
+    REF_SHAPES = {
+        "AWQ": {
+            (False, True): [(1, 24, 16), (32, 16)],
+            (True, True): [(1, 16, 24), (32, 16)],
+        },
+        "LMLMode": {
+            (False, True): [(1, 24, 16), (32, 16)],
+            (True, True): [(1, 16, 24), (32, 16)],
+        },
+    }
+
     @pytest.mark.parametrize(
         "model_cls_name",
         [
@@ -692,7 +703,7 @@ class TemplateWeightCompression(ABC):
         ],
         ids=["se", "lora", "gptq_se_awq"],
     )
-    def test_compression_with_transpose(self, model_cls_name, transpose_a, transpose_b, raises_error, kwargs):
+    def test_compression_with_transpose(self, model_cls_name, transpose_a, transpose_b, raises_error, kwargs, mocker):
         if kwargs.get("scale_estimation", False) and "scale_estimation" in self.get_not_supported_algorithms():
             pytest.skip("Scale estimation is not supported")
         if kwargs.get("awq", False) and "awq" in self.get_not_supported_algorithms():
@@ -708,18 +719,23 @@ class TemplateWeightCompression(ABC):
         input_data = [self.to_tensor(np.ones(inp.shape, dtype=np.float32)) for inp in inputs] * dataset_size
         dataset = Dataset(input_data, self.get_transform_func())
 
-        with (
-            pytest.raises(nncf.UnsupportedModelError)
-            if raises_error and not kwargs.get("lora_correction", False)
-            else nullcontext()
-        ):
-            compress_weights(
-                model,
-                mode=CompressWeightsMode.INT4_SYM,
-                ratio=1.0,
-                group_size=-1,
-                subset_size=2,
-                dataset=dataset,
-                all_layers=True,
-                **kwargs,
-            )
+        default_kwargs = dict(
+            mode=CompressWeightsMode.INT4_SYM,
+            ratio=1.0,
+            group_size=-1,
+            subset_size=2,
+            dataset=dataset,
+            all_layers=True,
+        )
+        kwargs = {**kwargs, **default_kwargs}
+        if raises_error:
+            with pytest.raises(nncf.UnsupportedModelError):
+                compress_weights(model, **kwargs)
+            return
+        compressed_model = compress_weights(model, **kwargs)
+
+        graph = NNCFGraphFactory.create(compressed_model)
+        mm = graph.get_node_by_name("MatMul")
+        input_shapes = [edge.tensor_shape for edge in graph.get_input_edges(mm)]
+        refs = self.REF_SHAPES[model_cls_name][(transpose_a, transpose_b)]
+        assert input_shapes == refs

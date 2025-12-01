@@ -872,7 +872,7 @@ class WeightCompression(Algorithm):
                     ):
                         # MoE operations are usually matmuls, so the check for matmul metatype is done
                         # This is to avoid raising the error for non-MoE cases with 3D weights.
-                        msg = f"""NNCF does not support 3D weights with current version of Openvino {ov_version} 
+                        msg = f"""NNCF does not support 3D weights with current version of Openvino {ov_version}
                                 due to a known issue in statistics collection Ticket - 176465
                                 Node with weight: {node.node_name}"""
                         raise nncf.UnsupportedModelError(msg)
@@ -1039,11 +1039,10 @@ class WeightCompression(Algorithm):
         activation_port = self._backend_entity.get_activation_port_id(node, nncf_graph)
         activation_edge = nncf_graph.get_input_edge_by_port_id(node, activation_port)
         activation_node = activation_edge.from_node
-        port_id = activation_edge.output_port_id
         activation_channel_axis = self._backend_entity.get_activation_channel_axis(
-            node, port_id, activation_edge.tensor_shape
+            node, activation_edge.input_port_id, activation_edge.tensor_shape
         )
-        return activation_node, port_id, activation_channel_axis
+        return activation_node, activation_edge.output_port_id, activation_channel_axis
 
     def get_matmul_input_to_output_nodes_map(
         self, matmul_nodes: list[NNCFNode], graph: NNCFGraph
@@ -1158,8 +1157,15 @@ class WeightCompression(Algorithm):
                 input_channel_axis = input_channel_axis % n_dims
                 reduction_axes = tuple(i for i in range(n_dims) if i != input_channel_axis)
 
-                # For 3D weights, hidden dimension is the second dimension. Reduce by all other dimensions
-                reduction_axes = (1,) if any(weight_dim == 3 for weight_dim in all_weight_dims) else reduction_axes
+                if any(weight_dim > 3 for weight_dim in all_weight_dims):
+                    max_val = max(weight_dim for weight_dim in all_weight_dims)
+                    msg = f"Compression with {max_val} dimentional weight is not supported"
+                    raise nncf.InternalError(msg)
+
+                # For 3D weights, keep the batch dimention
+                if any(weight_dim == 3 for weight_dim in all_weight_dims):
+                    assert len(reduction_axes) == 2
+                    reduction_axes = reduction_axes[1:]
 
                 stat_collector = self._backend_entity.mean_statistic_collector(
                     reduction_axes=reduction_axes, subset_size=self._subset_size
