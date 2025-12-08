@@ -62,7 +62,7 @@ class AWQ(Algorithm):
 
     def __init__(
         self,
-        subset_size: int = 32,
+        subset_size: int = 128,
         percent_to_apply: float = 0.002,
         alpha_min: float = 0.0,
         alpha_max: float = 1.0,
@@ -363,6 +363,9 @@ class AWQ(Algorithm):
 
             # skip node if it is in IgnoredScope or should not be compressed
             if target_node_names[-1] not in name_mapping:
+                continue
+            # DEBUG
+            if "x_proj" in target_node_names[-1]:
                 continue
 
             weight_params = all_weight_params[name_mapping[target_node_names[-1]]]

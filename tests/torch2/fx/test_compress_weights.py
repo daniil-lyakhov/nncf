@@ -346,7 +346,7 @@ class TestFXTemplateWeightCompression(TemplateWeightCompression):
         return exported_model
 
     @staticmethod
-    def get_model_for_test_scale_estimation():
+    def get_model_for_test_scale_estimation(transpose_a: bool):
         model = LinearModel(torch.arange(0, 8 * 16, dtype=torch.float32).reshape(16, 8))
         ex_input = torch.ones([1, 4, 8], dtype=torch.float32)
         exported_model = get_torch_fx_model(model, ex_input)
@@ -577,3 +577,7 @@ class TestFXTemplateWeightCompression(TemplateWeightCompression):
     @pytest.mark.skip("Torch does not have transpose functionality")
     def test_compression_with_transpose(self):
         pass
+
+    @pytest.fixture
+    def transpose_a_supported(self) -> bool:
+        return False

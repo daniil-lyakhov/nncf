@@ -517,7 +517,7 @@ class TestPTTemplateWeightCompression(TemplateWeightCompression):
         return SequentialMatmulModel()
 
     @staticmethod
-    def get_model_for_test_scale_estimation():
+    def get_model_for_test_scale_estimation(tranpose_a: bool):
         return LinearModel(torch.arange(0, 8 * 16, dtype=torch.float32).reshape(16, 8))
 
     @staticmethod
@@ -744,3 +744,7 @@ def test_half_precision_models(dtype):
         awq=True,
         dataset=nncf.Dataset([dict(inputs)]),
     )
+
+    @pytest.fixture
+    def tranpose_a_supported() -> bool:
+        return False

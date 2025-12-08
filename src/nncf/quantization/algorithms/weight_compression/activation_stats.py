@@ -42,6 +42,7 @@ def process_stats(stats: WCTensorStatistic, subset_size: int) -> tuple[Tensor, T
     # Prevent high memory and time consumption by sampling
     if X_full.shape[sample_axis] > subset_size:
         # Activations were reduced across all but the last dimension
+        # TODO: Use inp channel axis instead
         lens = [reduce(mul, shape[:-1], 1) for shape in stats.shape_values]
         step = X_full.shape[sample_axis] // subset_size
         sorted_idxs = [i[0] for i in sorted(enumerate(lens), key=lambda x: -x[1])][::step]

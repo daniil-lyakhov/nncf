@@ -228,7 +228,7 @@ class TemplateWeightCompression(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_model_for_test_scale_estimation() -> TModel:
+    def get_model_for_test_scale_estimation(transpose_a: bool) -> TModel:
         """
         Returns a backend model for test_scale_estimation.
         """
@@ -461,10 +461,31 @@ class TemplateWeightCompression(ABC):
     def test_awq_scale_ref() -> dict[str, Tensor]:
         "Returns reference for test_awq_scale_reference."
 
+    @abstractmethod
+    @pytest.fixture
+    def transpose_a_supported(self) -> bool:
+        """True if backend supports tranpose for MM activations, False otherwise"""
+
+    @pytest.mark.parametrize("transpose_a", [True, False])
     @pytest.mark.parametrize("non_mergable_pattern", [True, False])
-    def test_awq_scale_reference(self, monkeypatch, mocker, non_mergable_pattern, test_awq_scale_ref):
+    def test_awq_scale_reference(
+        self,
+        non_mergable_pattern,
+        transpose_a,
+        test_awq_scale_ref,
+        transpose_a_supported,
+        monkeypatch,
+        mocker,
+    ):
         monkeypatch.setattr("nncf.quantization.algorithms.weight_compression.algorithm.AWQ", SpyAWQ)
-        model = self.get_awq_model(non_mergable_pattern)
+        if transpose_a:
+            if not transpose_a_supported:
+                msg = "Transpose a is not supported for the current backend"
+                pytest.skip(msg)
+
+            model = self.get_transposable_awq_model_and_inputs(transpose_a=True, transpose_b=True)
+        else:
+            model = self.get_awq_model(non_mergable_pattern)
 
         input = 0.01 * np.arange(0, 4 * 8, dtype=np.float32).reshape(1, 4, 8) + 0.02
         input = self.to_tensor(input)

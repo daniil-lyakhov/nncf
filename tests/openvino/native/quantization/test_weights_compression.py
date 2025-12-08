@@ -2046,7 +2046,7 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
         return SequentialMatmulModel().ov_model
 
     @staticmethod
-    def get_model_for_test_scale_estimation():
+    def get_model_for_test_scale_estimation(tranpose_a: bool):
         return MatMul().ov_model
 
     @staticmethod
@@ -2245,3 +2245,7 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
                 )
             ),
         }
+
+    @pytest.fixture
+    def transpose_a_supported(self) -> bool:
+        return True
