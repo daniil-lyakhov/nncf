@@ -141,12 +141,15 @@ class ScaleEstimation:
 
             if self._backend_entity.matmul_has_transposed_activations(wp.node_with_weight, graph):
                 msg = "Transposed activations are not supported yet for the Scale Estimation algorithm"
-                raise nncf.UnsupportedModelError(msg)
+                #raise nncf.UnsupportedModelError(msg)
 
             weight = self._backend_entity.get_weight(wp.node_with_weight, weight_port_id, model, graph)
 
+            port_id = self._backend_entity.get_activation_port_id(wp.node_with_weight, graph)
+            act_ch_axis = self._backend_entity.get_activation_channel_axis(wp.node_with_weight, port_id)
             scale, zero_point = self.calculate_quantization_params(
                 stats,
+                act_ch_axis,
                 weight,
                 wp.reduction_axes,
                 config,
@@ -162,6 +165,7 @@ class ScaleEstimation:
     @staticmethod
     def calculate_quantization_params(
         statistics: WCTensorStatistic,
+        act_ch_axis: int,
         weight: Tensor,
         reduction_axes: tuple[int, ...],
         config: WeightCompressionConfig,
@@ -195,7 +199,7 @@ class ScaleEstimation:
         """
         reduction_axis = reduction_axes[0]
 
-        s, X = process_stats(statistics, subset_size)
+        s, X = process_stats(statistics, subset_size, act_ch_axis=act_ch_axis)
 
         X = X.astype(TensorDataType.float32)
         weight = weight.astype(TensorDataType.float32)
@@ -383,7 +387,7 @@ class ScaleEstimation:
         return result_scale, zp
 
     @staticmethod
-    def activations_to_wc_statistics(activations: list[Tensor]) -> WCTensorStatistic:
+    def activations_to_wc_statistics(activations: list[Tensor], act_ch_axis: int) -> WCTensorStatistic:
         """
         Mimic the activation reducing logic from WeightCompression.get_statistic_points.
 
@@ -394,7 +398,9 @@ class ScaleEstimation:
         shapes = []
         for act in activations:
             shapes.append(act.shape)
-            reduction_shape = tuple(range(act.ndim - 1))
+            n_dims = len(act.shape)
+            input_channel_axis = input_channel_axis % n_dims
+            reduction_shape = tuple(i for i in range(n_dims) if i != input_channel_axis)
             mean_values.append(fns.mean(act, axis=reduction_shape))
         wc_statistics = WCTensorStatistic(mean_values, shapes)
         return wc_statistics

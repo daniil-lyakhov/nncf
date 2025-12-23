@@ -485,7 +485,7 @@ class TestONNXTemplateWeightCompression(TemplateWeightCompression):
         return model
 
     @staticmethod
-    def get_model_for_test_scale_estimation() -> onnx.ModelProto:
+    def get_model_for_test_scale_estimation(transpose_a: bool) -> onnx.ModelProto:
         """
         Builds a model to be used in the following tests:
             - TemplateWeightCompression.test_scale_estimation()
@@ -493,10 +493,16 @@ class TestONNXTemplateWeightCompression(TemplateWeightCompression):
         tests.
         """
         mb = ModelBuilder()
-        x = mb.add_input("input", (1, 4, 8))
+
         output = mb.add_output("output", (1, 4, 16))
         weights = np.arange(0, 16 * 8, dtype=np.float32).reshape(16, 8).T
-        mb.add_matmul(x, shape=(8, 16), output=output, data=weights)
+        if transpose_a:
+            x = mb.add_input("input", (4, 8))
+            transpose = mb.add_transpose(x, (1, 0))
+            mb.add_gemm(transpose, shape=(8, 16), output=output, weight_data=weights, trans_a=1)
+        else:
+            x = mb.add_input("input", (1, 4, 8))
+            mb.add_matmul(x, shape=(8, 16), output=output, data=weights)
 
         return mb.build(opset_version=21)
 
@@ -519,7 +525,7 @@ class TestONNXTemplateWeightCompression(TemplateWeightCompression):
         return mb.build(opset_version=21)
 
     @staticmethod
-    def get_scale_estimation_ref(check_sampling_activation_stats_flow):
+    def get_scale_estimation_ref(check_sampling_activation_stats_flow, transpose_a: bool):
         return (
             np.array(
                 [

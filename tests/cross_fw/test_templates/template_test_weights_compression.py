@@ -236,7 +236,7 @@ class TemplateWeightCompression(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_model_for_test_scale_estimation() -> TModel:
+    def get_model_for_test_scale_estimation(transpose_a: bool) -> TModel:
         """
         Returns a backend model for test_scale_estimation.
         """
@@ -259,16 +259,16 @@ class TemplateWeightCompression(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_scale_estimation_ref(check_sampling_activation_stats_flow: bool) -> TTensor:
+    def get_scale_estimation_ref(check_sampling_activation_stats_flow: bool, transpose_a: bool) -> TTensor:
         """
         :param check_sampling_activation_stats_flow: whether we are checking the flow with sampling when processing
             activation statistics
         Returns the reference output of calculate_quantization_params of ScaleEstimation.
         """
 
-    @pytest.mark.parametrize("is_moe", [False, True])
+    @pytest.mark.parametrize("is_moe,transpose_a", [(False, False), (False, True), (True, False)])
     @pytest.mark.parametrize("check_sampling_activation_stats_flow", [False, True])
-    def test_scale_estimation(self, mocker, is_moe, check_sampling_activation_stats_flow):
+    def test_scale_estimation(self, mocker, is_moe, transpose_a, check_sampling_activation_stats_flow):
         """Checks that scales match the reference."""
         calc_q_params_spy = mocker.spy(ScaleEstimation, "calculate_quantization_params")
 
@@ -276,8 +276,10 @@ class TemplateWeightCompression(ABC):
             model = self.get_moe_model_for_test_scale_estimation()
             input = np.arange(0, 2 * 4 * 8, dtype=np.float32).reshape(2, 4, 8)
         else:
-            model = self.get_model_for_test_scale_estimation()
+            model = self.get_model_for_test_scale_estimation(transpose_a=transpose_a)
             input = np.arange(0, 4 * 8, dtype=np.float32).reshape(1, 4, 8)
+            if transpose_a:
+                input = np.squeeze(input)
 
         # prepare dataset of size subset_size with input tensors
         subset_size = 2 if check_sampling_activation_stats_flow else 1
@@ -309,7 +311,7 @@ class TemplateWeightCompression(ABC):
         if is_moe:
             reference = self.get_moe_scale_estimation_ref(check_sampling_activation_stats_flow)
         else:
-            reference = self.get_scale_estimation_ref(check_sampling_activation_stats_flow)
+            reference = self.get_scale_estimation_ref(check_sampling_activation_stats_flow, transpose_a)
         assert fns.allclose(Tensor(reference), computed_scale)
 
     @staticmethod
@@ -325,7 +327,7 @@ class TemplateWeightCompression(ABC):
     def test_scale_estimation_outlier_channel_has_lowest_error(self, mocker):
         """Checks that outlier channel has a lowest error after quantization."""
         OUTLIER_CHANNEL = 4
-        model = self.get_model_for_test_scale_estimation()
+        model = self.get_model_for_test_scale_estimation(transpose_a=False)
         original_weight = self.get_orig_weight(model)
 
         # prepare dataset with one input tensor
