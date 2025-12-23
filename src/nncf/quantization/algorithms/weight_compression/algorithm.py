@@ -16,8 +16,6 @@ from collections import defaultdict
 from functools import reduce
 from typing import Any, Optional, TypeVar
 
-from packaging import version
-
 import nncf
 from nncf import Dataset
 from nncf.common.factory import StatisticsAggregatorFactory
@@ -852,11 +850,26 @@ class WeightCompression(Algorithm):
         statistics = self._get_statistics_for_weights_compression(matmul_input_to_output_nodes_map, statistic_points)
         return statistics, statistic_points
 
-    def _maybe_get_ov_major_version(self) -> Optional[str]:
+    @staticmethod
+    def _maybe_get_ov_version() -> Optional[tuple]:
+        """
+        Parse OpenVINO version strings like:
+            '2026.0.0-20595-5d95073296d'
+        into a tuple:
+            (2026, 0, 0, 20595)
+        """
         try:
+            import re
+
             import openvino as ov
 
-            return ov.__version__.split(".")[0]
+            base, rest = ov.__version__.split("-", 1)
+            major, minor, patch = map(int, base.split("."))
+
+            m = re.match(r"(\d+)", rest)
+            build = int(m.group(1))
+
+            return major, minor, patch, build
         except Exception:
             return None
 
@@ -930,12 +943,12 @@ class WeightCompression(Algorithm):
                         )
 
                     model_backend = get_backend(model)
-                    ov_version = self._maybe_get_ov_major_version()
+                    ov_version = self._maybe_get_ov_version()
                     if (
                         model_backend == BackendType.OPENVINO
                         and len(weight_shape) == 3
                         and ov_version
-                        and version.parse(ov_version) <= version.parse("2026")
+                        and ov_version < (2026, 0, 0, 20483)
                         and node.metatype in self._backend_entity.matmul_metatypes
                         and (
                             self._data_aware_compression
@@ -945,8 +958,10 @@ class WeightCompression(Algorithm):
                     ):
                         # MoE operations are usually matmuls, so the check for matmul metatype is done
                         # This is to avoid raising the error for non-MoE cases with 3D weights.
-                        msg = f"""NNCF compression algorithms do not support 3D weights with current version of 
-                                Openvino {ov_version} due to a known issue in statistics collection Ticket - 176465. 
+                        parsed_ov_version = f"{ov_version[0]}.{ov_version[1]}.{ov_version[2]}-{ov_version[3]}"
+                        msg = f"""NNCF compression algorithms do not support 3D weights with current version of
+                                OpenVINO {parsed_ov_version} due to a known issue in statistics collection
+                                Ticket - 176465. Please update to the latest OpenVINO nightly version.
                                 Node with weight: {node.node_name}."""
                         raise nncf.UnsupportedModelError(msg)
 
@@ -1072,6 +1087,11 @@ class WeightCompression(Algorithm):
                 )
 
             if self._lora_correction:
+                for wc_params in all_weight_params:
+                    if self._backend_entity.matmul_has_transposed_activations(wc_params.node_with_weight, graph):
+                        msg = "Transposed activations are not supported yet for the LoRa correction algorithm"
+                        raise nncf.UnsupportedModelError(msg)
+
                 lora_correction_params = self._advanced_parameters.lora_correction_params
                 lora_correction_algo = LoraCorrectionAlgorithm(statistics, lora_correction_params)
                 description += " with correction of low-rank adapters"
@@ -1113,19 +1133,21 @@ class WeightCompression(Algorithm):
         )
         return transformed_model
 
-    def _get_activation_node_and_port(self, node: NNCFNode, nncf_graph: NNCFGraph) -> tuple[NNCFNode, int]:
+    def _get_activation_node_port_and_channel(self, node: NNCFNode, nncf_graph: NNCFGraph) -> tuple[NNCFNode, int, int]:
         """
-        This method returns the activation layer and corresponding port id for the node.
+        This method returns the activation layer, corresponding port id and channel axis for the given node.
 
         :param node: NNCFGraph node for which the activation is sought.
         :param nncf_graph: NNCFGraph instance with the node.
-        :return: Tuple with the activation node and port id.
+        :return: Tuple with the activation node, port id and channel axis.
         """
         activation_port = self._backend_entity.get_activation_port_id(node, nncf_graph)
         activation_edge = nncf_graph.get_input_edge_by_port_id(node, activation_port)
         activation_node = activation_edge.from_node
-        port_id = activation_edge.output_port_id
-        return activation_node, port_id
+        activation_channel_axis = self._backend_entity.get_activation_channel_axis(
+            node, activation_edge.input_port_id, activation_edge.tensor_shape
+        )
+        return activation_node, activation_edge.output_port_id, activation_channel_axis
 
     def get_matmul_input_to_output_nodes_map(
         self, matmul_nodes: list[NNCFNode], graph: NNCFGraph
@@ -1146,8 +1168,8 @@ class WeightCompression(Algorithm):
         """
         matmul_input_to_output_nodes_map = defaultdict(list)
         for node in matmul_nodes:
-            act_node, output_port_id = self._get_activation_node_and_port(node, graph)
-            matmul_input_to_output_nodes_map[(act_node, output_port_id)].append(node)
+            act_node, output_port_id, act_channel_axis = self._get_activation_node_port_and_channel(node, graph)
+            matmul_input_to_output_nodes_map[(act_node, output_port_id, act_channel_axis)].append(node)
         return matmul_input_to_output_nodes_map
 
     def get_compression_nodes_info(
@@ -1215,7 +1237,11 @@ class WeightCompression(Algorithm):
 
         # Statistics for data aware algorithms
         if self._data_aware_compression:
-            for (node, output_port_id), node_with_weights in matmul_input_to_output_nodes_map.items():
+            for (
+                node,
+                output_port_id,
+                input_channel_axis,
+            ), node_with_weights in matmul_input_to_output_nodes_map.items():
                 statistic_point = self._backend_entity.target_point(
                     TargetType.POST_LAYER_OPERATION, node.node_name, port_id=output_port_id
                 )
@@ -1230,13 +1256,21 @@ class WeightCompression(Algorithm):
                     ]
                     all_weight_dims.extend(weight_dims)
 
-                # by default, reduce activations across all but the last dimension. The last dimension is
-                # assumed to be the hidden size dimension.
+                # Reduce activations across all but the hidden dimension.
                 n_dims = len(graph.get_output_edges_by_port_id(node, output_port_id)[0].tensor_shape)
-                reduction_axes = tuple(range(n_dims - 1))
+                # negative axis (e.g. -1 for the last axis) is converted into corresponding positive value
+                input_channel_axis = input_channel_axis % n_dims
+                reduction_axes = tuple(i for i in range(n_dims) if i != input_channel_axis)
 
-                # For 3D weights, hidden dimension is the second dimension. Reduce by all other dimensions
-                reduction_axes = (1,) if any(weight_dim == 3 for weight_dim in all_weight_dims) else reduction_axes
+                if any(weight_dim > 3 for weight_dim in all_weight_dims):
+                    max_val = max(weight_dim for weight_dim in all_weight_dims)
+                    msg = f"Compression with {max_val} dimentional weight is not supported"
+                    raise nncf.InternalError(msg)
+
+                # For 3D weights, keep the batch dimention
+                if any(weight_dim == 3 for weight_dim in all_weight_dims):
+                    assert len(reduction_axes) == 2
+                    reduction_axes = reduction_axes[1:]
 
                 stat_collector = self._backend_entity.mean_statistic_collector(
                     reduction_axes=reduction_axes, subset_size=self._subset_size
@@ -1276,7 +1310,7 @@ class WeightCompression(Algorithm):
         # Where mean_value is a 1D tensor representing an activation reduced over batch and sequence length dimensions,
         # shape is an original shape of an activation before reduction, n is the size of the dataset (or subset_size).
         statistics = {}
-        for (act_node, output_port_id), matmul_nodes in matmul_input_to_output_nodes_map.items():
+        for (act_node, output_port_id, _), matmul_nodes in matmul_input_to_output_nodes_map.items():
             tensor_collectors = list(
                 statistic_points.get_algo_statistics_for_node(
                     act_node.node_name,

@@ -13,7 +13,6 @@ from typing import Callable, Iterable, Optional
 import openvino as ov
 from openvino import opset13 as opset
 
-import nncf
 from nncf.common.graph import NNCFGraph
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import OperatorMetatype
@@ -35,6 +34,7 @@ from nncf.openvino.graph.model_transformer import OVModelTransformer
 from nncf.openvino.graph.node_utils import convert_op
 from nncf.openvino.graph.node_utils import create_ov_codebook_subgraph
 from nncf.openvino.graph.node_utils import create_ov_const_from_tensor
+from nncf.openvino.graph.node_utils import get_activation_channel_axis
 from nncf.openvino.graph.node_utils import get_const_value_as_numpy_tensor
 from nncf.openvino.graph.node_utils import get_const_value_as_ov_tensor
 from nncf.openvino.graph.node_utils import get_weight_channel_axes
@@ -64,6 +64,7 @@ from nncf.quantization.algorithms.weight_compression.parameters import Compresse
 from nncf.quantization.algorithms.weight_compression.weight_lowering import compress_weight
 from nncf.tensor import Tensor
 from nncf.tensor.definitions import TensorDataType
+from nncf.tensor.functions.openvino_numeric import DTYPE_MAP
 from nncf.tensor.functions.openvino_numeric import DTYPE_MAP_REV
 
 
@@ -118,9 +119,6 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
 
     @staticmethod
     def get_activation_port_id(node: NNCFNode, nncf_graph: NNCFGraph) -> int:
-        if node.layer_attributes.input_attributes["transpose"]:
-            msg = "Transposed input is not supported"
-            raise nncf.UnsupportedModelError(msg)
         constant_ports = node.layer_attributes.get_const_port_ids()
         activation_ports = [
             e.input_port_id for e in nncf_graph.get_input_edges(node) if e.input_port_id not in constant_ports
@@ -141,6 +139,11 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         weight_node = self.name_to_node_mapping[weight_name]
         weight_tensor = get_const_value_as_numpy_tensor(weight_node)
         return Tensor(weight_tensor)
+
+    def matmul_has_transposed_activations(self, matmul: NNCFNode, graph: NNCFGraph) -> bool:
+        if matmul.metatype != om.OVMatMulMetatype:
+            return False
+        return matmul.layer_attributes.input_attributes["transpose"]
 
     def get_weight_dtype(
         self, node_with_weight: NNCFNode, weight_port_id: int, model: ov.Model, graph: NNCFGraph
@@ -223,32 +226,12 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         should_add_convert_node: bool,
         precomputed_compressed_weight: Optional[CompressedWeight] = None,
     ):
-        scale_dtype = ov.Type.f16
-        if compression_config.mode == CompressWeightsMode.NF4:
-            compression_dtype = ov.Type.nf4
-        elif compression_config.mode == CompressWeightsMode.MXFP4:
-            compression_dtype = ov.Type.f4e2m1
-            scale_dtype = ov.Type.f8e8m0
-        elif compression_config.mode == CompressWeightsMode.MXFP8_E4M3:
-            compression_dtype = ov.Type.f8e4m3
-            scale_dtype = ov.Type.f8e8m0
-        elif compression_config.mode == CompressWeightsMode.FP8_E4M3:
-            compression_dtype = ov.Type.f8e4m3
-        elif compression_config.mode == CompressWeightsMode.FP4:
-            compression_dtype = ov.Type.f4e2m1
-        elif compression_config.mode == CompressWeightsMode.INT4_SYM:
-            compression_dtype = ov.Type.i4
-        elif compression_config.mode == CompressWeightsMode.INT4_ASYM:
-            compression_dtype = ov.Type.u4
-        elif compression_config.mode == CompressWeightsMode.INT8_SYM:
-            compression_dtype = ov.Type.i8
-        elif compression_config.mode == CompressWeightsMode.INT8_ASYM:
-            compression_dtype = ov.Type.u8
-        elif compression_config.is_codebook:
-            compression_dtype = None
-        else:
-            msg = f"{compression_config.mode.value} is not supported."
-            raise nncf.ParameterNotSupportedError(msg)
+        compression_dtype = DTYPE_MAP[compression_config.compression_dtype]
+        scale_dtype = (
+            ov.Type.f8e8m0
+            if compression_config.mode in [CompressWeightsMode.MXFP4, CompressWeightsMode.MXFP8_E4M3]
+            else ov.Type.f16
+        )
 
         original_shape = weight.shape
 
@@ -261,8 +244,6 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
             )
 
         if compression_config.is_codebook:
-            n_quants = compressed_weight.codebook.size - 1
-            compression_dtype = ov.Type.u16 if n_quants > 255 else (ov.Type.u8 if n_quants > 15 else ov.Type.u4)
             converted_const = create_ov_codebook_subgraph(
                 codebook=compressed_weight.codebook
                 if compression_config.mode == CompressWeightsMode.CODEBOOK
@@ -398,6 +379,10 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         pattern = create_rope()
         pattern.add_pattern_alternative(create_sam_pe())
         return pattern
+
+    @staticmethod
+    def get_activation_channel_axis(node: NNCFNode, port_id: int, input_shape: tuple[int]) -> int:
+        return get_activation_channel_axis(node, port_id, input_shape)
 
 
 class OVTensorWeightCompressionAlgoBackend(OVWeightCompressionAlgoBackend):

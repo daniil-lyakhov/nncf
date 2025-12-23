@@ -12,7 +12,7 @@
 import inspect
 import os
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, Optional
 from unittest.mock import patch
 
 import numpy as np
@@ -64,6 +64,7 @@ from tests.cross_fw.test_templates.template_test_weights_compression import Temp
 from tests.openvino.native.common import get_actual_reference_for_current_openvino
 from tests.openvino.native.models import AWQActMatmulModel
 from tests.openvino.native.models import AWQMatmulModel
+from tests.openvino.native.models import AWQModel
 from tests.openvino.native.models import AWQModel_fp16_overlow
 from tests.openvino.native.models import DifferentChannelSizeMatmulModel
 from tests.openvino.native.models import GatherAndMatmulShareData
@@ -104,7 +105,9 @@ class LMLinearModel(OVReferenceModel):
     HIDDEN_DIM = 16
     INPUT_SHAPE = [1, 24, HIDDEN_DIM]  # [B, SeqLen, HiddenDim]
 
-    def _create_ov_model(self, transpose_b: bool = True, transpose_a=False, input_shape=None):
+    def _create_ov_model(
+        self, transpose_b: bool = True, transpose_a: bool = False, input_shape: Optional[list[int]] = None
+    ):
         self._input_shape = self.INPUT_SHAPE if input_shape is None else input_shape
         hdim_axis = -2 if transpose_a else -1
         self._hidden_dim = self._input_shape[hdim_axis]
@@ -730,7 +733,7 @@ LIST_DESCS = [
 def test_quantization_error_calculation(desc: QuantErrorDesc):
     weight = Tensor(desc.weight)
     axis = 1
-    actual_error = get_integer_quantization_error(weight, axis, desc.config)
+    actual_error = get_integer_quantization_error(weight, axis, desc.config, reduction="max_mean")
     ref_error = desc.ref_error
     atol = desc.atol if desc.atol is not None else 1e-8
     assert np.allclose(actual_error, ref_error, atol=atol)
@@ -1442,6 +1445,38 @@ TEST_FLOAT_COMPRESSED_REFS = {
             8.0,
         ],
     },
+    CompressWeightsMode.FP8_E4M3: {
+        "neg": [
+            -8.0,
+            -6.857143402099609,
+            -5.714285850524902,
+            -5.142857551574707,
+            -4.0,
+            -2.857142925262451,
+            -2.0,
+            -1.0,
+            0.0,
+        ],
+        "pos": [0.0, 1.0, 2.0, 2.857142925262451, 4.0, 5.142857551574707, 5.714285850524902, 6.857143402099609, 8.0],
+        "neg-pos": [
+            -8.0,
+            -6.857143402099609,
+            -5.714285850524902,
+            -5.142857551574707,
+            -4.0,
+            -2.857142925262451,
+            -2.0,
+            -1.0,
+            0.0,
+            1.0,
+            2.0,
+            2.857142925262451,
+            4.0,
+            5.142857551574707,
+            5.714285850524902,
+            6.857143402099609,
+        ],
+    },
 }
 
 
@@ -1940,38 +1975,6 @@ def test_compression_with_different_algo_combinations(input_shape, kwargs):
     )
 
 
-@pytest.mark.parametrize(
-    "kwargs",
-    [
-        dict(scale_estimation=True),
-        dict(lora_correction=True),
-        dict(
-            gptq=True,
-            awq=True,
-            scale_estimation=True,
-            advanced_parameters=CompressionParams(gptq_params=GPTQParams(subset_size=2)),
-        ),
-    ],
-)
-def test_compression_with_transposed_activations(kwargs):
-    dataset_size = 4
-    model = LMLinearModel(transpose_a=True, transpose_b=False).ov_model
-    input_data = [np.ones(inp.shape) for inp in model.inputs] * dataset_size
-    dataset = Dataset(input_data)
-
-    with pytest.raises(nncf.UnsupportedModelError):
-        compress_weights(
-            model,
-            mode=CompressWeightsMode.INT4_SYM,
-            ratio=1.0,
-            group_size=8,
-            subset_size=2,
-            dataset=dataset,
-            all_layers=True,
-            **kwargs,
-        )
-
-
 @pytest.mark.parametrize("disabled", [False, True])
 def test_disabled_optimized_compression(disabled):
     hidden_dim = (MIN_INPUT_SIZE_FOR_OPTIMIZED_COMPRESSION // LMLinearModel.OUTPUT_DIM) + 1
@@ -2000,7 +2003,7 @@ def test_nf4_quantization_mid_quant(weight, scale):
     scale = Tensor(scale)
     # norm_weight equals -0.8480964 (one bit away from the first NF4 quantile center)
     norm_weight = _calculate_normalized_weight(weight, scale)
-    nf4_quant = _calculate_float_quantized_weight(norm_weight, CompressWeightsMode.NF4)
+    nf4_quant = _calculate_float_quantized_weight(norm_weight, TensorDataType.nf4)
 
     norm_weight_ov_backend = Tensor(ov.Tensor(norm_weight.data, norm_weight.shape, ov.Type.f32))
     ref_nf4_quant = norm_weight_ov_backend.astype(TensorDataType.nf4).as_numpy_tensor()
@@ -2028,11 +2031,98 @@ def test_nf4_quantization_mid_quant(weight, scale):
 )
 def test_mxfp4_quantization_edge_cases(input_val, expected_val, description):
     norm_weight = Tensor(np.array([input_val], dtype=np.float32))
-    result = _calculate_float_quantized_weight(norm_weight, CompressWeightsMode.MXFP4)
+    result = _calculate_float_quantized_weight(norm_weight, TensorDataType.f4e2m1)
 
     assert result.data[0] == expected_val, (
         f"{description}: Expected {expected_val}, got {result.data[0]} for input value {input_val}"
     )
+
+
+@pytest.mark.parametrize(
+    "input_val,expected_val,description",
+    [
+        # --- Zeros ---
+        (0.0, 0.0, "Positive zero should stay 0.0"),
+        (-0.0, 0.0, "Negative zero should quantize to +0.0 (LUT[0])"),
+        # --- Small subnormals & underflow (based on LUT[0..15]) ---
+        # LUT[1] = 0.001953125
+        (0.0005, 0.0, "Too small magnitude should underflow to 0.0"),
+        (0.001, 0.001953125, "Small positive should become smallest positive subnormal (LUT[1])"),
+        (-0.001, -0.001953125, "Negative small should become smallest negative subnormal (-LUT[1])"),
+        # A few more subnormal points (LUT[2] and LUT[4])
+        # LUT[2] = 0.00390625, LUT[4] = 0.0078125
+        (0.003, 0.00390625, "Should round up to subnormal 0.00390625 (LUT[2])"),
+        (0.006, 0.005859375, "Should round to subnormal 0.005859375 (LUT[3])"),
+        (-0.006, -0.005859375, "Negative should round to -0.005859375 (LUT[3])"),
+        # --- Around the transition into 'larger' subnormals / small normals ---
+        # LUT[16] = 0.03125
+        (0.03125, 0.03125, "0.03125 exactly representable (LUT[16])"),
+        (0.030, 0.029296875, "0.030 should round to 0.029296875 (LUT[15])"),
+        (-0.030, -0.029296875, "Negative rounding around -0.029296875"),
+        # --- Normal range values (taken directly from LUT for guaranteed exactness) ---
+        # From LUT around 0.0625..0.25
+        (0.0625, 0.0625, "0.0625 exactly representable (LUT[24])"),
+        (0.0703125, 0.0703125, "0.0703125 exactly representable (LUT[25])"),
+        (0.078125, 0.078125, "0.078125 exactly representable (LUT[26])"),
+        (0.109375, 0.109375, "0.109375 exactly representable (LUT[30])"),
+        (0.125, 0.125, "0.125 exactly representable (LUT[32])"),
+        (0.25, 0.25, "0.25 exactly representable (LUT[40])"),
+        # A couple of midpoints to test rounding-to-nearest-even-ish behavior
+        (0.26, 0.25, "0.26 closer to 0.25 than 0.28125 – should round to 0.25"),
+        (0.28, 0.28125, "0.28 closer to 0.28125 (LUT[41]) – should round up"),
+        # --- Symmetry around zero for normals ---
+        (0.5, 0.5, "0.5 exactly representable (LUT[48])"),
+        (-0.5, -0.5, "-0.5 exactly representable"),
+        (1.0, 1.0, "1.0 exactly representable (LUT[56])"),
+        (-1.0, -1.0, "-1.0 exactly representable"),
+        (1.75, 1.75, "1.75 exactly representable (LUT[62])"),
+        (-1.75, -1.75, "-1.75 exactly representable"),
+        # --- Values in the 'integer-like' region ---
+        (2.0, 2.0, "2.0 exactly representable (LUT[64])"),
+        (3.0, 3.0, "3.0 exactly representable (LUT[68])"),
+        (4.0, 4.0, "4.0 exactly representable (LUT[72])"),
+        (5.0, 5.0, "5.0 exactly representable (LUT[74])"),
+        (6.0, 6.0, "6.0 exactly representable (LUT[76])"),
+        (7.0, 7.0, "7.0 exactly representable (LUT[78])"),
+        (8.0, 8.0, "8.0 exactly representable (LUT[80])"),
+        (-8.0, -8.0, "-8.0 exactly representable"),
+        # --- Larger finite values near high end of LUT ---
+        (16.0, 16.0, "16.0 exactly representable (LUT[88])"),
+        (32.0, 32.0, "32.0 exactly representable (LUT[96])"),
+        (64.0, 64.0, "64.0 exactly representable (LUT[104])"),
+        (128.0, 128.0, "128.0 exactly representable (LUT[112])"),
+        (256.0, 256.0, "256.0 exactly representable (LUT[120])"),
+        (448.0, 448.0, "448.0 exactly representable (LUT[126], max finite)"),
+        # --- Rounding near the max finite value ---
+        (400.0, 384.0, "400.0 should round to the nearest representable (LUT[116] = 384.0)"),
+        (460.0, 448.0, "460.0 should round to max finite 448.0 (LUT[126])"),
+        # --- Overflow / NaN / Inf handling ---
+        (500.0, np.nan, "Above max finite range, should overflow to NaN"),
+        (1e4, np.nan, "Way above max finite range, should overflow to NaN"),
+        (np.inf, np.nan, "+inf should map to NaN (no Inf representation)"),
+        (-np.inf, np.nan, "-inf should map to NaN (no Inf representation)"),
+        (np.nan, np.nan, "NaN input should remain NaN after quantization/dequantization"),
+    ],
+)
+@pytest.mark.parametrize("backend", ["numpy", "openvino"])
+def test_f8e4m3_quantization_edge_cases(input_val, expected_val, description, backend):
+    norm_weight = Tensor(np.array([input_val], dtype=np.float32))
+    if backend == "numpy":
+        result = _calculate_float_quantized_weight(norm_weight, TensorDataType.f8e4m3)
+    else:
+        result = (
+            norm_weight.as_openvino_tensor()
+            .astype(TensorDataType.f8e4m3)
+            .astype(TensorDataType.float32)
+            .as_numpy_tensor()
+        )
+
+    out = result.data[0]
+
+    if isinstance(expected_val, float) and np.isnan(expected_val):
+        assert np.isnan(out), f"{description}: Expected NaN, got {out} for input value {input_val}"
+    else:
+        assert out == expected_val, f"{description}: Expected {expected_val}, got {out} for input value {input_val}"
 
 
 @pytest.mark.parametrize(
@@ -2071,8 +2161,8 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
         return SAMPEModel().ov_model
 
     @staticmethod
-    def get_sequential_matmul_model() -> ov.Model:
-        return SequentialMatmulModel().ov_model
+    def get_sequential_matmul_model(transpose_a: bool) -> ov.Model:
+        return SequentialMatmulModel(transpose_a=transpose_a).ov_model
 
     @staticmethod
     def get_model_for_test_scale_estimation():
@@ -2083,8 +2173,8 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
         return SimpleMoEModel().ov_model
 
     @staticmethod
-    def get_awq_model() -> ov.Model:
-        return AWQMatmulModel().ov_model
+    def get_awq_model(non_mergable_pattern: bool) -> ov.Model:
+        return AWQMatmulModel(non_mergable_pattern=non_mergable_pattern).ov_model
 
     @staticmethod
     def get_different_channel_size_model(channel_sizes: list[int]) -> ov.Model:
@@ -2093,6 +2183,11 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
     @staticmethod
     def get_awq_act_model(with_multiply, n_layers):
         return AWQActMatmulModel(with_multiply=with_multiply, n_layers=n_layers).ov_model
+
+    @staticmethod
+    def get_transposable_awq_model(transpose_a, transpose_b, input_shape=None):
+        ov_model = AWQModel(transpose_a=transpose_a, transpose_b=transpose_b, input_shape=input_shape).ov_model
+        return ov_model
 
     @staticmethod
     def to_tensor(x) -> np.ndarray:
@@ -2107,7 +2202,7 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
         raise NotImplementedError
 
     @staticmethod
-    def check_weights(model: ov.Model, ref_ids: list[int]) -> None:
+    def check_weights(model: ov.Model, ref_ids: list[int], transpose_a=False) -> None:
         names = {op.get_friendly_name() for op in model.get_ordered_ops() if op.get_element_type() == ov.Type.i4}
         low_precision_nodes = {f"weights_{i}" for i in ref_ids}
         assert low_precision_nodes == names
@@ -2322,12 +2417,24 @@ class TestOVTemplateWeightCompression(TemplateWeightCompression):
         return awq_num
 
     @staticmethod
-    def get_reference_for_test_awq_scale_reference() -> dict[str, Tensor]:
+    @pytest.fixture
+    def test_awq_scale_ref() -> dict[str, Tensor]:
         return {
+            "MatMul": Tensor(np.array([[10.337929], [6.4558873]], dtype=np.float32)),
             "MatMul_3": Tensor(
                 np.array(
                     [[1.2264546, 1.2054994, 1.1413403, 1.0974358, 1.0643553, 1.0379708, 1.0161183, 0.9975262]],
                     dtype=np.float32,
+                ).T
+            ),
+            "MatMul_2": Tensor(
+                np.array(
+                    [[[1.9909902, 1.8632966, 1.5759803, 1.3974594, 1.2722752, 1.1779976, 1.1035581, 1.042768]]],
+                    dtype=np.float32,
                 )
-            )
+            ),
         }
+
+    @pytest.fixture
+    def transpose_a_supported(self) -> bool:
+        return True
