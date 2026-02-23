@@ -225,11 +225,12 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         precomputed_compressed_weight: CompressedWeight | None = None,
     ):
         compression_dtype = DTYPE_MAP[compression_config.compression_dtype]
-        scale_dtype = (
-            ov.Type.f8e8m0
-            if compression_config.mode in [CompressWeightsMode.MXFP4, CompressWeightsMode.MXFP8_E4M3]
-            else ov.Type.f16
-        )
+
+        scale_dtype = ov.Type.f16
+        if compression_config.mode in [CompressWeightsMode.MXFP4, CompressWeightsMode.MXFP8_E4M3]:
+            scale_dtype = ov.Type.f8e8m0
+        elif compression_config.mode == CompressWeightsMode.NVFP4:
+            scale_dtype = ov.Type.f8e4m3
 
         original_shape = weight.shape
 
@@ -276,6 +277,18 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
 
         if compression_config.group_size != -1:
             mul = opset.reshape(mul, output_shape=original_shape, special_zero=False)
+
+        if compressed_weight.tensor_scale is not None:
+            mul = convert_op(mul, ov.Type.f32)
+            tensor_scale_const = create_ov_const_from_tensor(
+                compressed_weight.tensor_scale, ov.Type.f32, name=f"{const_node_name}/tensor_scale"
+            )
+
+            mul = opset.multiply(
+                mul,
+                1 / tensor_scale_const,
+                name=f"{const_node_name}/tensor_fq_weights_{weight_port_id}",
+            )
 
         if should_add_convert_node:
             mul = opset.convert(mul, const_dtype, name=f"{const_node_name}/fq_weights_{weight_port_id}/convert")

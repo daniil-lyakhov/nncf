@@ -30,6 +30,7 @@ class CompressedWeight:
     scale: Tensor | None = None
     zero_point: Tensor | None = None
     codebook: Tensor | None = None
+    tensor_scale: Tensor | None = None
 
     def is_codebook(self):
         """

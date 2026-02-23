@@ -310,7 +310,7 @@ class GPTQ:
 
                 if (i1 + i) % group_size == 0:
                     if not block_compression_config.is_integer:
-                        scale = calculate_float_quantization_params(
+                        scale, _ = calculate_float_quantization_params(
                             weight_tensor[:, (i1 + i) : (i1 + i + group_size)], reduction_axes, block_compression_config
                         )
                         scales.append(scale)

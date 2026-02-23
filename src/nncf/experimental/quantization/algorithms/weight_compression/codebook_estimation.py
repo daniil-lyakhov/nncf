@@ -310,7 +310,7 @@ class CodebookEstimation(Algorithm):
         importance = fns.ones_like(weight)
         importance = importance * s
 
-        scale = calculate_float_quantization_params(weight, reduction_axes, config, signed=True)
+        scale, _ = calculate_float_quantization_params(weight, reduction_axes, config, signed=True)
         norm_weight = _calculate_normalized_weight(weight, scale)
 
         codebook, indexes, variants = weights_clusterization_k_means(
@@ -408,7 +408,7 @@ class CodebookEstimation(Algorithm):
             importance = importance * s
             importances.append(importance)
 
-            scale = calculate_float_quantization_params(weight, reduction_axes, config, signed=False)
+            scale, _ = calculate_float_quantization_params(weight, reduction_axes, config, signed=False)
             norm_weight.append(_calculate_normalized_weight(weight, scale))
 
         norm_weight = fns.concatenate(norm_weight, axis=0)
