@@ -247,14 +247,14 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
                 compressed_scale = compress_weight(
                     compressed_weight.scale, reduction_axes=scale_reduction_axes, config=scale_config
                 )
-                # from nncf.tensor import functions as fns
-                # decompressed_scale = compressed_scale.scale * compressed_scale.tensor
-                # scale_diff = compressed_weight.scale - decompressed_scale
-                # scale_diff_max = fns.max(fns.abs(scale_diff))
+                #from nncf.tensor import functions as fns
+                #decompressed_scale = compressed_scale.scale * compressed_scale.tensor
+                #scale_diff = compressed_weight.scale - decompressed_scale
+                #scale_diff_max = fns.max(fns.abs(scale_diff))
 
-                # from nncf.tensor.definitions import TensorDataType
-                # w_diff = (compressed_weight.tensor.as_numpy_tensor()  * decompressed_scale).flatten() - weight.as_numpy_tensor().flatten()
-                # max_w_diff = fns.max(fns.abs(w_diff))
+                #from nncf.tensor.definitions import TensorDataType
+                #w_diff = (compressed_weight.tensor.as_numpy_tensor()  * decompressed_scale).flatten() - weight.as_numpy_tensor().flatten()
+                #max_w_diff = fns.max(fns.abs(w_diff))
             else:
                 compressed_scale = None
                 compressed_weight = compress_weight(

@@ -1317,7 +1317,7 @@ def test_mixed_precision_mxfp(sensitivity_metric, all_layers, ratio, ref_ids, mo
     ),
 )
 @pytest.mark.parametrize(
-    "mode, weight_type, scale_type, global_scale_type",
+    "mode, weight_type, scale_type, sec_order_scale_type",
     [
         (CompressWeightsMode.FP8_E4M3, ov.Type.f8e4m3, ov.Type.f16, None),
         (CompressWeightsMode.FP4, ov.Type.f4e2m1, ov.Type.f16, None),
@@ -1326,7 +1326,7 @@ def test_mixed_precision_mxfp(sensitivity_metric, all_layers, ratio, ref_ids, mo
     ids=["FP8", "FP4", "NVFP4"],
 )
 def test_mixed_precision_fp(
-    sensitivity_metric, all_layers, ratio, ref_ids, mode, weight_type, scale_type, global_scale_type, group_size
+    sensitivity_metric, all_layers, ratio, ref_ids, mode, weight_type, scale_type, sec_order_scale_type, group_size
 ):
     model = SequentialMatmulModel(mm_hidden_dim=128).ov_model
     dataset = Dataset([np.ones([1, 4, 128]), np.arange(512).reshape(1, 4, 128)])
@@ -1349,7 +1349,7 @@ def test_mixed_precision_fp(
     for op in compressed_model.get_ordered_ops():
         if op.get_element_type() == weight_type:
             # Check effective default group size == 128
-            assert tuple(op.shape) == (128, 1, 128)
+            assert tuple(op.shape) == (128, 8, 16) if mode == CompressWeightsMode.NVFP4 else (128, 1, 128)
             ops.append(op)
 
     names_fp = {op.get_friendly_name() for op in ops}
