@@ -8,11 +8,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from copy import deepcopy
 from typing import Callable, Iterable
 
 import openvino as ov
 from openvino import opset13 as opset
 
+import nncf
 from nncf.common.graph import NNCFGraph
 from nncf.common.graph import NNCFNode
 from nncf.common.graph.operator_metatypes import OperatorMetatype
@@ -224,6 +226,44 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
         should_add_convert_node: bool,
         precomputed_compressed_weight: CompressedWeight | None = None,
     ):
+        with disable_results_caching(OV_MODEL_CACHE):
+            if compression_config.mode == CompressWeightsMode.NVFP4:
+                if len(weight.shape) > 2:
+                    msg = f"Could not compress {const_node_name} to NVFP4 as it has {len(weight.shape)} dims"
+                    " but only 1 <= dims  <= 2 are supported yet for the NVFP4"
+                    nncf.InternalError(msg)
+                assert len(reduction_axes) == 1
+                scale_reduction_axes = reduction_axes[0] - 1
+
+                weight_config = deepcopy(compression_config)
+                weight_config.mode = CompressWeightsMode.FP4
+                compressed_weight = compress_weight(
+                    weight,
+                    reduction_axes,
+                    weight_config,
+                    precomputed_compressed_weight,
+                )
+                scale_config = WeightCompressionConfig(mode=CompressWeightsMode.FP8_E4M3)
+                compressed_scale = compress_weight(
+                    compressed_weight.scale, reduction_axes=scale_reduction_axes, config=scale_config
+                )
+                # from nncf.tensor import functions as fns
+                # decompressed_scale = compressed_scale.scale * compressed_scale.tensor
+                # scale_diff = compressed_weight.scale - decompressed_scale
+                # scale_diff_max = fns.max(fns.abs(scale_diff))
+
+                # from nncf.tensor.definitions import TensorDataType
+                # w_diff = (compressed_weight.tensor.as_numpy_tensor()  * decompressed_scale).flatten() - weight.as_numpy_tensor().flatten()
+                # max_w_diff = fns.max(fns.abs(w_diff))
+            else:
+                compressed_scale = None
+                compressed_weight = compress_weight(
+                    weight,
+                    reduction_axes,
+                    compression_config,
+                    precomputed_compressed_weight,
+                )
+
         compression_dtype = DTYPE_MAP[compression_config.compression_dtype]
 
         scale_dtype = ov.Type.f16
@@ -233,14 +273,6 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
             scale_dtype = ov.Type.f8e4m3
 
         original_shape = weight.shape
-
-        with disable_results_caching(OV_MODEL_CACHE):
-            compressed_weight = compress_weight(
-                weight,
-                reduction_axes,
-                compression_config,
-                precomputed_compressed_weight,
-            )
 
         if compression_config.is_codebook:
             converted_const = create_ov_codebook_subgraph(
@@ -266,7 +298,25 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
                     converted_const, zero_point_const, name=f"{const_node_name}/zero_point/subtract"
                 )
 
-        scale_const = create_ov_const_from_tensor(compressed_weight.scale, scale_dtype, name=f"{const_node_name}/scale")
+        if compressed_scale is not None:
+            scale_const = create_ov_const_from_tensor(
+                compressed_scale.tensor, scale_dtype, name=f"{const_node_name}/scale"
+            )
+            sec_order_scale = create_ov_const_from_tensor(
+                compressed_scale.scale, ov.Type.f32, name=f"{const_node_name}/sec_order_scale"
+            )
+            scale_const = convert_op(scale_const, ov.Type.f32)
+
+            scale_const = opset.multiply(
+                scale_const,
+                sec_order_scale,
+                name=f"{const_node_name}/dequantized_scale_{weight_port_id}",
+            )
+        else:
+            scale_const = create_ov_const_from_tensor(
+                compressed_weight.scale, scale_dtype, name=f"{const_node_name}/scale"
+            )
+
         scale_const = convert_op(scale_const, ov.Type.f16)
 
         mul = opset.multiply(
@@ -277,18 +327,6 @@ class OVWeightCompressionAlgoBackend(WeightCompressionAlgoBackend):
 
         if compression_config.group_size != -1:
             mul = opset.reshape(mul, output_shape=original_shape, special_zero=False)
-
-        if compressed_weight.tensor_scale is not None:
-            mul = convert_op(mul, ov.Type.f32)
-            tensor_scale_const = create_ov_const_from_tensor(
-                compressed_weight.tensor_scale, ov.Type.f32, name=f"{const_node_name}/tensor_scale"
-            )
-
-            mul = opset.multiply(
-                mul,
-                1 / tensor_scale_const,
-                name=f"{const_node_name}/tensor_fq_weights_{weight_port_id}",
-            )
 
         if should_add_convert_node:
             mul = opset.convert(mul, const_dtype, name=f"{const_node_name}/fq_weights_{weight_port_id}/convert")

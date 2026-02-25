@@ -136,6 +136,13 @@ def get_next_node(node):
     return next_node
 
 
+def get_prev_node(op: ov.Node, input_port_ids: list[int]) -> ov.Node:
+    next_node = op.input_value(input_port_ids[0]).get_node()
+    if len(input_port_ids) == 1:
+        return next_node
+    return get_prev_node(next_node, input_port_ids[1:])
+
+
 def get_shape_for_second_input(op_with_weights: ov.Node) -> list[int]:
     return list(op_with_weights.inputs()[1].get_shape())
 
@@ -222,7 +229,11 @@ def check_int4_grouped(op: ov.Node, mode: CompressWeightsMode, group_size: int =
 
 
 def check_fp(op: ov.Node, mode: CompressWeightsMode, group_size: int = 3):
-    dtype = ov.Type.f4e2m1 if mode in (CompressWeightsMode.MXFP4, CompressWeightsMode.FP4, CompressWeightsMode.NVFP4) else ov.Type.f8e4m3
+    dtype = (
+        ov.Type.f4e2m1
+        if mode in (CompressWeightsMode.MXFP4, CompressWeightsMode.FP4, CompressWeightsMode.NVFP4)
+        else ov.Type.f8e4m3
+    )
     assert op.get_element_type() == dtype
 
     compressed_weight = astype(Tensor(op.get_tensor_view()), TensorDataType.float16)
@@ -239,10 +250,19 @@ def check_fp(op: ov.Node, mode: CompressWeightsMode, group_size: int = 3):
 
     mul_node = get_next_node(convert_node)
     assert mul_node.get_type_name() == "Multiply"
-    scale_node = mul_node.input_value(1).get_node()
+    scale_node = get_prev_node(mul_node, [1])
     assert list(scale_node.shape) == reduced_weight_shape
+    if mode == CompressWeightsMode.NVFP4:
+        sec_order_scale = get_prev_node(scale_node, [0, 1])
+        stats["sec_order_scale"] = get_const_value_as_numpy_tensor(sec_order_scale)
+
     if mode in (CompressWeightsMode.MXFP8_E4M3, CompressWeightsMode.MXFP4, CompressWeightsMode.NVFP4):
-        scale_node = scale_node.input_value(0).get_node()
+        # Propagate through a convert node
+
+        scale_node = get_prev_node(scale_node, [0])
+        if mode == CompressWeightsMode.NVFP4:
+            scale_node = get_prev_node(scale_node, [0, 0])
+
     stats["scale"] = get_const_value_as_numpy_tensor(scale_node)
 
     reshape_node = get_next_node(mul_node)
@@ -251,13 +271,6 @@ def check_fp(op: ov.Node, mode: CompressWeightsMode, group_size: int = 3):
     convert_node = get_next_node(reshape_node)
     assert convert_node.get_type_name() == "Convert"
 
-    # Check global scale
-    if mode == CompressWeightsMode.NVFP4:
-        global_mul_node = get_next_node(convert_node)
-        assert global_mul_node.get_type_name() == "Multiply"
-        global_scale_node = global_mul_node.input_value(1).get_node()
-        assert list(global_scale_node.shape) == []
-        stats["global_scale"] = get_const_value_as_numpy_tensor(global_scale_node)
     return stats
 
 
@@ -366,8 +379,10 @@ def check_fp8(op: ov.Node):
 def check_fp4(op: ov.Node):
     return check_fp(op, mode=CompressWeightsMode.FP4, group_size=3)
 
+
 def check_nvfp4(op: ov.Node):
     return check_fp(op, mode=CompressWeightsMode.NVFP4, group_size=16)
+
 
 def get_mixed_mapping(primary_fn: Callable, list_layers: list[str]):
     if primary_fn in (check_fp8, check_fp4):
@@ -395,7 +410,7 @@ def get_mixed_mapping(primary_fn: Callable, list_layers: list[str]):
         (CompressWeightsMode.MXFP4, 32, get_mixed_mapping(check_mxfp4, TEST_MODELS[IntegerModel])),
         (CompressWeightsMode.MXFP8_E4M3, 32, get_mixed_mapping(check_mxfp8, TEST_MODELS[IntegerModel])),
         (CompressWeightsMode.FP8_E4M3, 3, get_mixed_mapping(check_fp8, TEST_MODELS[IntegerModel])),
-        (CompressWeightsMode.FP4, 3, get_mixed_mapping(check_fp4, TEST_MODELS[IntegerModel])),
+        (CompressWeightsMode.FP4, 16, get_mixed_mapping(check_fp4, TEST_MODELS[IntegerModel])),
         (CompressWeightsMode.NVFP4, 16, get_mixed_mapping(check_nvfp4, TEST_MODELS[IntegerModel])),
     ),
 )
@@ -407,7 +422,10 @@ def test_compare_compressed_weights(mode, group_size, check_fn_per_node_map):
     }
     model = IntegerModel(
         dim2=group_size if group_size > 0 else 3,
-        dim3=mode_vs_dim3.get(mode, 6,),
+        dim3=mode_vs_dim3.get(
+            mode,
+            6,
+        ),
         positive_w=False,
     ).ov_model
     compressed_model = compress_weights(model, mode=mode, group_size=group_size)
@@ -1314,6 +1332,8 @@ def test_mixed_precision_fp(
     dataset = Dataset([np.ones([1, 4, 128]), np.arange(512).reshape(1, 4, 128)])
     kwargs = {}
     if group_size is not None:
+        if mode == CompressWeightsMode.NVFP4 and group_size != 16:
+            pytest.skip(f"NVFP4 does not support group size {group_size}")
         kwargs["group_size"] = group_size
     compressed_model = compress_weights(
         model,
@@ -1343,8 +1363,6 @@ def test_mixed_precision_fp(
     }
     ref_scale_nodes = {f"weights_{i}/scale" for i in range(5)}
     assert ref_scale_nodes == names_scales
-    # Check scale type
-    # Check global scale type
 
 
 @pytest.mark.parametrize(
@@ -1515,7 +1533,6 @@ TEST_FLOAT_COMPRESSED_REFS = {
     "mode",
     (
         CompressWeightsMode.FP4,
-        CompressWeightsMode.NVFP4,
         CompressWeightsMode.MXFP4,
         CompressWeightsMode.FP8_E4M3,
         CompressWeightsMode.MXFP8_E4M3,
@@ -1534,7 +1551,11 @@ def test_float_compressed_weighs_range(mode, id_, data):
     w = Tensor(data)
 
     config = WeightCompressionConfig(mode=mode)
-    compressed_weights, scale, _, global_scale = do_float_quantization(w, config, -1)
+    (
+        compressed_weights,
+        scale,
+        _,
+    ) = do_float_quantization(w, config, -1)
 
     if mode in TEST_FLOAT_COMPRESSED_REFS:
         ref = TEST_FLOAT_COMPRESSED_REFS[mode][id_]
