@@ -4,8 +4,7 @@ Benchmark tool for comparing int8 fake-quantization kernel implementations in NN
 Compares:
   - CUDA C++ extension kernel
   - CPU C++ extension kernel
-  - Reference pure-PyTorch kernel (NNCF implementation)
-
+  - Reference pure-PyTorch kernel (NNCF implementation)  - torchao _fake_quantize_affine (pure PyTorch + STE autograd)
 Across:
   - Per-tensor / per-weight-channel / per-activation-channel quantization
   - CPU / GPU devices
@@ -35,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 ScaleMode = Literal["per_tensor", "per_weight_channel", "per_activation_channel"]
 ExecutionMode = Literal["native", "inference_mode", "cuda_graph", "torch_compile"]
-KernelType = Literal["extension", "reference"]
+KernelType = Literal["extension", "reference", "torchao"]
 
 PREDEFINED_SHAPES = {
     "small_conv": (64, 64, 3, 3),
@@ -121,6 +120,121 @@ class KernelUnavailableError(RuntimeError):
     """Raised when a kernel cannot be loaded (e.g. nvcc not available for CUDA extension)."""
 
 
+# --- torchao helpers ---
+
+
+def _get_torchao_imports():
+    """Import torchao components, raising KernelUnavailableError if not installed."""
+    try:
+        from torchao.quantization.quant_primitives import (
+            ZeroPointDomain,
+            _fake_quantize_affine,
+            _fake_quantize_affine_cachemask,
+        )
+
+        return _fake_quantize_affine, _fake_quantize_affine_cachemask, ZeroPointDomain
+    except ImportError as e:
+        raise KernelUnavailableError(f"torchao not installed: {e}") from e
+
+
+def _get_block_size(shape: tuple[int, ...], scale_mode: ScaleMode) -> tuple[int, ...]:
+    """Convert NNCF scale_mode to torchao block_size."""
+    if scale_mode == "per_tensor":
+        return shape
+    elif scale_mode == "per_weight_channel":
+        # Per output channel (axis=0): each slice along dim0 is one block
+        return (1,) + shape[1:]
+    elif scale_mode == "per_activation_channel":
+        # Per channel (axis=1): each slice along dim1 is one block
+        return (shape[0], 1) + shape[2:]
+    else:
+        raise ValueError(f"Unknown scale_mode: {scale_mode}")
+
+
+def _convert_nncf_to_torchao_params(
+    input_low: torch.Tensor, input_range: torch.Tensor, levels: int
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Convert NNCF quantization params to torchao scale/zero_point.
+
+    NNCF: output = clip(input, input_low, input_low+input_range), then quantize with levels.
+    torchao: quantized_val = round(input / scale) + zero_point
+
+    Conversion:
+        scale = input_range / (levels - 1)
+        zero_point = round(-input_low / scale) = round(-input_low * (levels-1) / input_range)
+    """
+    scale = input_range / (levels - 1)
+    zero_point = torch.round(-input_low * (levels - 1) / input_range).to(torch.int32)
+    return scale, zero_point
+
+
+def _make_torchao_forward(config: BenchmarkConfig) -> Callable:
+    """Create a torchao forward function with pre-computed block_size."""
+    _fake_quantize_affine, _, ZeroPointDomain = _get_torchao_imports()
+    block_size = _get_block_size(config.tensor_shape, config.scale_mode)
+
+    def torchao_forward(
+        input_: torch.Tensor,
+        input_low: torch.Tensor,
+        input_range: torch.Tensor,
+        levels: int,
+    ) -> torch.Tensor:
+        scale, zero_point = _convert_nncf_to_torchao_params(input_low, input_range, levels)
+        return _fake_quantize_affine(
+            input_,
+            block_size,
+            scale,
+            zero_point,
+            torch.int8,
+            LEVEL_LOW,
+            LEVEL_HIGH,
+            ZeroPointDomain.INT,
+        )
+
+    return torchao_forward
+
+
+def _make_torchao_backward(config: BenchmarkConfig) -> Callable:
+    """Create a torchao backward function using direct STE mask computation.
+
+    torchao's backward is a Straight-Through Estimator: grad_input = grad_output * mask,
+    where mask indicates which values were NOT clipped during quantization.
+    This avoids autograd graph construction overhead for a fair kernel-level comparison.
+    """
+    _, _fake_quantize_affine_cachemask, ZeroPointDomain = _get_torchao_imports()
+    block_size = _get_block_size(config.tensor_shape, config.scale_mode)
+
+    def torchao_backward(
+        grad_output: torch.Tensor,
+        input_: torch.Tensor,
+        input_low: torch.Tensor,
+        input_range: torch.Tensor,
+        levels: int,
+        level_low: int,
+        level_high: int,
+    ) -> list[torch.Tensor]:
+        scale, zero_point = _convert_nncf_to_torchao_params(input_low, input_range, levels)
+        # Get the STE mask: True where quantized value is within [qmin, qmax]
+        _, mask = _fake_quantize_affine_cachemask(
+            input_,
+            block_size,
+            scale,
+            zero_point,
+            torch.int8,
+            level_low,
+            level_high,
+            ZeroPointDomain.INT,
+        )
+        # STE backward: pass gradient through for in-range values, zero for clipped
+        grad_input = grad_output * mask
+        return [grad_input, torch.zeros_like(input_low), torch.zeros_like(input_range)]
+
+    return torchao_backward
+
+
+# --- Kernel Loading ---
+
+
 def get_forward_fn(config: BenchmarkConfig) -> Callable:
     """Return the forward quantization function for the given config."""
     if config.kernel_type == "extension":
@@ -138,6 +252,8 @@ def get_forward_fn(config: BenchmarkConfig) -> Callable:
                 return QuantizedFunctionsCPU.get("Quantize_forward")
             except Exception as e:
                 raise KernelUnavailableError(f"CPU extension unavailable: {e}") from e
+    elif config.kernel_type == "torchao":
+        return _make_torchao_forward(config)
     else:
         # Reference: pure PyTorch implementation (unwrap CompilationWrapper to get raw function)
         from nncf.torch.quantization.reference import torch_executor
@@ -162,6 +278,8 @@ def get_backward_fn(config: BenchmarkConfig) -> Callable:
                 return QuantizedFunctionsCPU.get("Quantize_backward")
             except Exception as e:
                 raise KernelUnavailableError(f"CPU extension unavailable: {e}") from e
+    elif config.kernel_type == "torchao":
+        return _make_torchao_backward(config)
     else:
         from nncf.torch.quantization.reference import torch_executor
 
@@ -726,7 +844,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--kernel",
-        choices=["extension", "reference", "all"],
+        choices=["extension", "reference", "torchao", "all"],
         default="all",
         help="Which kernel implementation to benchmark (default: all)",
     )
@@ -769,7 +887,7 @@ def main() -> None:
 
     # Kernel types
     if args.kernel == "all":
-        kernel_types: list[KernelType] = ["extension", "reference"]
+        kernel_types: list[KernelType] = ["extension", "reference", "torchao"]
     else:
         kernel_types = [args.kernel]
 

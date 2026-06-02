@@ -35,10 +35,11 @@ PyTorch supports this directly: compile the model, then wrap the training step i
 
 ## Implications for NNCF
 
-- The current pybind11 kernel blocks torch.compile from optimizing the *surrounding* model ops (graph break)
-- Switching to `TORCH_LIBRARY` would let torch.compile fuse everything else while keeping the fast custom kernel as a node
+- The current pybind11 kernel blocks torch.compile from optimizing the *surrounding* model ops (graph break at every quantize call)
+- Switching to `torch.library.custom_op` would eliminate graph breaks — the custom kernel becomes an opaque but **valid** node in the FX graph. Surrounding ops can fuse with each other, but not across the custom op (it acts as a fusion barrier)
 - Then CUDA graphs on top would eliminate remaining dispatch overhead
-- The real-world QAT speedup from enabling torch.compile (via `TORCH_LIBRARY`) would likely be **much larger** than the kernel-level differences seen in the isolated benchmark, because it unlocks fusion of the entire model graph
+- The real-world QAT speedup from enabling torch.compile would likely be **much larger** than the kernel-level differences seen in the isolated benchmark, because it unlocks fusion of all non-quantize ops in the model graph
+- For **maximum** fusion (quantize fused with matmul/relu), quantization must be expressed as pure PyTorch ops (torchao approach) — see "Can Quantization Be Fused" section below
 
 ## CUDA Graphs: Integration Complexity in Practice
 
@@ -73,13 +74,13 @@ CUDA graphs are **not a drop-in optimization**. Even after fixing all blockers i
 
 ### Bottom line
 
-CUDA graphs deliver measurable speedup (1.7x training, 1.3x validation in our QAT experiment), but they are an **infrastructure-level optimization** that must be woven throughout the pipeline. They are not suitable as a user-facing "enable this flag" feature without significant guardrails. `torch.compile` is the more ergonomic path forward — once NNCF migrates custom ops to `TORCH_LIBRARY`, users get fusion + dispatch elimination with a single line change.
+CUDA graphs deliver measurable speedup (1.7x training, 1.3x validation in our QAT experiment), but they are an **infrastructure-level optimization** that must be woven throughout the pipeline. They are not suitable as a user-facing "enable this flag" feature without significant guardrails. `torch.compile` is the more ergonomic path forward — once NNCF registers custom ops via `torch.library.custom_op` and provides a materialize/finalize step (inlining quantizers into the forward), users get `torch.compile` compatibility with minimal code changes. Note: custom ops act as fusion barriers (surrounding ops fuse with each other, but not across the quantize op). Full cross-op fusion requires expressing quantization as pure PyTorch ops (torchao approach).
 
 ## Why torch.compile Is Incompatible With NNCF Hooks
 
-NNCF's quantization architecture has **three independent mechanisms** that each break `torch.compile`:
+NNCF's quantization architecture has **four independent mechanisms** that each break `torch.compile`:
 
-### 1. `TorchFunctionMode` — Python-level op interception
+### 1. `TorchFunctionMode` with dynamic dispatch logic — Python-level op interception
 
 NNCF wraps the quantized model's forward in `FunctionHookMode(TorchFunctionMode)` ([hook_executor_mode.py](src/nncf/torch/function_hook/hook_executor_mode.py)). This intercepts **every** `torch.*` operation at the Python level:
 
@@ -94,9 +95,10 @@ class FunctionHookMode(TorchFunctionMode):
 ```
 
 **Why this breaks torch.compile:**
-- Dynamo traces Python bytecode to build an FX graph. When it encounters a `TorchFunctionMode.__torch_function__` override, it cannot predict what the hook will do (it's arbitrary Python code with side effects: module call stacks, op counters, parameter caches).
-- Dynamo inserts a **guard** asserting that no `TorchFunctionMode` is active. If the mode is active, the guard fails → graph break → recompile → guard fails again → infinite recompilation or assertion error.
-- The `ForwardWithHooks.__call__` wrapper enters/exits `FunctionHookMode` as a context manager on every forward call, which is opaque to the tracer.
+- `TorchFunctionMode` itself is NOT inherently incompatible with `torch.compile` — a POC (`benchmarks/poc_function_mode_compile.py`) proves that simple modes with static dispatch logic compile successfully with `fullgraph=False`.
+- The problem is NNCF's **dynamic dispatch logic inside the mode**: op counters, module call stack traversal, string-based hook lookups. Dynamo attempts to trace through `__torch_function__` but encounters untraceable side effects → graph break.
+- With `fullgraph=False`, Dynamo creates a graph break at the mode boundary and falls back to eager for the mode's internal logic. With `fullgraph=True`, this causes compilation failure.
+- The `ForwardWithHooks.__call__` wrapper enters/exits `FunctionHookMode` as a context manager on every forward call, creating additional graph break points.
 
 ### 2. `has_torch_function_unary` / `handle_torch_function` in quantize functions
 
@@ -150,23 +152,27 @@ def get_next_op_call_name(self, fn_name):
 
 | NNCF Mechanism | torch.compile Failure Mode |
 |---|---|
-| `TorchFunctionMode` context manager | Guard assertion failure (mode active during trace) |
+| `TorchFunctionMode` with dynamic dispatch logic | Graph breaks at mode boundary; `fullgraph=True` fails |
 | `has_torch_function_unary` check | Data-dependent branch → graph break |
 | pybind11 extension calls | Opaque call → graph break (no FX representation) |
 | `torch.autograd.Function.apply` with opaque ops | Backward not traceable |
-| Runtime op counter / call stack | Python side effects → untraceable |
+| Runtime op counter / call stack (`op_calls` dict mutation) | Python side effects → untraceable |
 | `_call_impl` monkey-patching | Dynamic method override → guard failure |
+
+**Note:** `TorchFunctionMode` is not inherently incompatible with torch.compile. Simple modes with static dispatch (e.g., hooks keyed by function reference) work with `fullgraph=False`. The issue is NNCF's dynamic positional dispatch logic inside the mode (see [POC proof](#poc-proof-simple-torchfunctionmode--torchcompile-works) below).
 
 ### What would fix this
 
 | Fix | Effort | Benefit |
 |---|---|---|
-| Register ops via `TORCH_LIBRARY` + provide `FakeTensor` meta | Medium | Eliminates graph breaks from opaque calls; enables shape propagation |
-| Replace `TorchFunctionMode` with `torch.library` pre/post hooks | High | Removes the mode-based interception entirely; Dynamo can trace through |
+| Register ops via `torch.library.custom_op` + `register_fake` | Medium | Eliminates graph breaks from opaque calls; enables shape propagation |
+| Materialize quantizers into forward + remove mode before compile | Medium | Eliminates all mode-related graph breaks; enables `fullgraph=True` |
 | Express quantization as pure PyTorch ops (torchao style) | High | Full Inductor fusion; no custom extensions needed |
-| Use `torch.compiler.allow_in_graph` on autograd Functions | Low | Stops graph breaks but disables fusion through the op (barrier) |
+| Use `torch.compiler.allow_in_graph` on autograd Functions | Low | Stops graph breaks from autograd.Function but does NOT fix mode or pybind11 issues |
 
-The minimal path: `TORCH_LIBRARY` registration + `allow_in_graph` gives compatibility without rewriting the hook system. Full performance requires migrating away from `TorchFunctionMode` to a compiler-friendly hook mechanism.
+**The minimal viable path:** Register quantize ops via `torch.library.custom_op` (with `register_fake` + `register_autograd`), then materialize/inline quantizers into the model forward before compilation (eliminating the mode). This is the "materialize then compile" pattern — see [detailed architecture below](#the-viable-architecture-materialize-then-compile).
+
+**What does NOT work:** `allow_in_graph` alone does not fix the `TorchFunctionMode` dynamic dispatch or pybind11 opacity — it only prevents graph breaks from `autograd.Function.apply` calls. All four incompatibility layers must be addressed together.
 
 ## Can Quantization Be Fused With Surrounding Ops?
 
@@ -229,7 +235,9 @@ class HookFunctionMode(TorchFunctionMode):
         return result
 ```
 
-This compiles successfully with `fullgraph=False` because Dynamo can trace the dict lookup — the key is a constant function reference, not a dynamically-constructed string.
+This compiles successfully with `fullgraph=False` because Dynamo can trace the dict lookup — the key is a constant function reference, not a dynamically-constructed string. With `fullgraph=True` it may also succeed if the mode's logic is simple enough for Dynamo to fully trace without graph breaks.
+
+The key requirement: the mode's `__torch_function__` must contain **statically deterministic** logic — no mutable counters, no dynamic string construction, no data-dependent hook lookups.
 
 ### Why NNCF's FunctionHookMode Cannot Be Compiled
 
