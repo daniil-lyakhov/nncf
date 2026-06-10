@@ -27,7 +27,7 @@ from ultralytics.utils.metrics import ConfusionMatrix
 
 import nncf
 
-MODEL_NAME = "yolo26n"
+MODEL_NAME = "best"
 
 ROOT = Path(__file__).parent.resolve()
 
@@ -71,13 +71,13 @@ def prepare_validation(model: YOLO, args: Any) -> tuple[DetectionValidator, torc
     validator.data = check_det_dataset(args.data)
     validator.stride = 32
     validator.is_coco = True
-    validator.class_map = coco80_to_coco91_class()
+    #validator.class_map = coco80_to_coco91_class()
     validator.names = model.model.names
     validator.metrics.names = validator.names
     validator.device = torch.device("cpu")
     validator.end2end = False
 
-    coco_data_path = DATASETS_DIR / "coco128"
+    coco_data_path = Path("/home/dlyakhov/datasets/personal/marketsight_datasets/datasets/images/val")
     data_loader = validator.get_dataloader(coco_data_path.as_posix(), 1)
 
     return validator, data_loader
@@ -99,11 +99,13 @@ def benchmark_performance(model_path: Path, config) -> float:
 
 def prepare_openvino_model(model: YOLO, model_name: str) -> tuple[ov.Model, Path]:
     ir_model_path = ROOT / f"{model_name}_openvino_model" / f"{model_name}.xml"
-    if not ir_model_path.exists():
-        onnx_model_path = ROOT / f"{model_name}.onnx"
-        if not onnx_model_path.exists():
-            model.export(format="onnx", dynamic=True, half=False)
-
+    if True:
+        #if not ir_model_path.exists():
+        onnx_model_path = Path("/home/dlyakhov/Projects/retail_toncha/train-3/best.onnx")
+        if True:
+            #if not onnx_model_path.exists():
+            model.export(format="onnx", dynamic=False, half=False)
+        
         ov.save_model(ov.convert_model(onnx_model_path), ir_model_path)
     return ov.Core().read_model(ir_model_path), ir_model_path
 
@@ -126,7 +128,7 @@ def quantize(model: ov.Model, data_loader: torch.utils.data.DataLoader, validato
     quantized_model = nncf.quantize(
         model,
         quantization_dataset,
-        subset_size=len(data_loader),
+        subset_size=300,
         preset=nncf.QuantizationPreset.MIXED,
         fast_bias_correction=False,
         ignored_scope=nncf.IgnoredScope(patterns=[".*one2one.*"]),
@@ -135,12 +137,14 @@ def quantize(model: ov.Model, data_loader: torch.utils.data.DataLoader, validato
 
 
 def main():
-    model = YOLO(ROOT / f"{MODEL_NAME}.pt")
+    model_name = "/home/dlyakhov/Projects/retail_toncha/train-3/best.pt"
+    model = YOLO(model_name)
     args = get_cfg(cfg=DEFAULT_CFG)
-    args.data = "coco128.yaml"
+    args.data = "/home/dlyakhov/datasets/personal/marketsight_datasets/datasets/data.yaml"
     args.plots = False
 
     # Prepare validation dataset and helper
+    args.imgsz = 256
     validator, data_loader = prepare_validation(model, args)
 
     # Convert to OpenVINO model
