@@ -461,13 +461,14 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--strategies",
         nargs="+",
-        default=["baseline", "compile_kernels", "functional_ste", "functional_ste_compiled", "triton_fused_fq", "triton_fused_lora_fq"],
+        default=["baseline", "compile_kernels", "functional_ste", "functional_ste_compiled", "cuda_fused_fq", "triton_fused_fq", "triton_fused_lora_fq"],
         choices=[
             "baseline",
             "compile_kernels",
             "compile_kernels_autotune",
             "functional_ste",
             "functional_ste_compiled",
+            "cuda_fused_fq",
             "triton_fused_fq",
             "triton_fused_lora_fq",
             "cuda_graph",
@@ -528,6 +529,11 @@ def main(argv) -> None:
                     compiled_count += 1
             print(f"  Compiled {compiled_count} functional quantizers (reduce-overhead, fullgraph=True)")
 
+        elif strategy == "cuda_fused_fq":
+            from cuda_fq import replace_quantizers_with_cuda
+
+            replace_quantizers_with_cuda(model, nncf_modules)
+
         elif strategy == "triton_fused_fq":
             from triton_fq import replace_quantizers_with_triton
 
@@ -554,16 +560,16 @@ def main(argv) -> None:
                 continue
 
         # Run benchmark
-        try:
-            times = run_training_iters(
-                model, optimizer, input_ids, teacher_logits,
-                num_iters=args.iters, warmup_iters=args.warmup,
-            )
-            results.append(TimingResult(strategy, times))
-        except Exception as e:
-            print(f"  FAILED: {type(e).__name__}: {e}")
-            results.append(TimingResult(strategy, [float("nan")]))
-
+        #try:
+        times = run_training_iters(
+            model, optimizer, input_ids, teacher_logits,
+            num_iters=args.iters, warmup_iters=args.warmup,
+        )
+        results.append(TimingResult(strategy, times))
+        #        except Exception as e:
+        #            print(f"  FAILED: {type(e).__name__}: {e}")
+        #            results.append(TimingResult(strategy, [float("nan")]))
+        #
         # Cleanup
         del model, optimizer
         torch.cuda.empty_cache()

@@ -158,3 +158,61 @@ Result: NNCF's graph building fails with `TypeError: missing a required argument
 
 **Fix in NNCF**: `ForwardWithHooks.__signature__` strips `self` if it appears as the first param.
 Proper fix: use Python ≥3.14.
+
+## Why NNCF has both CUDA extension and PyTorch reference FQ implementations
+
+NNCF provides two backends for fake quantize forward/backward:
+
+| Backend | Class | Used by | Kernel location |
+|---------|-------|---------|-----------------|
+| CUDA extension | `QuantizedFunctionsCUDA` (`Quantize_forward`/`Quantize_backward`) | `QuantizeAsymmetric`, `QuantizeSymmetric` (non-LoRA) | `nncf/torch/extensions/src/quantization/cuda/functions_cuda_impl.cu` |
+| PyTorch reference | `ReferenceQuantizedFunctions` (`RQ.Quantize_forward`/`RQ.Quantize_backward`) | `QuantizeAsymmetricTorch`, `QuantizeSymmetricTorch` (LoRA + group quant) | `nncf/torch/quantization/reference.py` |
+
+### Root cause: the CUDA kernel doesn't support group quantization broadcasting
+
+The CUDA kernel's `get_scale_type()` only supports three scale layouts:
+
+1. **SINGLE_SCALE** — one scale for the entire tensor
+2. **PER_WEIGHT_CHANNEL** — `input_low` is 1D with `size(0) == input.size(0)` (one scale per row)
+3. **PER_ACTIVATION_CHANNEL** — `input_low` is 1D with `size(1) == input.size(1)` (one scale per channel)
+
+Group quantization requires a **3D broadcasting** pattern:
+- Weight reshaped to `(out_features, num_groups_per_row, group_size)` = e.g. `(2048, 128, 64)`
+- `input_low` has shape `(2048, 128, 1)` — one scale per group, broadcasting across group_size
+
+The CUDA kernel cannot handle this. The PyTorch reference uses standard PyTorch ops
+with arbitrary broadcasting, so it works for any shape.
+
+### Why forcing 262144 "channels" into the CUDA kernel causes OOM
+
+If you flatten `input_low` to `(262144,)` and reshape weight to `(262144, 64)`, the CUDA
+kernel treats it as PER_WEIGHT_CHANNEL with 262144 "output channels" (designed for ~2048).
+
+The backward kernel `q_scale_per_weight_channel_cuda_backward` allocates temporary
+reduction buffers per channel:
+```cpp
+dim3 grid_size = get_2d_grid_size_for_per_channel(scale_count);  // (262144, grid_y)
+auto dev_tmp_range = at::zeros({262144, grid_y}, float32);  // reduction workspace
+auto dev_tmp_low   = at::zeros({262144, grid_y}, float32);
+auto dev_last_block_counter_range = at::zeros({262144, 1}, int32);
+auto dev_last_block_counter_low   = at::zeros({262144, 1}, int32);
+```
+
+Per backward call this is ~4-8MB. But the real issue is the kernel launches **262144 thread
+blocks** (each with 1024 threads) to process just 64 elements per block — extremely wasteful
+for the GPU scheduler and memory subsystem. Combined with model weights, optimizer states,
+and activations already near the 24GB limit, the overhead pushes it over.
+
+### Why Triton doesn't have this problem
+
+The Triton kernel was designed specifically for group quantization:
+- Forward: one program per `BLOCK_SIZE` elements, group index computed on the fly
+- Backward: uses `tl.atomic_add` for per-group gradient reduction — **zero temporary buffers**
+
+### Summary
+
+| Approach | Group quant support | Temp buffers in backward | Memory overhead |
+|----------|-------------------|-------------------------|----------------|
+| CUDA extension (forced flat) | Hacky (262144 "channels") | ~4-8MB per layer call | OOM on 24GB |
+| PyTorch reference (baseline) | Native (3D broadcasting) | None (pure Python ops) | Higher compute time |
+| Triton kernel | Native (group_idx = offset // group_size) | None (atomic_add) | Optimal |
