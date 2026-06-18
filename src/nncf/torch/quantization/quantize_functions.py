@@ -377,6 +377,39 @@ def _symmetric_quantize_lora(input_, input_shape, A, B, scale, level_low, level_
     )
 
 
+def _tune_range_forward(input_low, input_range, levels):
+    input_high = input_range + input_low
+    input_low_copy = input_low.clone()
+    input_low_copy[input_low_copy > 0] = 0
+    input_high[input_high < 0] = 0
+    n = levels - 1
+    # Need a cast here because fp16 division yields fp32 results sometimes
+    scale = (n / (input_high - input_low_copy)).to(dtype=input_high.dtype)
+    zp = torch.round(-input_low_copy * scale)
+
+    new_input_low = torch.where(zp < n, zp / (zp - n) * input_high, input_low_copy)
+    new_input_high = torch.where(zp > 0.0, (zp - n) / zp * input_low_copy, input_high)
+
+    range_1 = input_high - new_input_low
+    range_2 = new_input_high - input_low_copy
+
+    mask = (range_1 > range_2).to(input_high.dtype)
+    inv_mask = (1 - mask).abs()
+
+    new_input_low = mask * new_input_low + inv_mask * input_low_copy
+    new_input_range = inv_mask * new_input_high + mask * input_high - new_input_low
+
+    return new_input_low, new_input_range
+
+
+def _tune_range_backward(grad_input_low, grad_input_range):
+    return grad_input_low, grad_input_range, None
+
+
+_tune_range_forward = CompilationWrapper(_tune_range_forward)
+_tune_range_backward = CompilationWrapper(_tune_range_backward)
+
+
 class TuneRange(torch.autograd.Function):
     """
     Makes sure that the zero-point quantum in the quantized domain points exactly to floating point zero,
@@ -387,35 +420,11 @@ class TuneRange(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input_low, input_range, levels):
-        input_high = input_range + input_low
-        input_low_copy = input_low.clone()
-        input_low_copy[input_low_copy > 0] = 0
-        input_high[input_high < 0] = 0
-        n = levels - 1
-        # Need a cast here because fp16 division yields fp32 results sometimes
-        scale = (n / (input_high - input_low_copy)).to(dtype=input_high.dtype)
-        zp = torch.round(-input_low_copy * scale)
-
-        new_input_low = torch.where(zp < n, zp / (zp - n) * input_high, input_low_copy)
-        new_input_high = torch.where(zp > 0.0, (zp - n) / zp * input_low_copy, input_high)
-
-        range_1 = input_high - new_input_low
-        range_2 = new_input_high - input_low_copy
-
-        mask = (range_1 > range_2).to(input_high.dtype)
-        inv_mask = (1 - mask).abs()
-
-        new_input_low = mask * new_input_low + inv_mask * input_low_copy
-        new_input_range = inv_mask * new_input_high + mask * input_high - new_input_low
-
-        return new_input_low, new_input_range
+        return _tune_range_forward(input_low, input_range, levels)
 
     @staticmethod
     def backward(ctx: Any, *grad_outputs: Any) -> Any:
-        grad_input_low = grad_outputs[0]
-        grad_input_range = grad_outputs[1]
-        return grad_input_low, grad_input_range, None
-
+        return _tune_range_backward(grad_outputs[0], grad_outputs[1])
 
 def decompress_asymmetric(input: torch.Tensor, scale: torch.Tensor, zero_point: torch.Tensor) -> torch.Tensor:
     """
